@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <assert.h>
 
 bool is_number(char c) {
     return '0' <= c && c <= '9';
@@ -12,8 +13,23 @@ typedef enum {
     TOKEN_MULTIPLY,
     TOKEN_DIVIDE,
     TOKEN_NUMBER,
-    TOKEN_EOF
+    TOKEN_EOF,
+
+    TOKEN_COUNT // Make sure this token is the last one 
+                // listed in the enum, as this is assumed by compile time assertions
 } TokenType;
+
+const char *token_to_string_table[] = {
+    [TOKEN_PLUS] = "+",
+    [TOKEN_MINUS] = "-",
+    [TOKEN_MULTIPLY] = "*",
+    [TOKEN_DIVIDE] = "/",
+    [TOKEN_NUMBER] = "number",
+    [TOKEN_EOF] = "end of file"
+};
+
+static_assert(sizeof(token_to_string_table) / sizeof(char *) == TOKEN_COUNT,
+              "Every token must have a corresponding entry in the token to string table, so add an entry probably");
 
 typedef struct {
     TokenType type;
@@ -21,12 +37,6 @@ typedef struct {
         unsigned int number;
     };
 } Token;
-
-typedef struct {
-    Token *items;
-    size_t count;
-    size_t capacity;
-} TokenArray;
 
 void print_token(Token tok) {
     switch (tok.type) {
@@ -38,6 +48,12 @@ void print_token(Token tok) {
         case TOKEN_EOF:      printf("EOF\n"); break;
     }
 }
+
+typedef struct {
+    Token *items;
+    size_t count;
+    size_t capacity;
+} TokenArray;
 
 #define array_append(array, item)\
     do {\
@@ -86,12 +102,15 @@ int get_token_precedence_table[] = {
     [TOKEN_DIVIDE] = 2,
 };
 
+bool token_is_operator(TokenType type) {
+    return type == TOKEN_PLUS     ||
+           type == TOKEN_MINUS    ||
+           type == TOKEN_MULTIPLY ||
+           type == TOKEN_DIVIDE;
+}
+
 int get_token_precedence(TokenType type) {
-    if (type == TOKEN_PLUS     ||
-        type == TOKEN_MINUS    ||
-        type == TOKEN_MULTIPLY ||
-        type == TOKEN_DIVIDE)
-        return get_token_precedence_table[type];
+    if (token_is_operator(type)) return get_token_precedence_table[type];
 
     return -1;
 }
@@ -106,7 +125,9 @@ bool match_next_token(ParserState *parser, TokenType type) {
     if (peek_next_token(parser) == type) {
         return true;
     } else {
-        printf("expected a token but got a different one than I wanted\n");
+        printf("parsing error: expected a \"%s\" but got a \"%s\" instead\n",
+                token_to_string_table[type],
+                token_to_string_table[peek_next_token(parser)]);
         parser->error = true;
         return false;
     }
@@ -128,7 +149,15 @@ AST *parse_expression(ParserState *parser, int min_prec) {
     left->type = AST_NUMBER;
     left->number = tok.number;
 
-    while (min_prec < get_token_precedence(peek_next_token(parser))) {
+    if (peek_next_token(parser) == TOKEN_EOF) return left;
+
+    if (!token_is_operator(peek_next_token(parser))) {
+        printf("parsing error: expected an \"operator\" but got a \"%s\" instead\n",
+                token_to_string_table[peek_next_token(parser)]);
+        parser->error = true;
+    }
+
+    while (get_token_precedence(peek_next_token(parser)) > min_prec) {
         AST *op = (AST *)malloc(sizeof(AST));
         op->type = AST_BINARY_OP;
         op->left = left;
@@ -149,6 +178,9 @@ AST *parse_expression(ParserState *parser, int min_prec) {
         }
 
         op->right = parse_expression(parser, get_token_precedence(tok.type));
+        if (parser->error) {
+            return NULL;
+        }
 
         left = op;
     }
@@ -231,7 +263,7 @@ int main() {
                     tok.number = (unsigned int)(c - '0');
                     array_append(tokens, tok);
                 } else {
-                    printf("tokenizing error, unrecognized character \"%c\"\n", c);
+                    printf("tokenizing error: unrecognized character \"%c\"\n", c);
                 }
                 break;
         }
