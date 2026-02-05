@@ -18,4 +18,9 @@
         array.items[array.count++] = item;\
     } while (0)
 
+#define array_pop(array)\
+    do {\
+        if (array.count != 0) array.count--;\
+    } while(0)
+
 #endif

@@ -38,7 +38,7 @@ int main() {
 
         switch (c) {
             case '\n':
-                column = 0;
+                column = 1;
                 row++;
                 break;
             case ' ':
