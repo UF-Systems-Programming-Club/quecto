@@ -3,7 +3,7 @@
 #include <string.h>
 #include "lexer.h"
 
-int main() {
+int token_tests() {
     struct {
         const char *input;
         int expected_count;
@@ -34,7 +34,7 @@ int main() {
         TokenArray result = tokenize(tok_tests[i].input, strlen(tok_tests[i].input));
 
         if (result.count != (size_t)tok_tests[i].expected_count) {
-            printf("  FAILED: Expected %d tokens, got %zu\n", tok_tests[i].expected_count, result.count);
+            printf("FAILED: Expected %d tokens, got %zu\n", tok_tests[i].expected_count, result.count);
         } else {
             int match = 1;
             for (int j = 0; j < tok_tests[i].expected_count; j++) {
@@ -56,4 +56,8 @@ int main() {
 
     printf("\nTest Summary: %d/%d tok_tests_passed\n", tok_tests_passed, num_tok_tests);
     return (tok_tests_passed == num_tok_tests) ? 0 : 1;
+}
+
+int main() {
+    return token_tests();
 }
