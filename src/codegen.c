@@ -2,6 +2,7 @@
 
 #include "codegen.h"
 
+int stack_offset = 0;
 const char *register_list[][4] = {
     [BIT_8]  = { "al",  "bl",  "cl",  "dl" },
     [BIT_16] = { "ax",  "bx",  "cx",  "dx", },
@@ -9,12 +10,19 @@ const char *register_list[][4] = {
     [BIT_64] = { "rax", "rbx", "rcx", "rdx" }
 };
 
-bool register_free_list[] = { 0, 0, 0, 0 };
+bool register_free_list[] = { 1, 1, 1, 1 };
 
-int allocate_register() {
+int current_symbol = 0;
+LocTable loc_table = {0};
+
+// TODO: evict register should evict to another register if possible instead of stack
+int evict_register(FILE *file, int reg) {
+}
+
+int allocate_register(FILE *file) {
     for (int i = 0; i < (int)(sizeof(register_free_list) / sizeof(register_free_list[0])); i++) {
-        if (register_free_list[i] == 0) {
-            register_free_list[i] = 1;
+        if (register_free_list[i]) {
+            register_free_list[i] = 0;
             return i;
         }
     }
@@ -27,62 +35,158 @@ void free_register(int reg) {
     register_free_list[reg] = 0;
 }
 
-void generate_load_register_with_int(FILE *file, int reg, int val) {
-    // TODO: Perhaps it might be better to have the register allocation happen within the code generation functions
-    // I'm not sure about freeing however. Let's see how codegen goes
-    fprintf(file, "\tmov\t%s, %d\n", register_list[BIT_32][reg], val);
+Symbol generate_add(FILE *file, Symbol sym1, Symbol sym2) {
+    // TODO: this is really gross, need to add some abstracting functions for the location table
+    int reg;
+    switch (loc_table.locs[sym1].type) {
+        case LOC_REGISTER:
+            reg = loc_table.locs[sym1].register_index;
+            break;
+        case LOC_STACK:
+            assert(0);
+            break;
+        case LOC_IMMEDIATE:
+            reg = allocate_register(file);
+            fprintf(file, "\tmov\t%s, %u\n", register_list[BIT_32][reg], loc_table.locs[sym1].value);
+            loc_table.locs[sym1].type = LOC_REGISTER;
+            loc_table.locs[sym1].register_index = reg;
+            break;
+    }
+
+    switch (loc_table.locs[sym2].type) {
+        case LOC_REGISTER:
+            fprintf(file,
+                    "\tadd\t%s, %s\n",
+                    register_list[BIT_32][reg],
+                    register_list[BIT_32][loc_table.locs[sym2].register_index]);
+            break;
+        case LOC_STACK:
+            assert(0);
+            break;
+        case LOC_IMMEDIATE:
+            fprintf(file, "\tadd\t%s, %u\n", register_list[BIT_32][reg], loc_table.locs[sym2].value);
+            break;
+    }
+
+    Symbol res = current_symbol++;
+    loc_table.locs[res].type = LOC_REGISTER;
+    loc_table.locs[res].register_index = reg;
+    return res;
 }
 
-void generate_add_registers(FILE *file, int reg1, int reg2) {
-    fprintf(file, "\tadd\t%s, %s\n", register_list[BIT_32][reg1], register_list[BIT_32][reg2]);
+Symbol generate_subtract(FILE *file, Symbol sym1, Symbol sym2) {
+    // TODO: this is really gross, need to add some abstracting functions for the location table
+    int reg;
+    switch (loc_table.locs[sym1].type) {
+        case LOC_REGISTER:
+            reg = loc_table.locs[sym1].register_index;
+            break;
+        case LOC_STACK:
+            assert(0);
+            break;
+        case LOC_IMMEDIATE:
+            reg = allocate_register(file);
+            fprintf(file, "\tmov\t%s, %u\n", register_list[BIT_32][reg], loc_table.locs[sym1].value);
+            loc_table.locs[sym1].type = LOC_REGISTER;
+            loc_table.locs[sym1].register_index = reg;
+            break;
+    }
+
+    switch (loc_table.locs[sym2].type) {
+        case LOC_REGISTER:
+            fprintf(file,
+                    "\tsub\t%s, %s\n",
+                    register_list[BIT_32][reg],
+                    register_list[BIT_32][loc_table.locs[sym2].register_index]);
+            break;
+        case LOC_STACK:
+            assert(0);
+            break;
+        case LOC_IMMEDIATE:
+            fprintf(file, "\tsub\t%s, %u\n", register_list[BIT_32][reg], loc_table.locs[sym2].value);
+            break;
+    }
+
+    Symbol res = current_symbol++;
+    loc_table.locs[res].type = LOC_REGISTER;
+    loc_table.locs[res].register_index = reg;
+    return res;
 }
 
-void generate_subtract_registers(FILE *file, int reg1, int reg2) {
-    fprintf(file, "\tsub\t%s, %s\n", register_list[BIT_32][reg1], register_list[BIT_32][reg2]);
+Symbol generate_multiply(FILE *file, Symbol sym1, Symbol sym2) {
+    // TODO: this is really gross, need to add some abstracting functions for the location table
+    int reg;
+    switch (loc_table.locs[sym1].type) {
+        case LOC_REGISTER:
+            reg = loc_table.locs[sym1].register_index;
+            break;
+        case LOC_STACK:
+            assert(0);
+            break;
+        case LOC_IMMEDIATE:
+            reg = allocate_register(file);
+            fprintf(file, "\tmov\t%s, %u\n", register_list[BIT_32][reg], loc_table.locs[sym1].value);
+            loc_table.locs[sym1].type = LOC_REGISTER;
+            loc_table.locs[sym1].register_index = reg;
+            break;
+    }
+
+    switch (loc_table.locs[sym2].type) {
+        case LOC_REGISTER:
+            fprintf(file,
+                    "\timul\t%s, %s\n",
+                    register_list[BIT_32][reg],
+                    register_list[BIT_32][loc_table.locs[sym2].register_index]);
+            break;
+        case LOC_STACK:
+            assert(0);
+            break;
+        case LOC_IMMEDIATE:
+            fprintf(file, "\timul\t%s, %u\n", register_list[BIT_32][reg], loc_table.locs[sym2].value);
+            break;
+    }
+
+    Symbol res = current_symbol++;
+    loc_table.locs[res].type = LOC_REGISTER;
+    loc_table.locs[res].register_index = reg;
+    return res;
 }
 
-void generate_multiply_registers(FILE *file, int reg1, int reg2) {
-    fprintf(file, "\timul\t%s, %s\n", register_list[BIT_32][reg1], register_list[BIT_32][reg2]);
-}
-
-void generate_divide_registers(FILE *file, int reg1, int reg2) {
+Symbol generate_divide(FILE *file, Symbol sym1, Symbol sym2) {
     // TODO: in order to implement division we need to implement evicting registers onto the stack
     assert(0);
     // fprintf(file, "\tdiv\t%s, %s\n", register_list[BIT_32][reg1], register_list[BIT_32][reg2]);
 }
 
-Loc generate_ast_assembly(FILE *file, AST *ast) {
+Symbol generate_ast_assembly(FILE *file, AST *ast) {
     assert(ast->type != AST_FLOAT_LIT);
 
     if (ast->type == AST_INT_LIT) {
-        int reg = allocate_register();
-        generate_load_register_with_int(file, reg, ast->int_lit);
         Loc loc = {
-            .type = LOC_REGISTER,
-            .register_index = reg
+            .type = LOC_IMMEDIATE,
+            .value = ast->int_lit
         };
-        return loc;
+        loc_table.locs[current_symbol++] = loc;
+
+        return current_symbol - 1;
     }
 
-    Loc loc_left = generate_ast_assembly(file, ast->left);
-    Loc loc_right = generate_ast_assembly(file, ast->right);
+    Symbol left = generate_ast_assembly(file, ast->left);
+    Symbol right = generate_ast_assembly(file, ast->right);
 
+    Symbol res;
     switch (ast->op) {
         case OP_PLUS:
-            generate_add_registers(file, loc_left.register_index, loc_right.register_index);
-            free_register(loc_right.register_index);
-            return loc_left;
+            res = generate_add(file, left, right);
+            return res;
         case OP_MINUS:    
-            generate_subtract_registers(file, loc_left.register_index, loc_right.register_index);
-            free_register(loc_right.register_index);
-            return loc_left;
+            res = generate_subtract(file, left, right);
+            return res;
         case OP_MULTIPLY:
-            generate_multiply_registers(file, loc_left.register_index, loc_right.register_index);
-            free_register(loc_right.register_index);
-            return loc_left;
+            res = generate_multiply(file, left, right);
+            return res;
         case OP_DIVIDE: 
-            generate_divide_registers(file, loc_left.register_index, loc_right.register_index);
-            free_register(loc_right.register_index);
-            return loc_left;
+            res = generate_divide(file, left, right);
+            return res;
     }
 }

@@ -62,9 +62,9 @@ int main() {
         fprintf(out, "\tsection\t.text\n");
         fprintf(out, ENTRY_SYMBOL ":\n");
 
-        Loc ret = generate_ast_assembly(out, ast);
+        Symbol sym = generate_ast_assembly(out, ast);
 
-        fprintf(out, "\tmov\tedi, %s\n", register_list[BIT_32][ret.register_index]);
+        fprintf(out, "\tmov\tedi, %s\n", register_list[BIT_32][loc_table.locs[sym].register_index]);
         fprintf(out, "\tmov\teax, " EXIT_STATUS "\n");
         fprintf(out, "\tsyscall\n");
 

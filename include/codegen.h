@@ -3,6 +3,8 @@
 
 #include <stdio.h>
 #include <stdbool.h>
+#include <string.h>
+
 #include "AST.h"
 
 typedef enum {
@@ -14,7 +16,8 @@ typedef enum {
 
 typedef enum {
     LOC_REGISTER,
-    LOC_STACK
+    LOC_STACK,
+    LOC_IMMEDIATE
 } LocType;
 
 typedef struct {
@@ -22,16 +25,24 @@ typedef struct {
     union {
         int stack_offset; // negative offset from rbp
         int register_index;
+        unsigned int value;
     };
 } Loc;
+
+typedef int Symbol;
+
+typedef struct {
+    Loc locs[512];
+} LocTable;
+
+extern int current_symbol;
+extern LocTable loc_table;
 
 extern const char *register_list[][4];
 extern bool register_free_list[];
 
 int allocate_register();
 void free_register(int reg);
-void generate_load_register_with_int(FILE *file, int reg, int val);
-void generate_add_registers(FILE *file, int reg1, int reg2);
-Loc generate_ast_assembly(FILE *file, AST *ast);
+Symbol generate_ast_assembly(FILE *file, AST *ast);
 
 #endif
