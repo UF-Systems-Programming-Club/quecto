@@ -3,6 +3,13 @@ This isn't a super strict grammar with like BNF or anything, just a nice referen
 '*' means 0 or more times
 '+' means 1 or more times
 
-program = *(expr) EOF
+program = *(statement) EOF
 
+statement = expr '\n' or
+            declaration '\n' or
+            return '\n'
+
+identifier = (_|a-z|A-Z)(a-z|A-Z|0-9|_)*
+declaration = identifer : {type} = expr
+return = return expr
 expr = ( '(' expr ')' or number ) *(operator expr)

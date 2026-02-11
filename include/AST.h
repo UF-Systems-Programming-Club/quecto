@@ -5,6 +5,8 @@
 
 typedef enum {
     AST_BINARY_OP,
+    AST_DECLARATION,
+    AST_RETURN,
     AST_INT_LIT,
     AST_FLOAT_LIT,
 } ASTType;
@@ -23,6 +25,10 @@ typedef struct AST {
             BinaryOp op;
             struct AST *left;
             struct AST *right;
+        };
+        struct {
+            char *symbol;
+            struct AST *expr;
         };
         unsigned int int_lit;
         float float_lit;

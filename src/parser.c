@@ -1,4 +1,6 @@
 #include "parser.h"
+#include "AST.h"
+#include "lexer.h"
 
 int get_token_precedence_table[] = {
     [TOKEN_PLUS] = 1,
@@ -35,6 +37,18 @@ TokenType peek_next_token(ParserState *parser) {
     if (parser->current >= parser->tokens.count) return TOKEN_EOF;
 
     return parser->tokens.items[parser->current].type;
+}
+
+bool accept_next_token(ParserState *parser, TokenType type) {
+    if (peek_next_token(parser) == type) {
+        return true;
+    } else {
+        return false;
+    }
+}
+
+void eat_next_token(ParserState *parser) {
+    if (parser->current < parser->tokens.count) parser->current++;
 }
 
 bool match_next_token(ParserState *parser, TokenType type) {
@@ -131,6 +145,34 @@ AST *parse_expression(ParserState *parser, int min_prec) {
     }
 
     return left;
+}
+
+AST *parse_statement(ParserState *parser) {
+    AST *statement = (AST *)malloc(sizeof(AST));
+
+    if (accept_next_token(parser, TOKEN_IDENTIFIER)) {
+
+        Token identity = get_next_token(parser);
+
+        if (accept_next_token(parser, TOKEN_COLON)) {
+            eat_next_token(parser);
+            if (accept_next_token(parser, TOKEN_IDENTIFIER)) {
+                eat_next_token(parser);
+                if (accept_next_token(parser, TOKEN_EQUALS)) {
+                    eat_next_token(parser);
+                    statement->type = AST_DECLARATION;
+                    statement->symbol = identity.identifer;
+                    statement->expr = parse_expression(parser, 0);
+                }
+            }
+        }
+    } else if (accept_next_token(parser, TOKEN_RETURN)) {
+
+    } else {
+
+    }
+
+    return statement;
 }
 
 AST *parse_program(ParserState *parser) {
