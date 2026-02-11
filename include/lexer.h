@@ -14,6 +14,10 @@ typedef enum {
     TOKEN_EOF,
     TOKEN_OPEN_PAREN,
     TOKEN_CLOSE_PAREN,
+    TOKEN_IDENTIFIER,
+    TOKEN_COLON,
+    TOKEN_RETURN,
+    TOKEN_EQUALS,
 
     TOKEN_COUNT // Make sure this token is the last one
                 // listed in the enum, as this is assumed by compile time assertions
@@ -24,6 +28,7 @@ typedef struct {
     union {
         unsigned int int_lit;
         float float_lit;
+        char *identifer;
     };
     unsigned int row, col;
 } Token;
@@ -38,6 +43,7 @@ extern const char *token_to_string_table[];
 int int_from_str(const char* a, size_t len);
 float float_from_str(const char* a, size_t len);
 bool is_number(char c);
+bool is_alpha(char c);
 void print_token(Token tok);
 TokenArray tokenize(const char* buf, size_t buf_size);
 

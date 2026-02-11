@@ -1,4 +1,8 @@
 #include "lexer.h"
+#include "common.h"
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
 
 const char *token_to_string_table[] = {
     [TOKEN_PLUS] = "+",
@@ -8,8 +12,12 @@ const char *token_to_string_table[] = {
     [TOKEN_OPEN_PAREN] = "(",
     [TOKEN_CLOSE_PAREN] = ")",
     [TOKEN_SEMICOLON] = ";",
+    [TOKEN_COLON] = ":",
+    [TOKEN_EQUALS] = "=",
     [TOKEN_INT_LIT] = "integer literal",
     [TOKEN_FLOAT_LIT] = "float literal",
+    [TOKEN_IDENTIFIER] = "identifer",
+    [TOKEN_RETURN] = "return",
     [TOKEN_EOF] = "end of file"
 };
 
@@ -58,6 +66,10 @@ bool is_number(char c) {
     return '0' <= c && c <= '9';
 }
 
+bool is_alpha(char c) {
+    return ('a' <= c  && c <= 'z') || ('A' <= c && c <= 'Z');
+}
+
 void print_token(Token tok) {
     switch (tok.type) {
         case TOKEN_PLUS:        printf("+\n"); break;
@@ -69,6 +81,10 @@ void print_token(Token tok) {
         case TOKEN_FLOAT_LIT:   printf("%.2f\n", tok.float_lit); break;
         case TOKEN_EOF:         printf("EOF\n"); break;
         case TOKEN_OPEN_PAREN:  printf("(\n"); break;
+        case TOKEN_IDENTIFIER:  printf("%s\n", tok.identifer); break;
+        case TOKEN_COLON:       printf(":\n"); break;
+        case TOKEN_EQUALS:      printf("=\n"); break;
+        case TOKEN_RETURN:      printf("return\n"); break;
         case TOKEN_CLOSE_PAREN: printf(")\n"); break;
     }
 }
@@ -99,7 +115,6 @@ TokenArray tokenize(const char* buf, size_t buf_size) {
             case '\t':
             case '\r':
                 break;
-
             case '+':
                 tok.type = TOKEN_PLUS;
                 array_append(tokens, tok);
@@ -124,9 +139,31 @@ TokenArray tokenize(const char* buf, size_t buf_size) {
                 tok.type = TOKEN_CLOSE_PAREN;
                 array_append(tokens, tok);
                 break;
-
+            case ':':
+                tok.type = TOKEN_COLON;
+                array_append(tokens, tok);
+                break;
+            case '=':
+                tok.type = TOKEN_EQUALS;
+                array_append(tokens, tok);
+                break;
             default:
-                if (is_number(c)) {
+                if (is_alpha(c)) {
+                    tok.type = TOKEN_IDENTIFIER;
+                    while (next < buf_size && (is_alpha(buf[next]) || is_number(buf[next]) || buf[next] == '_')) {
+                        next++;
+                    }
+
+                    if (strncmp(&buf[start], "return", next - start) == 0) {
+                        tok.type = TOKEN_RETURN;
+                    } else {
+                        tok.identifer = (char*) malloc(next - start);
+                        strncpy(tok.identifer, &buf[start], next - start);
+                    }
+
+                    array_append(tokens, tok);
+                }
+                else if (is_number(c)) {
                     tok.type = TOKEN_INT_LIT;
                     int num_decimal_points = 0;
                     while (next < buf_size && (is_number(buf[next]) || buf[next] == '.')) {
