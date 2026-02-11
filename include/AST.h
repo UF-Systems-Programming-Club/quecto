@@ -16,6 +16,7 @@ typedef enum {
     OP_MINUS,
     OP_MULTIPLY,
     OP_DIVIDE,
+    OP_ASSIGN,
 } BinaryOp;
 
 typedef struct AST {

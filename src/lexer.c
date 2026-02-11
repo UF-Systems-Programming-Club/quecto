@@ -86,6 +86,7 @@ void print_token(Token tok) {
         case TOKEN_EQUALS:      printf("=\n"); break;
         case TOKEN_RETURN:      printf("return\n"); break;
         case TOKEN_CLOSE_PAREN: printf(")\n"); break;
+        case TOKEN_ASSIGN:      printf("=\n"); break;
     }
 }
 

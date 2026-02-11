@@ -6,13 +6,15 @@ int get_token_precedence_table[] = {
     [TOKEN_PLUS] = 1,
     [TOKEN_MINUS] = 1,
     [TOKEN_MULTIPLY] = 2,
-    [TOKEN_DIVIDE] = 2
+    [TOKEN_DIVIDE] = 2,
+    [TOKEN_ASSIGN] = 1,
 };
 
 bool token_is_operator(TokenType type) {
     return type == TOKEN_PLUS     ||
            type == TOKEN_MINUS    ||
            type == TOKEN_MULTIPLY ||
+           type == TOKEN_ASSIGN   ||
            type == TOKEN_DIVIDE;
 }
 
@@ -116,6 +118,10 @@ AST *parse_expression(ParserState *parser, int min_prec) {
             if (!match_next_token(parser, TOKEN_CLOSE_PAREN)) return NULL;
             get_next_token(parser);
             break;
+        case TOKEN_ASSIGN:
+            left->type = AST_BINARY_OP;
+            left->op = OP_ASSIGN;
+            break;
     }
 
     while (get_token_precedence(peek_next_token(parser)) > min_prec) {
@@ -136,7 +142,10 @@ AST *parse_expression(ParserState *parser, int min_prec) {
             case TOKEN_DIVIDE:
                 op->op = OP_DIVIDE;
                 break;
-        }
+            case TOKEN_ASSIGN:
+                op->op = OP_ASSIGN;
+                break;        
+            }
 
         op->right = parse_expression(parser, get_token_precedence(tok.type));
         if (parser->error) return NULL;
