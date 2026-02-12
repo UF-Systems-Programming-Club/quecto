@@ -1,6 +1,6 @@
 #include "parser.h"
 #include "AST.h"
-#include "lexer.h"
+#include "tokenizer.h"
 
 int get_token_precedence_table[] = {
     [TOKEN_PLUS] = 1,

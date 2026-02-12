@@ -2,7 +2,7 @@
 #define PARSER_H
 
 #include "common.h"
-#include "lexer.h"
+#include "tokenizer.h"
 #include "AST.h"
 
 typedef struct {

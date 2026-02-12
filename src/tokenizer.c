@@ -1,4 +1,4 @@
-#include "lexer.h"
+#include "tokenizer.h"
 #include "common.h"
 #include <stdlib.h>
 #include <stdio.h>

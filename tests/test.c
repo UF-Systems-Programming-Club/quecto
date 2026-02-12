@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "lexer.h"
+#include "tokenizer.h"
 
 int token_tests() {
     struct {

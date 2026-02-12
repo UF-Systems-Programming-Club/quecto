@@ -1,7 +1,7 @@
 #ifndef AST_H
 #define AST_H
 
-#include "lexer.h"
+#include "tokenizer.h"
 
 typedef enum {
     AST_BINARY_OP,

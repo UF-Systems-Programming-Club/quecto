@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "lexer.h"
+#include "tokenizer.h"
 #include "parser.h"
 #include "AST.h"
 #include "codegen.h"
@@ -44,18 +44,6 @@ int main() {
     AST *ast = parse_program(&parser);
 
     if (!parser.error) {
-        /*AST result = evaluate_ast(ast);
-        switch (result.type) {
-            case AST_BINARY_OP:
-                printf("error");
-                break;
-            case AST_FLOAT_LIT:
-                printf("float result: %f\n", result.float_lit);
-                break;
-            case AST_INT_LIT:
-                printf("unsigned result: %u\n", result.int_lit);
-                break;
-        }*/
         FILE *out = fopen("out.S", "w");
 
         fprintf(out, "\tglobal\t" ENTRY_SYMBOL "\n\n");

@@ -15,7 +15,7 @@ bool register_free_list[] = { 1, 1, 1, 1 };
 int current_symbol = 0;
 LocTable loc_table = {0};
 
-// TODO: evict register should evict to another register if possible instead of stack
+// TODO: evict register should evict to another register if possible before stack
 int evict_register(FILE *file, int reg) {
 }
 
@@ -35,23 +35,29 @@ void free_register(int reg) {
     register_free_list[reg] = 0;
 }
 
-Symbol generate_add(FILE *file, Symbol sym1, Symbol sym2) {
-    // TODO: this is really gross, need to add some abstracting functions for the location table
+int load_symbol_into_register(FILE *file, Symbol sym) {
     int reg;
-    switch (loc_table.locs[sym1].type) {
+    switch (loc_table.locs[sym].type) {
         case LOC_REGISTER:
-            reg = loc_table.locs[sym1].register_index;
+            reg = loc_table.locs[sym].register_index;
             break;
         case LOC_STACK:
             assert(0);
             break;
         case LOC_IMMEDIATE:
             reg = allocate_register(file);
-            fprintf(file, "\tmov\t%s, %u\n", register_list[BIT_32][reg], loc_table.locs[sym1].value);
-            loc_table.locs[sym1].type = LOC_REGISTER;
-            loc_table.locs[sym1].register_index = reg;
+            fprintf(file, "\tmov\t%s, %u\n", register_list[BIT_32][reg], loc_table.locs[sym].value);
+            loc_table.locs[sym].type = LOC_REGISTER;
+            loc_table.locs[sym].register_index = reg;
             break;
     }
+    return reg;
+}
+
+
+Symbol generate_add(FILE *file, Symbol sym1, Symbol sym2) {
+    // TODO: this is really gross, need to add some abstracting functions for the location table
+    int reg = load_symbol_into_register(file, sym1);
 
     switch (loc_table.locs[sym2].type) {
         case LOC_REGISTER:
@@ -76,21 +82,7 @@ Symbol generate_add(FILE *file, Symbol sym1, Symbol sym2) {
 
 Symbol generate_subtract(FILE *file, Symbol sym1, Symbol sym2) {
     // TODO: this is really gross, need to add some abstracting functions for the location table
-    int reg;
-    switch (loc_table.locs[sym1].type) {
-        case LOC_REGISTER:
-            reg = loc_table.locs[sym1].register_index;
-            break;
-        case LOC_STACK:
-            assert(0);
-            break;
-        case LOC_IMMEDIATE:
-            reg = allocate_register(file);
-            fprintf(file, "\tmov\t%s, %u\n", register_list[BIT_32][reg], loc_table.locs[sym1].value);
-            loc_table.locs[sym1].type = LOC_REGISTER;
-            loc_table.locs[sym1].register_index = reg;
-            break;
-    }
+    int reg = load_symbol_into_register(file, sym1);
 
     switch (loc_table.locs[sym2].type) {
         case LOC_REGISTER:
@@ -115,21 +107,7 @@ Symbol generate_subtract(FILE *file, Symbol sym1, Symbol sym2) {
 
 Symbol generate_multiply(FILE *file, Symbol sym1, Symbol sym2) {
     // TODO: this is really gross, need to add some abstracting functions for the location table
-    int reg;
-    switch (loc_table.locs[sym1].type) {
-        case LOC_REGISTER:
-            reg = loc_table.locs[sym1].register_index;
-            break;
-        case LOC_STACK:
-            assert(0);
-            break;
-        case LOC_IMMEDIATE:
-            reg = allocate_register(file);
-            fprintf(file, "\tmov\t%s, %u\n", register_list[BIT_32][reg], loc_table.locs[sym1].value);
-            loc_table.locs[sym1].type = LOC_REGISTER;
-            loc_table.locs[sym1].register_index = reg;
-            break;
-    }
+    int reg = load_symbol_into_register(file, sym1);
 
     switch (loc_table.locs[sym2].type) {
         case LOC_REGISTER:
