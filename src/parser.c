@@ -170,7 +170,7 @@ AST *parse_statement(ParserState *parser) {
                 if (accept_next_token(parser, TOKEN_EQUALS)) {
                     eat_next_token(parser);
                     statement->type = AST_DECLARATION;
-                    statement->symbol = identity.identifer;
+                    statement->symbol = identity.identifier;
                     statement->expr = parse_expression(parser, 0);
                 }
             }

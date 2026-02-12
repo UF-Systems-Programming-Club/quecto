@@ -30,7 +30,7 @@ typedef struct {
     union {
         unsigned int int_lit;
         float float_lit;
-        char *identifer;
+        char *identifier;
     };
     unsigned int row, col;
 } Token;

@@ -17,7 +17,7 @@ const char *token_to_string_table[] = {
     [TOKEN_COLON_EQUALS] = ":=",
     [TOKEN_INT_LIT] = "integer literal",
     [TOKEN_FLOAT_LIT] = "float literal",
-    [TOKEN_IDENTIFIER] = "identifer",
+    [TOKEN_IDENTIFIER] = "identifier",
     [TOKEN_RETURN] = "return",
     [TOKEN_EOF] = "end of file"
 };
@@ -82,7 +82,7 @@ void print_token(Token tok) {
         case TOKEN_FLOAT_LIT:    printf("%.2f\n", tok.float_lit); break;
         case TOKEN_EOF:          printf("EOF\n"); break;
         case TOKEN_OPEN_PAREN:   printf("(\n"); break;
-        case TOKEN_IDENTIFIER:   printf("%s\n", tok.identifer); break;
+        case TOKEN_IDENTIFIER:   printf("%s\n", tok.identifier); break;
         case TOKEN_COLON:        printf(":\n"); break;
         case TOKEN_EQUALS:       printf("=\n"); break;
         case TOKEN_COLON_EQUALS: printf(":=\n"); break;
@@ -167,8 +167,9 @@ TokenArray tokenize(const char* buf, size_t buf_size) {
                     if (strncmp(&buf[start], "return", next - start) == 0) {
                         tok.type = TOKEN_RETURN;
                     } else {
-                        tok.identifer = (char*) malloc(next - start);
-                        strncpy(tok.identifer, &buf[start], next - start);
+                        tok.identifier = (char*) malloc(next - start + 1);
+                        strncpy(tok.identifier, &buf[start], next - start);
+                        tok.identifier[next - start] = '\0';
                     }
 
                     array_append(tokens, tok);
