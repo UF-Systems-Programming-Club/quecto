@@ -144,7 +144,7 @@ AST *parse_expression(ParserState *parser, int min_prec) {
                 break;
             case TOKEN_ASSIGN:
                 op->op = OP_ASSIGN;
-                break;        
+                break;
             }
 
         op->right = parse_expression(parser, get_token_precedence(tok.type));
@@ -157,7 +157,9 @@ AST *parse_expression(ParserState *parser, int min_prec) {
 }
 
 AST *parse_statement(ParserState *parser) {
+
     AST *statement = (AST *)malloc(sizeof(AST));
+
 
     if (accept_next_token(parser, TOKEN_IDENTIFIER)) {
 
@@ -175,17 +177,21 @@ AST *parse_statement(ParserState *parser) {
                 }
             }
         }
+        else if (accept_next_token(parser, TOKEN_COLON_EQUALS)) {
+            eat_next_token(parser);
+            parse_expression(parser, 0);
+        }
     } else if (accept_next_token(parser, TOKEN_RETURN)) {
 
     } else {
-
+        statement = parse_expression(parser, 0);
     }
 
     return statement;
 }
 
 AST *parse_program(ParserState *parser) {
-    AST *ret = parse_expression(parser, 0);
+    AST *ret = parse_statement(parser);
     if (parser->error) return NULL;
 
     if (!match_next_token(parser, TOKEN_EOF)) {

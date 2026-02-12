@@ -1,5 +1,7 @@
 #include <assert.h>
+#include <stdio.h>
 
+#include "AST.h"
 #include "codegen.h"
 
 int stack_offset = 0;
@@ -149,22 +151,36 @@ Symbol generate_ast_assembly(FILE *file, AST *ast) {
         return current_symbol - 1;
     }
 
-    Symbol left = generate_ast_assembly(file, ast->left);
-    Symbol right = generate_ast_assembly(file, ast->right);
+    switch (ast->type) {
+        case AST_BINARY_OP:
+        {
+            Symbol left = generate_ast_assembly(file, ast->left);
+            Symbol right = generate_ast_assembly(file, ast->right);
 
-    Symbol res;
-    switch (ast->op) {
-        case OP_PLUS:
-            res = generate_add(file, left, right);
-            return res;
-        case OP_MINUS:    
-            res = generate_subtract(file, left, right);
-            return res;
-        case OP_MULTIPLY:
-            res = generate_multiply(file, left, right);
-            return res;
-        case OP_DIVIDE: 
-            res = generate_divide(file, left, right);
-            return res;
+            Symbol res;
+            switch (ast->op) {
+                case OP_PLUS:
+                    res = generate_add(file, left, right);
+                    return res;
+                case OP_MINUS:
+                    res = generate_subtract(file, left, right);
+                    return res;
+                case OP_MULTIPLY:
+                    res = generate_multiply(file, left, right);
+                    return res;
+                case OP_DIVIDE:
+                    res = generate_divide(file, left, right);
+                    return res;
+            }
+            break;
+        }
+        case AST_DECLARATION:
+            break;
+        case AST_RETURN:
+            break;
+        case AST_FLOAT_LIT:
+        case AST_INT_LIT:
+            break;
     }
+
 }
