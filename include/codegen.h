@@ -7,6 +7,15 @@
 
 #include "AST.h"
 
+#ifdef __MACH__
+#define EXIT_STATUS "0x2000001"
+#define ENTRY_SYMBOL "_main"
+#else
+#define EXIT_STATUS "60"
+#define ENTRY_SYMBOL "_start"
+#endif
+
+
 typedef enum {
     BIT_8,
     BIT_16,

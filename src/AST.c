@@ -91,17 +91,17 @@ void print_ast(AST* ast) {
             printf(")");
             break;
         case AST_BLOCK:
-
-            printf("{ \"block\": [\n");
+            printf("{\n");
             for (int i = 0; i < ast->block.count; i++) {
                 printf("\t");
                 print_ast(ast->block.items[i]);
                 printf(",\n");
             }
-            printf("]}\n");
+            printf("}\n");
             break;
         case AST_RETURN:
-            printf("return");
+            printf("return ");
+            print_ast(ast->expr);
             break;
         default:
             printf("unknown\n");

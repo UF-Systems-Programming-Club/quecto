@@ -177,7 +177,14 @@ Symbol generate_ast_assembly(FILE *file, AST *ast) {
         case AST_DECLARATION:
             break;
         case AST_RETURN:
+        {
+            Symbol expr = generate_ast_assembly(file, ast->expr);
+
+            fprintf(file, "\tmov\tedi, %s\n", register_list[BIT_32][loc_table.locs[expr].register_index]);
+            fprintf(file, "\tmov\teax, " EXIT_STATUS "\n");
+            fprintf(file, "\tsyscall\n");
             break;
+        }
         case AST_FLOAT_LIT:
         case AST_INT_LIT:
             break;

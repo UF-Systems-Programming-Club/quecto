@@ -161,17 +161,14 @@ AST *parse_statement(ParserState *parser) {
     if (check_next_token(parser, TOKEN_OPEN_CURLY)) {
         eat_next_token(parser);
         statement->type = AST_BLOCK;
-        print_token((Token){.type = peek_next_token(parser)});
 
         while (!check_next_token(parser, TOKEN_CLOSE_CURLY)) {
             AST* s = parse_statement(parser);
-            printf("%d\n", s->type);
             array_append(statement->block, s);
         }
 
         match_next_token(parser, TOKEN_CLOSE_CURLY);
         eat_next_token(parser);
-        print_token((Token){.type = peek_next_token(parser)});;
 
     } else if (check_next_token(parser, TOKEN_IDENTIFIER)) {
         Token identity = get_next_token(parser);
@@ -193,7 +190,9 @@ AST *parse_statement(ParserState *parser) {
             statement->expr = parse_expression(parser, 0);
         }
     } else if (check_next_token(parser, TOKEN_RETURN)) {
-
+        eat_next_token(parser);
+        statement->type = AST_RETURN;
+        statement->expr = parse_expression(parser, 0);
     } else {
         statement = parse_expression(parser, 0);
     }
