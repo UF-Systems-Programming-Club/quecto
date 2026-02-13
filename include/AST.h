@@ -5,6 +5,7 @@
 
 typedef enum {
     AST_BINARY_OP,
+    AST_BLOCK,
     AST_DECLARATION,
     AST_RETURN,
     AST_INT_LIT,
@@ -31,11 +32,17 @@ typedef struct AST {
             char *symbol;
             struct AST *expr;
         };
+        struct {
+                struct AST **items;
+                size_t count;
+                size_t capacity;
+        } block;
         unsigned int int_lit;
         float float_lit;
     };
 } AST;
 
 AST evaluate_ast(AST *ast);
+void print_ast(AST* ast);
 
 #endif

@@ -1,5 +1,6 @@
 #include "parser.h"
 #include "AST.h"
+#include "common.h"
 #include "tokenizer.h"
 
 int get_token_precedence_table[] = {
@@ -41,12 +42,8 @@ TokenType peek_next_token(ParserState *parser) {
     return parser->tokens.items[parser->current].type;
 }
 
-bool accept_next_token(ParserState *parser, TokenType type) {
-    if (peek_next_token(parser) == type) {
-        return true;
-    } else {
-        return false;
-    }
+bool check_next_token(ParserState *parser, TokenType type) {
+    return (peek_next_token(parser) == type);
 }
 
 void eat_next_token(ParserState *parser) {
@@ -160,28 +157,39 @@ AST *parse_statement(ParserState *parser) {
 
     AST *statement = (AST *)malloc(sizeof(AST));
 
+    if (check_next_token(parser, TOKEN_OPEN_CURLY)) {
+        eat_next_token(parser);
+        statement->type = AST_BLOCK;
+        print_token((Token){.type = peek_next_token(parser)});
 
-    if (accept_next_token(parser, TOKEN_IDENTIFIER)) {
+        while (!check_next_token(parser, TOKEN_CLOSE_CURLY)) {
+            AST* s = parse_statement(parser);
+            array_append(statement->block, s);
+        }
 
+        match_next_token(parser, TOKEN_CLOSE_CURLY);
+        eat_next_token(parser);
+        print_token((Token){.type = peek_next_token(parser)});;
+
+    } else if (check_next_token(parser, TOKEN_IDENTIFIER)) {
         Token identity = get_next_token(parser);
 
-        if (accept_next_token(parser, TOKEN_COLON)) {
+        if (check_next_token(parser, TOKEN_COLON)) {
             eat_next_token(parser);
-            if (accept_next_token(parser, TOKEN_IDENTIFIER)) {
+            if (check_next_token(parser, TOKEN_IDENTIFIER)) {
                 eat_next_token(parser);
-                if (accept_next_token(parser, TOKEN_EQUALS)) {
+                if (check_next_token(parser, TOKEN_EQUALS)) {
                     eat_next_token(parser);
                     statement->type = AST_DECLARATION;
                     statement->symbol = identity.identifier;
                     statement->expr = parse_expression(parser, 0);
                 }
             }
-        }
-        else if (accept_next_token(parser, TOKEN_COLON_EQUALS)) {
+        } else if (check_next_token(parser, TOKEN_COLON_EQUALS)) {
             eat_next_token(parser);
             parse_expression(parser, 0);
         }
-    } else if (accept_next_token(parser, TOKEN_RETURN)) {
+    } else if (check_next_token(parser, TOKEN_RETURN)) {
 
     } else {
         statement = parse_expression(parser, 0);

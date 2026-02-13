@@ -9,6 +9,8 @@ const char *token_to_string_table[] = {
     [TOKEN_MINUS] = "-",
     [TOKEN_MULTIPLY] = "*",
     [TOKEN_DIVIDE] = "/",
+    [TOKEN_OPEN_CURLY] = "{",
+    [TOKEN_CLOSE_CURLY] = "}",
     [TOKEN_OPEN_PAREN] = "(",
     [TOKEN_CLOSE_PAREN] = ")",
     [TOKEN_SEMICOLON] = ";",
@@ -82,6 +84,8 @@ void print_token(Token tok) {
         case TOKEN_FLOAT_LIT:    printf("%.2f\n", tok.float_lit); break;
         case TOKEN_EOF:          printf("EOF\n"); break;
         case TOKEN_OPEN_PAREN:   printf("(\n"); break;
+        case TOKEN_OPEN_CURLY:   printf("{\n"); break;
+        case TOKEN_CLOSE_CURLY:  printf("}\n"); break;
         case TOKEN_IDENTIFIER:   printf("%s\n", tok.identifier); break;
         case TOKEN_COLON:        printf(":\n"); break;
         case TOKEN_EQUALS:       printf("=\n"); break;
@@ -134,6 +138,14 @@ TokenArray tokenize(const char* buf, size_t buf_size) {
                 break;
             case '/':
                 tok.type = TOKEN_DIVIDE;
+                array_append(tokens, tok);
+                break;
+            case '{':
+                tok.type = TOKEN_OPEN_CURLY;
+                array_append(tokens, tok);
+                break;
+            case '}':
+                tok.type = TOKEN_CLOSE_CURLY;
                 array_append(tokens, tok);
                 break;
             case '(':

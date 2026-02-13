@@ -44,6 +44,9 @@ int main() {
     AST *ast = parse_program(&parser);
 
     if (!parser.error) {
+
+        print_ast(ast);
+
         FILE *out = fopen("out.S", "w");
 
         fprintf(out, "\tglobal\t" ENTRY_SYMBOL "\n\n");
