@@ -64,7 +64,7 @@ void print_ast(AST* ast) {
             printf("%d", ast->int_lit);
             break;
         case AST_DECLARATION:
-            printf("declaration: {symbol} {expr}\n");
+            printf("%s := ", ast->symbol);
             print_ast(ast->expr);
             break;
         case AST_BINARY_OP:

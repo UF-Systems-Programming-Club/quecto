@@ -2,6 +2,7 @@
 #include "AST.h"
 #include "common.h"
 #include "tokenizer.h"
+#include <stdio.h>
 
 int get_token_precedence_table[] = {
     [TOKEN_PLUS] = 1,
@@ -164,6 +165,7 @@ AST *parse_statement(ParserState *parser) {
 
         while (!check_next_token(parser, TOKEN_CLOSE_CURLY)) {
             AST* s = parse_statement(parser);
+            printf("%d\n", s->type);
             array_append(statement->block, s);
         }
 
@@ -173,7 +175,6 @@ AST *parse_statement(ParserState *parser) {
 
     } else if (check_next_token(parser, TOKEN_IDENTIFIER)) {
         Token identity = get_next_token(parser);
-
         if (check_next_token(parser, TOKEN_COLON)) {
             eat_next_token(parser);
             if (check_next_token(parser, TOKEN_IDENTIFIER)) {
@@ -187,7 +188,9 @@ AST *parse_statement(ParserState *parser) {
             }
         } else if (check_next_token(parser, TOKEN_COLON_EQUALS)) {
             eat_next_token(parser);
-            parse_expression(parser, 0);
+            statement->type = AST_DECLARATION;
+            statement->symbol = identity.identifier;
+            statement->expr = parse_expression(parser, 0);
         }
     } else if (check_next_token(parser, TOKEN_RETURN)) {
 
