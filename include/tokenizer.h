@@ -9,7 +9,6 @@ typedef enum {
     TOKEN_MULTIPLY,
     TOKEN_SEMICOLON,
     TOKEN_DIVIDE,
-    TOKEN_ASSIGN,
     TOKEN_INT_LIT,
     TOKEN_FLOAT_LIT,
     TOKEN_EOF,
@@ -22,6 +21,7 @@ typedef enum {
     TOKEN_EQUALS,
     TOKEN_COLON_EQUALS,
     TOKEN_RETURN,
+    TOKEN_ERROR,
 
     TOKEN_COUNT // Make sure this token is the last one
                 // listed in the enum, as this is assumed by compile time assertions

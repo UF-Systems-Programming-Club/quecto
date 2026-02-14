@@ -1,8 +1,9 @@
-#include "tokenizer.h"
-#include "common.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+
+#include "tokenizer.h"
+#include "common.h"
 
 const char *token_to_string_table[] = {
     [TOKEN_PLUS] = "+",
@@ -21,6 +22,7 @@ const char *token_to_string_table[] = {
     [TOKEN_FLOAT_LIT] = "float literal",
     [TOKEN_IDENTIFIER] = "identifier",
     [TOKEN_RETURN] = "return",
+    [TOKEN_ERROR] = "error",
     [TOKEN_EOF] = "end of file"
 };
 
@@ -92,7 +94,6 @@ void print_token(Token tok) {
         case TOKEN_COLON_EQUALS: printf(":=\n"); break;
         case TOKEN_RETURN:       printf("return\n"); break;
         case TOKEN_CLOSE_PAREN:  printf(")\n"); break;
-        case TOKEN_ASSIGN:       printf("=\n"); break;
 
         default:                assert(0 && "Every token needs to be able to be printed, so add entry");
     }

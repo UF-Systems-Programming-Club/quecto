@@ -1,7 +1,7 @@
 #include <assert.h>
 #include <stdio.h>
 
-#include "AST.h"
+#include "ast.h"
 #include "codegen.h"
 
 int stack_offset = 0;
@@ -16,10 +16,6 @@ bool register_free_list[] = { 1, 1, 1, 1 };
 
 int current_symbol = 0;
 LocTable loc_table = {0};
-
-// TODO: evict register should evict to another register if possible before stack
-int evict_register(FILE *file, int reg) {
-}
 
 int allocate_register(FILE *file) {
     for (int i = 0; i < (int)(sizeof(register_free_list) / sizeof(register_free_list[0])); i++) {

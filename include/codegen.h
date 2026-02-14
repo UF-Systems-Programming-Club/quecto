@@ -5,7 +5,7 @@
 #include <stdbool.h>
 #include <string.h>
 
-#include "AST.h"
+#include "ast.h"
 
 #ifdef __MACH__
 #define EXIT_STATUS "0x2000001"

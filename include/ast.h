@@ -42,7 +42,6 @@ typedef struct AST {
     };
 } AST;
 
-AST evaluate_ast(AST *ast);
 void print_ast(AST* ast);
 
 #endif

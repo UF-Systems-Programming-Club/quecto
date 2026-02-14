@@ -3,7 +3,7 @@
 
 #include "tokenizer.h"
 #include "parser.h"
-#include "AST.h"
+#include "ast.h"
 #include "codegen.h"
 
 #ifdef __MACH__
@@ -14,7 +14,7 @@
 #define ENTRY_SYMBOL "_start"
 #endif
 
-int main() {
+int main(int argc, char **argv) {
     FILE *f = fopen("hello.q", "r");
 
     fseek(f, 0, SEEK_END);
@@ -46,6 +46,7 @@ int main() {
     if (!parser.error) {
 
         print_ast(ast);
+        printf("\n");
 
         FILE *out = fopen("out.S", "w");
 

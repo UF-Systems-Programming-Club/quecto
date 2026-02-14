@@ -3,7 +3,7 @@
 
 #include "common.h"
 #include "tokenizer.h"
-#include "AST.h"
+#include "ast.h"
 
 typedef struct {
     TokenArray tokens;
