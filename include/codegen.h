@@ -15,7 +15,6 @@
 #define ENTRY_SYMBOL "_start"
 #endif
 
-
 typedef enum {
     BIT_8,
     BIT_16,

@@ -4,6 +4,7 @@
 #include "tokenizer.h"
 #include "parser.h"
 #include "ast.h"
+#include "ir.h"
 #include "codegen.h"
 
 #ifdef __MACH__
@@ -46,9 +47,14 @@ int main(int argc, char **argv) {
     if (!parser.error) {
 
         print_ast(ast);
-        printf("\n");
+        printf("\n\n");
 
-        FILE *out = fopen("out.S", "w");
+        InstList ir = {0};
+        generate_ir_from_ast(&ir, ast);
+        pretty_print_ir(ir);
+
+        print_live_intervals(create_live_intervals_from_ir(ir));
+        /*FILE *out = fopen("out.S", "w");
 
         fprintf(out, "\tglobal\t" ENTRY_SYMBOL "\n\n");
         fprintf(out, "\tsection\t.text\n");
@@ -60,6 +66,6 @@ int main(int argc, char **argv) {
         // fprintf(out, "\tmov\teax, " EXIT_STATUS "\n");
         // fprintf(out, "\tsyscall\n");
 
-        fclose(out);
+        fclose(out);*/
     }
 }
