@@ -21,7 +21,6 @@ typedef enum {
     TOKEN_EQUALS,
     TOKEN_COLON_EQUALS,
     TOKEN_RETURN,
-    TOKEN_ERROR,
 
     TOKEN_COUNT // Make sure this token is the last one
                 // listed in the enum, as this is assumed by compile time assertions

@@ -19,7 +19,7 @@ bool token_is_operator(TokenType type) {
            type == TOKEN_DIVIDE;
 }
 
-int get_token_precedence(TokenType type) {
+int get_token_type_precedence(TokenType type) {
     if (token_is_operator(type)) return get_token_precedence_table[type];
     return -1;
 }
@@ -41,14 +41,14 @@ int print_parser_error(ParserState *parser, const char *format, ...) {
     return result;
 }
 
-Token peek_next_token(ParserState *parser) {
-    if (parser->current >= parser->tokens.count) return parser->tokens.items[parser->tokens.count - 1];
+TokenType peek_next_token_type(ParserState *parser) {
+    if (parser->current >= parser->tokens.count) return parser->tokens.items[parser->tokens.count - 1].type;
 
-    return parser->tokens.items[parser->current];
+    return parser->tokens.items[parser->current].type;
 }
 
 bool check_next_token(ParserState *parser, Token *tok, TokenType type) {
-    if (peek_next_token(parser).type == type) {
+    if (peek_next_token_type(parser) == type) {
         *tok = *get_next_token(parser);
         return true;
     }
@@ -61,8 +61,7 @@ bool expect_next_token(ParserState *parser, Token *tok, TokenType type) {
     } else {
         print_parser_error(parser,"expected \"%s\" but got \"%s\" instead\n",
             token_to_string_table[type],
-            token_to_string_table[peek_next_token(parser).type]);
-        tok->type = TOKEN_ERROR;
+            token_to_string_table[peek_next_token_type(parser)]);
         parser->error = true;
         return false;
     }
@@ -81,14 +80,13 @@ bool expect_next_token_multiple(ParserState *parser, Token *tok, int count, ...)
     va_end(args);
     va_start(args, count);
 
-    tok->type = TOKEN_ERROR;
     parser->error = true;
     print_parser_error(parser, "");
     for (int i = 0; i < count - 1; i++) {
         printf("\"%s\", ", token_to_string_table[va_arg(args, TokenType)]);
     }
     printf("or \"%s\", ", token_to_string_table[va_arg(args, TokenType)]);
-    printf("but got \"%s\" instead\n", token_to_string_table[peek_next_token(parser).type]);
+    printf("but got \"%s\" instead\n", token_to_string_table[peek_next_token_type(parser)]);
 
     va_end(args);
     return false;
@@ -119,7 +117,7 @@ AST *parse_expression(ParserState *parser, int min_prec) {
             break;
     }
 
-    while (get_token_precedence(peek_next_token(parser).type) > min_prec) {
+    while (get_token_type_precedence(peek_next_token_type(parser)) > min_prec) {
         AST *op = (AST *)malloc(sizeof(AST));
         op->type = AST_BINARY_OP;
         op->left = left;
@@ -139,7 +137,7 @@ AST *parse_expression(ParserState *parser, int min_prec) {
                 break;
         }
 
-        op->right = parse_expression(parser, get_token_precedence(tok.type));
+        op->right = parse_expression(parser, get_token_type_precedence(tok.type));
         if (parser->error) return NULL;
 
         left = op;
@@ -192,6 +190,9 @@ AST *parse_program(ParserState *parser) {
     AST *ret = parse_statement(parser);
     if (parser->error) return NULL;
 
+    // TODO: I'm not sure if it's better to pass pointer to local tok
+    // or have tok be a global variable, but switching to local pointer
+    // cleaned up parser code a lot from previous solution
     Token tok;
     if (!expect_next_token(parser, &tok, TOKEN_EOF)) {
         free(ret);

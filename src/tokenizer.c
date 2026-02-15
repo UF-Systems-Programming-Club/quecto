@@ -22,7 +22,6 @@ const char *token_to_string_table[] = {
     [TOKEN_FLOAT_LIT] = "float literal",
     [TOKEN_IDENTIFIER] = "identifier",
     [TOKEN_RETURN] = "return",
-    [TOKEN_ERROR] = "error",
     [TOKEN_EOF] = "end of file"
 };
 
