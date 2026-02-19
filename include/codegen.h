@@ -1,4 +1,4 @@
-#ifndef CODEGEN_H
+/*#ifndef CODEGEN_H
 #define CODEGEN_H
 
 #include <stdio.h>
@@ -53,4 +53,6 @@ int allocate_register();
 void free_register(int reg);
 Symbol generate_ast_assembly(FILE *file, AST *ast);
 
-#endif
+#endif*/
+
+void generate_assembly_from_ir(FILE *out, InstList ir, IntervalList intervals);

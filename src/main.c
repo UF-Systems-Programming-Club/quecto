@@ -45,15 +45,21 @@ int main(int argc, char **argv) {
     AST *ast = parse_program(&parser);
 
     if (!parser.error) {
-
         print_ast(ast);
         printf("\n\n");
 
         InstList ir = {0};
         generate_ir_from_ast(&ir, ast);
         pretty_print_ir(ir);
+        printf("\n");
 
-        print_live_intervals(create_live_intervals_from_ir(ir));
+        IntervalList intervals = create_live_intervals_from_ir(ir);
+        linear_scan_register_allocation(&intervals);
+        print_live_intervals(intervals);
+
+        FILE *out = fopen("out.S", "w");
+        generate_assembly_from_ir(out, ir, intervals);
+
         /*FILE *out = fopen("out.S", "w");
 
         fprintf(out, "\tglobal\t" ENTRY_SYMBOL "\n\n");

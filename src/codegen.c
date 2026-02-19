@@ -1,4 +1,4 @@
-#include <assert.h>
+/*#include <assert.h>
 #include <stdio.h>
 
 #include "ast.h"
@@ -186,4 +186,36 @@ Symbol generate_ast_assembly(FILE *file, AST *ast) {
             break;
     }
 
+}*/
+
+#include "ir.h"
+
+void generate_assembly_from_ir(FILE *out, InstList ir, IntervalList intervals) {
+    for (int i = 0; i < ir.count; i++) {
+        Inst inst = ir.items[i];
+        int dest = intervals.items[inst.dest].loc.register_index;
+        int arg1 = intervals.items[inst.arg1].loc.register_index;
+        int arg2 = intervals.items[inst.arg2].loc.register_index;
+        switch (inst.type) {
+            case INST_ADD:
+                if (dest != arg1)
+                    fprintf(out, "\tmov\t%s, %s\n", registers[dest], registers[arg1]);
+                fprintf(out, "\tadd\t%s, %s\n", registers[dest], registers[arg2]);
+                break;
+            case INST_SUB:
+                if (dest != arg1)
+                    fprintf(out, "\tmov\t%s, %s\n", registers[dest], registers[arg1]);
+                fprintf(out, "\tsub\t%s, %s\n", registers[dest], registers[arg2]);
+                break;
+            case INST_MUL:
+                if (dest != arg1)
+                    fprintf(out, "\tmov\t%s, %s\n", registers[dest], registers[arg1]);
+                fprintf(out, "\timul\t%s, %s\n", registers[dest], registers[arg2]);
+                break;
+            case INST_DIV:
+                // assert(0);
+            case INST_LOAD:
+                fprintf(out, "\tmov\t%s, %d\n", registers[dest], inst.arg1);
+        }
+    }
 }

@@ -50,6 +50,7 @@ void generate_ir_from_ast(InstList *ir, AST *ast) {
 void pretty_print_ir(InstList ir) {
     for (int i = 0; i < ir.count; i++) {
         Inst inst = ir.items[i];
+        printf("%d: ", i);
         switch (inst.type) {
             case INST_ADD:
                 printf("r%d = add r%d, r%d\n", inst.dest, inst.arg1, inst.arg2);
@@ -73,18 +74,18 @@ void pretty_print_ir(InstList ir) {
 }
 
 IntervalList create_live_intervals_from_ir(InstList ir) {
-    // TODO: will potentially have to add sorting functionality for the interval list.
-    // for now this technically doesn't work because of how we treat arguments in an
-    // instruction but I need to do some other things so I am pushing for now
+    // NOTE: will potentially have to add sorting functionality for the interval list.
+    // assumes instructions, registers, and intervals are in the same order in their
+    // respective arrays
     IntervalList intervals = {0};
 
     for (int i = 0; i < current_register; i++) {
-        LiveInterval interval;
+        Interval interval;
 
         // get start of interval
         for (int j = 0; j < ir.count; j++) {
             Inst inst = ir.items[j];
-            if (inst.dest == i || inst.arg1 == i || inst.arg2 == i) {
+            if (inst.dest == i) {
                 interval.start = j;
                 break;
             }
@@ -93,10 +94,40 @@ IntervalList create_live_intervals_from_ir(InstList ir) {
         // get end of interval
         for (int j = ir.count - 1; j >= 0; j--) {
             Inst inst = ir.items[j];
-            if (inst.dest == i || inst.arg1 == i || inst.arg2 == i) {
-                interval.end = j;
-                break;
+            bool exit = false;
+            switch (inst.type) {
+                case INST_ADD:
+                    if (inst.dest == i || inst.arg1 == i || inst.arg2 == i) {
+                        interval.end = j;
+                        exit = true;
+                    }
+                    break;
+                case INST_SUB:
+                    if (inst.dest == i || inst.arg1 == i || inst.arg2 == i) {
+                        interval.end = j;
+                        exit = true;
+                    }
+                    break;
+                case INST_MUL:
+                    if (inst.dest == i || inst.arg1 == i || inst.arg2 == i) {
+                        interval.end = j;
+                        exit = true;
+                    }
+                    break;
+                case INST_DIV:
+                    if (inst.dest == i || inst.arg1 == i || inst.arg2 == i) {
+                        interval.end = j;
+                        exit = true;
+                    }
+                    break;
+                case INST_LOAD:
+                    if (inst.dest == i) {
+                        interval.end = j;
+                        exit = true;
+                    }
+                    break;
             }
+            if (exit) break;
         }
 
         array_append(intervals, interval);
@@ -105,8 +136,73 @@ IntervalList create_live_intervals_from_ir(InstList ir) {
     return intervals;
 }
 
+const char *registers[] = {
+    "eax", "ecx", "edx", "edi",
+};
+
+// TODO: will need to turn this into an interval set to perform register pre-allocation
+// for procedures and operations that require specific registers
+bool register_is_free[] = { 1, 1, 1, 1, };
+
 void print_live_intervals(IntervalList intervals) {
     for (int i = 0; i < intervals.count; i++) {
-        printf("r%d: [%d, %d]\n", i, intervals.items[i].start, intervals.items[i].end);
+        printf("r%d: [%d, %d] @ ", i, intervals.items[i].start, intervals.items[i].end);
+        switch (intervals.items[i].loc.type) {
+            case LOC_STACK:
+                printf("[rbp - %d]\n", intervals.items[i].loc.stack_offset);
+            case LOC_REGISTER:
+                printf("%s\n", registers[intervals.items[i].loc.register_index]);
+        }
+    }
+}
+
+void linear_scan_register_allocation(IntervalList *intervals) {
+    // NOTE: assumes intervals is sorted in order of increasing start point already. might change where that is
+    // not true
+    IntervalList active = {0};
+    for (int i = 0; i < intervals->count; i++) {
+        Interval *interval = &intervals->items[i];
+
+        // Expire old intervals
+        for (int j = 0; j < active.count; j++) {
+            if (active.items[j].end >= intervals->items[i].start) break;
+
+            // free register
+            register_is_free[active.items[j].loc.register_index] = true;
+
+            // remove interval from active
+            int k = j;
+            while (k < active.count - 1) {
+                active.items[k] = active.items[k + 1];
+                k++;
+            }
+            active.count--;
+
+        }
+
+        // 4 is the amount of registers, will need to be changed for each platform
+        if (active.count == 4) {
+            // Spill interval i
+            // assert(0);
+            printf("in here\n");
+        } else {
+            // allocate register
+            for (int k = 0; k < 4; k++) {
+                if (register_is_free[k]) {
+                    register_is_free[k] = false;
+                    interval->loc.type = LOC_REGISTER;
+                    interval->loc.register_index = k;
+                    break;
+                }
+            }
+
+            array_append(active, *interval);
+            int insert_slot = active.count - 1;
+            while (insert_slot > 0 && active.items[insert_slot - 1].end > interval->end) {
+                active.items[insert_slot] = active.items[insert_slot - 1];
+                insert_slot--;
+            }
+            active.items[insert_slot] = *interval;
+        }
     }
 }
