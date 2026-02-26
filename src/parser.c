@@ -47,7 +47,7 @@ TokenType peek_next_token_type(ParserState *parser) {
     return parser->tokens.items[parser->current].type;
 }
 
-bool check_next_token(ParserState *parser, Token *tok, TokenType type) {
+bool match_next_token(ParserState *parser, Token *tok, TokenType type) {
     if (peek_next_token_type(parser) == type) {
         *tok = *get_next_token(parser);
         return true;
@@ -56,7 +56,7 @@ bool check_next_token(ParserState *parser, Token *tok, TokenType type) {
 }
 
 bool expect_next_token(ParserState *parser, Token *tok, TokenType type) {
-    if (check_next_token(parser, tok, type)) {
+    if (match_next_token(parser, tok, type)) {
         return true;
     } else {
         print_parser_error(parser,"expected \"%s\" but got \"%s\" instead\n",
@@ -73,7 +73,7 @@ bool expect_next_token_multiple(ParserState *parser, Token *tok, int count, ...)
     va_start(args, count);
     for (int i = 0; i < count; i++) {
         TokenType type = va_arg(args, TokenType);
-        if (check_next_token(parser, tok, type)) {
+        if (match_next_token(parser, tok, type)) {
             return true;
         }
     }
@@ -149,34 +149,34 @@ AST *parse_expression(ParserState *parser, int min_prec) {
 AST *parse_statement(ParserState *parser) {
     Token tok;
 
-    AST *statement = (AST *)malloc(sizeof(AST));
+    // NOTE: changed to calloc here because array macros need array to be initialized to all zero
+    AST *statement = (AST *)calloc(1, sizeof(AST));
 
-    if (check_next_token(parser, &tok, TOKEN_OPEN_CURLY)) {
+    if (match_next_token(parser, &tok, TOKEN_OPEN_CURLY)) {
         statement->type = AST_BLOCK;
 
-        while (!check_next_token(parser, &tok, TOKEN_CLOSE_CURLY)) {
-            AST* s = parse_statement(parser);
+        while (!match_next_token(parser, &tok, TOKEN_CLOSE_CURLY)) {
+            AST *s = parse_statement(parser);
             array_append(statement->block, s);
         }
 
         expect_next_token(parser, &tok, TOKEN_CLOSE_CURLY);
 
-    } else if (check_next_token(parser, &tok, TOKEN_IDENTIFIER)) {
+    } else if (match_next_token(parser, &tok, TOKEN_IDENTIFIER)) {
         Token ident = tok;
-        if (check_next_token(parser, &tok, TOKEN_COLON)) {
-            if (check_next_token(parser, &tok, TOKEN_IDENTIFIER)) {
-                if (check_next_token(parser, &tok, TOKEN_EQUALS)) {
-                    statement->type = AST_DECLARATION;
-                    statement->symbol = ident.identifier;
-                    statement->expr = parse_expression(parser, 0);
-                }
-            }
-        } else if (check_next_token(parser, &tok, TOKEN_COLON_EQUALS)) {
+        if (match_next_token(parser, &tok, TOKEN_COLON)) {
+            if (!match_next_token(parser, &tok, TOKEN_IDENTIFIER)) return NULL;
+            if (!match_next_token(parser, &tok, TOKEN_EQUALS)) return NULL;
+
+            statement->type = AST_DECLARATION;
+            statement->symbol = ident.identifier;
+            statement->expr = parse_expression(parser, 0);
+        } else if (match_next_token(parser, &tok, TOKEN_COLON_EQUALS)) {
             statement->type = AST_DECLARATION;
             statement->symbol = ident.identifier;
             statement->expr = parse_expression(parser, 0);
         }
-    } else if (check_next_token(parser, &tok, TOKEN_RETURN)) {
+    } else if (match_next_token(parser, &tok, TOKEN_RETURN)) {
         statement->type = AST_RETURN;
         statement->expr = parse_expression(parser, 0);
     } else {

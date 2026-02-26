@@ -3,48 +3,93 @@
 #include "common.h"
 #include "ir.h"
 
-int current_register = 0;
+int current_vreg = 0;
 
-int generate_expr_ir(InstList *ir, AST *expr) {
+IROp generate_load_imm_ir(InstList *ir, IROp imm) {
+    Inst inst;
+    IROp dest = {
+        .type = IR_OP_VREG,
+        .vreg = current_vreg++,
+    };
+    inst.type = INST_LOADI;
+    inst.dest = dest;
+    inst.arg1 = imm;
+
+    array_append(*ir, inst);
+    return dest;
+}
+
+IROp generate_expr_ir(InstList *ir, AST *expr) {
     if (expr->type == AST_INT_LIT) {
-        Inst inst = {
-            .type = INST_LOAD,
-            .dest = current_register,
-            .arg1 = expr->int_lit
+        IROp res = {
+            .type = IR_OP_IMM,
+            .imm = expr->int_lit
         };
-        // TODO: do i want to create the ir like this?
-        array_append((*ir), inst);
-        return current_register++;
+        return res;
     }
 
-    int arg1 = generate_expr_ir(ir, expr->left);
-    int arg2 = generate_expr_ir(ir, expr->right);
-
     Inst inst;
-    inst.dest = current_register;
-    inst.arg1 = arg1;
-    inst.arg2 = arg2;
+    IROp dest = {
+        .type = IR_OP_VREG,
+        .vreg = current_vreg++,
+    };
+    inst.dest = dest;
+    inst.arg1 = generate_expr_ir(ir, expr->left);
+    inst.arg2 = generate_expr_ir(ir, expr->right);
+
     switch (expr->op) {
         case OP_PLUS:
+            if (inst.arg1.type == IR_OP_IMM) {
+                if (inst.arg2.type == IR_OP_VREG) {
+                    IROp temp = inst.arg1;
+                    inst.arg1 = inst.arg2;
+                    inst.arg2 = temp;
+                } else {
+                    inst.arg1 = generate_load_imm_ir(ir, inst.arg1);
+                }
+            }
             inst.type = INST_ADD;
             break;
         case OP_MINUS:
+            if (inst.arg1.type == IR_OP_IMM) {
+                inst.arg1 = generate_load_imm_ir(ir, inst.arg1);
+            }
             inst.type = INST_SUB;
             break;
         case OP_MULTIPLY:
+            if (inst.arg1.type == IR_OP_IMM) {
+                if (inst.arg2.type == IR_OP_VREG) {
+                    IROp temp = inst.arg1;
+                    inst.arg1 = inst.arg2;
+                    inst.arg2 = temp;
+                } else {
+                    inst.arg1 = generate_load_imm_ir(ir, inst.arg1);
+                }
+            }
             inst.type = INST_MUL;
             break;
         case OP_DIVIDE:
+            if (inst.arg1.type == IR_OP_IMM) {
+                inst.arg1 = generate_load_imm_ir(ir, inst.arg1);
+            }
             inst.type = INST_DIV;
             break;
     }
-    array_append((*ir), inst);
-    return current_register++;
+    array_append(*ir, inst);
+    return dest;
 }
 
 void generate_ir_from_ast(InstList *ir, AST *ast) {
     // TODO: assumes ast is an expression only for now
     generate_expr_ir(ir, ast);
+}
+
+void print_ir_op(IROp op) {
+    if (op.type == IR_OP_IMM) {
+        printf("%d", op.imm);
+    } else {
+        printf("r%d", op.vreg);
+    }
 }
 
 void pretty_print_ir(InstList ir) {
@@ -53,19 +98,38 @@ void pretty_print_ir(InstList ir) {
         printf("%d: ", i);
         switch (inst.type) {
             case INST_ADD:
-                printf("r%d = add r%d, r%d\n", inst.dest, inst.arg1, inst.arg2);
+                printf("\tr%d = add ", inst.dest.vreg);
+                print_ir_op(inst.arg1);
+                printf(", ");
+                print_ir_op(inst.arg2);
+                printf("\n");
                 break;
             case INST_SUB:
-                printf("r%d = sub r%d, r%d\n", inst.dest, inst.arg1, inst.arg2);
+                printf("\tr%d = sub ", inst.dest.vreg);
+                print_ir_op(inst.arg1);
+                printf(", ");
+                print_ir_op(inst.arg2);
+                printf("\n");
                 break;
             case INST_MUL:
-                printf("r%d = mul r%d, r%d\n", inst.dest, inst.arg1, inst.arg2);
+                printf("\tr%d = mul ", inst.dest.vreg);
+                print_ir_op(inst.arg1);
+                printf(", ");
+                print_ir_op(inst.arg2);
+                printf("\n");
                 break;
             case INST_DIV:
-                printf("r%d = div r%d, r%d\n", inst.dest, inst.arg1, inst.arg2);
+                printf("\tr%d = div ", inst.dest.vreg);
+                print_ir_op(inst.arg1);
+                printf(", ");
+                print_ir_op(inst.arg2);
+                printf("\n");
                 break;
-            case INST_LOAD:
-                printf("r%d = %d\n", inst.dest, inst.arg1);
+            case INST_MOV:
+                printf("\tr%d = r%d\n", inst.dest.vreg, inst.arg1.vreg);
+                break;
+            case INST_LOADI:
+                printf("\tr%d = loadi %d\n", inst.dest.vreg, inst.arg1.imm);
                 break;
             default:
                 printf("error unrecognized instruction in ir\n");
@@ -73,67 +137,43 @@ void pretty_print_ir(InstList ir) {
     }
 }
 
-IntervalList create_live_intervals_from_ir(InstList ir) {
-    // NOTE: will potentially have to add sorting functionality for the interval list.
-    // assumes instructions, registers, and intervals are in the same order in their
-    // respective arrays
-    IntervalList intervals = {0};
+IntervalArray create_live_intervals_from_ir(InstList ir) {
+    IntervalArray intervals;
+    array_init(intervals, current_vreg);
 
-    for (int i = 0; i < current_register; i++) {
-        Interval interval;
-
-        // get start of interval
-        for (int j = 0; j < ir.count; j++) {
-            Inst inst = ir.items[j];
-            if (inst.dest == i) {
-                interval.start = j;
+    for (int vreg = 0; vreg < current_vreg; vreg++) {
+        Interval interval = {0};
+        interval.vreg = vreg;
+        // find start
+        for (int i = 0; i < ir.count; i++) {
+            if (ir.items[i].dest.type == IR_OP_VREG && ir.items[i].dest.vreg == vreg) {
+                interval.start = i;
                 break;
             }
         }
 
-        // get end of interval
-        for (int j = ir.count - 1; j >= 0; j--) {
-            Inst inst = ir.items[j];
-            bool exit = false;
-            switch (inst.type) {
-                case INST_ADD:
-                    if (inst.dest == i || inst.arg1 == i || inst.arg2 == i) {
-                        interval.end = j;
-                        exit = true;
-                    }
-                    break;
-                case INST_SUB:
-                    if (inst.dest == i || inst.arg1 == i || inst.arg2 == i) {
-                        interval.end = j;
-                        exit = true;
-                    }
-                    break;
-                case INST_MUL:
-                    if (inst.dest == i || inst.arg1 == i || inst.arg2 == i) {
-                        interval.end = j;
-                        exit = true;
-                    }
-                    break;
-                case INST_DIV:
-                    if (inst.dest == i || inst.arg1 == i || inst.arg2 == i) {
-                        interval.end = j;
-                        exit = true;
-                    }
-                    break;
-                case INST_LOAD:
-                    if (inst.dest == i) {
-                        interval.end = j;
-                        exit = true;
-                    }
-                    break;
+        // find end
+        for (int i = ir.count - 1; i >= 0; i--) {
+            if (ir.items[i].arg1.type == IR_OP_VREG && ir.items[i].arg1.vreg == vreg) {
+                interval.end = i;
+                break;
             }
-            if (exit) break;
+            if (ir.items[i].arg2.type == IR_OP_VREG && ir.items[i].arg2.vreg == vreg) {
+                interval.end = i;
+                break;
+            }
         }
 
         array_append(intervals, interval);
     }
 
     return intervals;
+}
+
+void print_live_intervals(IntervalArray intervals) {
+    for (int i = 0; i < intervals.count; i++) {
+        printf("r%d: [%d, %d]\n", intervals.items[i].vreg, intervals.items[i].start, intervals.items[i].end);
+    }
 }
 
 const char *registers[] = {
@@ -144,31 +184,25 @@ const char *registers[] = {
 // for procedures and operations that require specific registers
 bool register_is_free[] = { 1, 1, 1, 1, };
 
-void print_live_intervals(IntervalList intervals) {
-    for (int i = 0; i < intervals.count; i++) {
-        printf("r%d: [%d, %d] @ ", i, intervals.items[i].start, intervals.items[i].end);
-        switch (intervals.items[i].loc.type) {
-            case LOC_STACK:
-                printf("[rbp - %d]\n", intervals.items[i].loc.stack_offset);
-            case LOC_REGISTER:
-                printf("%s\n", registers[intervals.items[i].loc.register_index]);
-        }
-    }
-}
+// NOTE: assumes intervals is already sorted
+LocationArray linear_scan_register_allocation(IntervalArray *intervals) {
+    LocationArray locations = {0};
+    array_init(locations, current_vreg);
+    locations.count = current_vreg;
+    IntervalArray active = {0};
 
-void linear_scan_register_allocation(IntervalList *intervals) {
-    // NOTE: assumes intervals is sorted in order of increasing start point already. might change where that is
-    // not true
-    IntervalList active = {0};
     for (int i = 0; i < intervals->count; i++) {
         Interval *interval = &intervals->items[i];
+        Location location = {0};
+        location.type = LOC_REGISTER;
+        int vreg = intervals->items[i].vreg;
 
         // Expire old intervals
         for (int j = 0; j < active.count; j++) {
-            if (active.items[j].end >= intervals->items[i].start) break;
+            if (active.items[j].end > intervals->items[i].start) break;
 
             // free register
-            register_is_free[active.items[j].loc.register_index] = true;
+            register_is_free[locations.items[active.items[j].vreg].register_index] = true;
 
             // remove interval from active
             int k = j;
@@ -180,18 +214,19 @@ void linear_scan_register_allocation(IntervalList *intervals) {
 
         }
 
-        // 4 is the amount of registers, will need to be changed for each platform
+        // 4 is the amount of registers currently, will need to be changed for each platform
         if (active.count == 4) {
             // Spill interval i
-            // assert(0);
-            printf("in here\n");
+            assert(0);
         } else {
             // allocate register
             for (int k = 0; k < 4; k++) {
                 if (register_is_free[k]) {
                     register_is_free[k] = false;
-                    interval->loc.type = LOC_REGISTER;
-                    interval->loc.register_index = k;
+                    /*interval->loc.type = LOC_REGISTER;
+                    interval->loc.register_index = k;*/
+                    location.type = LOC_REGISTER;
+                    location.register_index = k;
                     break;
                 }
             }
@@ -204,5 +239,8 @@ void linear_scan_register_allocation(IntervalList *intervals) {
             }
             active.items[insert_slot] = *interval;
         }
+
+        locations.items[vreg] = location;
     }
+    return locations;
 }

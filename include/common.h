@@ -9,7 +9,7 @@
 #include <string.h>
 #include <assert.h>
 
-/* Struct definition needed to use array macros
+/* Struct definition needed to use array macros.
  * typedef struct {
  *     T items;
  *     size_t count;
@@ -19,12 +19,26 @@
 
 #define array_append(array, item)\
     do {\
-        if (array.count >= array.capacity) {\
-            if (array.capacity == 0) array.capacity = 128;\
-            array.capacity *= 2;\
-            array.items = realloc(array.items, array.capacity * sizeof(*array.items));\
+        if ((array).count >= (array).capacity) {\
+            if ((array).capacity == 0) (array).capacity = 128;\
+            (array).capacity *= 2;\
+            (array).items = realloc((array).items, (array).capacity * sizeof(*(array).items));\
         }\
-        array.items[array.count++] = item;\
+        (array).items[(array).count++] = item;\
+    } while (0)
+
+#define array_init(array, size)\
+    do {\
+        (array).capacity = size;\
+        (array).items = malloc((array).capacity * sizeof(*(array).items));\
+        (array).count = 0;\
+    } while (0)
+
+#define array_free(array)\
+    do {\
+        (array).capacity = 0;\
+        free((array).items);\
+        (array).count = 0;\
     } while (0)
 
 

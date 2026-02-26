@@ -53,25 +53,45 @@ int main(int argc, char **argv) {
         pretty_print_ir(ir);
         printf("\n");
 
-        IntervalList intervals = create_live_intervals_from_ir(ir);
-        linear_scan_register_allocation(&intervals);
+        ir = adhere_ir_to_machine_spec(ir);
+        pretty_print_ir(ir);
+        printf("\n");
+
+        IntervalArray intervals = create_live_intervals_from_ir(ir);
+        // Bubble sort
+        for (int i = 0; i < intervals.count - 1; i++) {
+            bool swapped = false;
+            for (int j = 0; j < intervals.count - i - 1; j++) {
+                if (intervals.items[j].start > intervals.items[j+1].start) {
+                    Interval temp = intervals.items[j];
+                    intervals.items[j] = intervals.items[j+1];
+                    intervals.items[j+1] = temp;
+                    swapped = true;
+                }
+            }
+            if (!swapped)
+                break;
+        }
         print_live_intervals(intervals);
+        printf("\n");
+
+        LocationArray locations = linear_scan_register_allocation(&intervals);
+        for (int i = 0; i < locations.count; i++) {
+            printf("vreg %d @ r%d\n", i, locations.items[i].register_index);
+        }
 
         FILE *out = fopen("out.S", "w");
-        generate_assembly_from_ir(out, ir, intervals);
-
-        /*FILE *out = fopen("out.S", "w");
 
         fprintf(out, "\tglobal\t" ENTRY_SYMBOL "\n\n");
         fprintf(out, "\tsection\t.text\n");
         fprintf(out, ENTRY_SYMBOL ":\n");
 
-        Symbol sym = generate_ast_assembly(out, ast);
+        generate_assembly_from_ir(out, ir, locations);
 
-        // fprintf(out, "\tmov\tedi, %s\n", register_list[BIT_32][loc_table.locs[sym].register_index]);
-        // fprintf(out, "\tmov\teax, " EXIT_STATUS "\n");
-        // fprintf(out, "\tsyscall\n");
+        fprintf(out, "\tmov\tedi, %d\n", 0);
+        fprintf(out, "\tmov\teax, " EXIT_STATUS "\n");
+        fprintf(out, "\tsyscall\n");
 
-        fclose(out);*/
+        fclose(out);
     }
 }

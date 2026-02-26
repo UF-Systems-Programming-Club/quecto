@@ -15,3 +15,12 @@ echo $?
 to view the exit code.
 
 ## Intermediate Language Description
+
+Arithmetic instructions:
+can utilize two registers, or a register and an imm (order matters, so has to be reg plus imm)
+* add
+* sub
+* mul
+* div
+
+loadi

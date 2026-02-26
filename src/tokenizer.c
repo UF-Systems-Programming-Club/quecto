@@ -38,7 +38,7 @@ int int_from_str(const char* a, size_t len) {
     return accum;
 }
 
-float float_from_str(const char* a, size_t len) {
+float float_from_str(const char *a, size_t len) {
     float accum = 0;
     int decimal = len, exponent = -1;
     float tens = 1;
@@ -98,7 +98,7 @@ void print_token(Token tok) {
     }
 }
 
-TokenArray tokenize(const char* buf, size_t buf_size) {
+TokenArray tokenize(const char *buf, size_t buf_size) {
     TokenArray tokens = {0};
 
     size_t start = 0;

@@ -1,58 +1,7 @@
-/*#ifndef CODEGEN_H
+#ifndef CODEGEN_H
 #define CODEGEN_H
 
-#include <stdio.h>
-#include <stdbool.h>
-#include <string.h>
+InstList adhere_ir_to_machine_spec(InstList ir);
+void generate_assembly_from_ir(FILE *out, InstList ir, LocationArray location);
 
-#include "ast.h"
-
-#ifdef __MACH__
-#define EXIT_STATUS "0x2000001"
-#define ENTRY_SYMBOL "_main"
-#else
-#define EXIT_STATUS "60"
-#define ENTRY_SYMBOL "_start"
 #endif
-
-typedef enum {
-    BIT_8,
-    BIT_16,
-    BIT_32,
-    BIT_64,
-} RegisterSizes;
-
-typedef enum {
-    LOC_REGISTER,
-    LOC_STACK,
-    LOC_IMMEDIATE
-} LocType;
-
-typedef struct {
-    LocType type;
-    union {
-        int stack_offset; // negative offset from rbp
-        int register_index;
-        unsigned int value;
-    };
-} Loc;
-
-typedef int Symbol;
-
-typedef struct {
-    Loc locs[512];
-} LocTable;
-
-extern int current_symbol;
-extern LocTable loc_table;
-
-extern const char *register_list[][4];
-extern bool register_free_list[];
-
-int allocate_register();
-void free_register(int reg);
-Symbol generate_ast_assembly(FILE *file, AST *ast);
-
-#endif*/
-
-void generate_assembly_from_ir(FILE *out, InstList ir, IntervalList intervals);

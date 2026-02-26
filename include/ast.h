@@ -23,19 +23,21 @@ typedef enum {
 typedef struct AST {
     ASTType type;
     union {
+        // Binary op
         struct {
             BinaryOp op;
             struct AST *left;
             struct AST *right;
         };
+        // Declaration
         struct {
             char *symbol;
             struct AST *expr;
         };
         struct {
-                struct AST **items;
-                size_t count;
-                size_t capacity;
+            struct AST **items;
+            size_t count;
+            size_t capacity;
         } block;
         unsigned int int_lit;
         float float_lit;

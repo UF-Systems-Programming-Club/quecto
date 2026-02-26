@@ -8,14 +8,28 @@ typedef enum {
     INST_SUB,
     INST_MUL,
     INST_DIV,
-    INST_LOAD,
+    INST_MOV,
+    INST_LOADI,
 } InstType;
+
+typedef enum {
+    IR_OP_VREG,
+    IR_OP_IMM,
+} IROpType;
+
+typedef struct {
+    IROpType type;
+    union {
+        int vreg;
+        int imm;
+    };
+} IROp;
 
 typedef struct {
     InstType type;
-    int dest;
-    int arg1;
-    int arg2;
+    IROp dest;
+    IROp arg1;
+    IROp arg2;
 } Inst;
 
 typedef struct {
@@ -33,32 +47,38 @@ typedef struct {
     LocationType type;
     union {
         int register_index;
-        int stack_offset; // negative offset from rbp (so 8 means [rbp - 8])
+        int stack_offset; // negative offset from rbp (so 8 means [bp - 8])
     };
 } Location;
 
 typedef struct {
-    Location loc;
-    int start;
-    int end;
-    // both inclusive
+    Location *items;
+    size_t count;
+    size_t capacity;
+} LocationArray;
+
+typedef struct {
+    int vreg;
+    int start; // inclusive
+    int end; // exclusive i.e. dies at end so can be merged with another interval
 } Interval;
 
 typedef struct {
     Interval *items;
     size_t count;
     size_t capacity;
-} IntervalList;
+} IntervalArray;
 
-extern int current_register;
+extern int current_vreg;
 extern const char *registers[];
+extern bool register_is_free[];
 
-int generate_expr_ir(InstList *ir, AST *expr);
+IROp generate_expr_ir(InstList *ir, AST *expr);
 void generate_ir_from_ast(InstList *ir, AST *ast);
 void pretty_print_ir(InstList ir);
 
-IntervalList create_live_intervals_from_ir(InstList ir);
-void print_live_intervals(IntervalList intervals);
-void linear_scan_register_allocation(IntervalList *intervals);
+IntervalArray create_live_intervals_from_ir(InstList ir);
+void print_live_intervals(IntervalArray intervals);
+LocationArray linear_scan_register_allocation(IntervalArray *intervals);
 
 #endif
