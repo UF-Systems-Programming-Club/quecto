@@ -11,6 +11,9 @@ void print_ast(AST* ast, int indent) {
         case AST_INT_LIT:
             printf("%d", ast->int_lit);
             break;
+        case AST_SYMBOL:
+            printf("'%s'", ast->symbol);
+            break;
         case AST_ASSIGNMENT:
             print_indent(0, "%s = ", ast->symbol);
             print_ast(ast->expr, 0);

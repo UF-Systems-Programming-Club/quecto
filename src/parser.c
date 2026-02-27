@@ -107,7 +107,7 @@ void insert_symbol(ParserState *parser, const char *symbol, SymbolType type) {
 
 AST *parse_expression(ParserState *parser, int min_prec) {
     Token tok;
-    if (!expect_next_token_multiple(parser, &tok, 3, TOKEN_INT_LIT, TOKEN_FLOAT_LIT, TOKEN_OPEN_PAREN))
+    if (!expect_next_token_multiple(parser, &tok, 4, TOKEN_INT_LIT, TOKEN_FLOAT_LIT, TOKEN_IDENTIFIER, TOKEN_OPEN_PAREN))
         return NULL;
 
     AST *left = (AST *)malloc(sizeof(AST));
@@ -120,6 +120,10 @@ AST *parse_expression(ParserState *parser, int min_prec) {
         case TOKEN_FLOAT_LIT:
             left->type = AST_FLOAT_LIT;
             left->float_lit = tok.float_lit;
+            break;
+        case TOKEN_IDENTIFIER:
+            left->type = AST_SYMBOL;
+            left->symbol = tok.identifier;
             break;
         case TOKEN_OPEN_PAREN:
             free(left);

@@ -14,6 +14,7 @@ typedef enum {
     AST_RETURN,
     AST_INT_LIT,
     AST_FLOAT_LIT,
+    AST_SYMBOL,
 } ASTType;
 
 typedef enum {
@@ -45,6 +46,7 @@ typedef struct AST {
         } block;
         unsigned int int_lit;
         float float_lit;
+        //char *symbol;
     };
 
 } AST;
