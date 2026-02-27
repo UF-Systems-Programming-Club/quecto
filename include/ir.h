@@ -8,6 +8,8 @@ typedef enum {
     INST_SUB,
     INST_MUL,
     INST_DIV,
+    INST_LOAD,
+    INST_STORE,
     INST_MOV,
     INST_LOADI,
 } InstType;
@@ -15,12 +17,14 @@ typedef enum {
 typedef enum {
     IR_OP_VREG,
     IR_OP_IMM,
+    IR_OP_REG,
 } IROpType;
 
 typedef struct {
     IROpType type;
     union {
         int vreg;
+        int reg;
         int imm;
     };
 } IROp;
@@ -60,7 +64,7 @@ typedef struct {
 typedef struct {
     int vreg;
     int start; // inclusive
-    int end; // exclusive i.e. dies at end so can be merged with another interval
+    int end;   // exclusive i.e. dies at end so can be merged with another interval
 } Interval;
 
 typedef struct {
@@ -69,7 +73,10 @@ typedef struct {
     size_t capacity;
 } IntervalArray;
 
-extern int current_vreg;
+typedef struct {
+} IntervalSet;
+
+extern int vreg_count;
 extern const char *registers[];
 extern bool register_is_free[];
 

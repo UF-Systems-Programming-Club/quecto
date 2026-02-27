@@ -6,15 +6,15 @@
 #include "symbol_table.h"
 
 typedef enum {
-
+    AST_PROGRAM,
     AST_BINARY_OP,
-    AST_ASSIGNMENT,
     AST_BLOCK,
-    AST_DECLARATION,
+    AST_DECL,
+    AST_ASSIGNMENT,
     AST_RETURN,
+    AST_SYMBOL,
     AST_INT_LIT,
     AST_FLOAT_LIT,
-    AST_SYMBOL,
 } ASTType;
 
 typedef enum {
@@ -27,6 +27,13 @@ typedef enum {
 typedef struct AST {
     ASTType type;
     union {
+        // TODO: should probably have anonymous structs inside the union? not sure, this would
+        // be a pretty agressive renaming though, lots of changes
+        struct {
+            struct AST **items;
+            size_t count;
+            size_t capacity;
+        } program, block;
         // Binary op
         struct {
             BinaryOp op;
@@ -35,20 +42,16 @@ typedef struct AST {
         };
         // Declaration and Assignment
         struct {
-            char *symbol;
+            struct AST *symbol;
             struct AST *expr;
-        };
+        } decl, assignment;
         struct {
-            SymbolTable* symbol_table;
-            struct AST **items;
-            size_t count;
-            size_t capacity;
-        } block;
+            SymbolTable *symbol_table;
+            char *ident;
+        } symbol;
         unsigned int int_lit;
         float float_lit;
-        //char *symbol;
     };
-
 } AST;
 
 void print_ast(AST* ast, int indent);

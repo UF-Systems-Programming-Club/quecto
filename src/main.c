@@ -41,13 +41,16 @@ int main(int argc, char **argv) {
 
     ParserState parser = {0};
     parser.tokens = tokens;
+    // global symbol table initialization
+    parser.cur_symbol_table = calloc(1, sizeof(SymbolTable));
 
     AST *ast = parse_program(&parser);
 
     if (!parser.error) {
         print_ast(ast, 0);
-        printf("\n\n");
-        InstList ir = {0};
+        printf("\n");
+
+        /*InstList ir = {0};
         generate_ir_from_ast(&ir, ast);
         pretty_print_ir(ir);
         printf("\n");
@@ -76,7 +79,7 @@ int main(int argc, char **argv) {
 
         LocationArray locations = linear_scan_register_allocation(&intervals);
         for (int i = 0; i < locations.count; i++) {
-            printf("vreg %d @ r%d\n", i, locations.items[i].register_index);
+            printf("r%d @ %s\n", i, registers[locations.items[i].register_index]);
         }
 
         FILE *out = fopen("out.S", "w");
@@ -91,6 +94,6 @@ int main(int argc, char **argv) {
         fprintf(out, "\tmov\teax, " EXIT_STATUS "\n");
         fprintf(out, "\tsyscall\n");
 
-        fclose(out);
-        }
+        fclose(out);*/
+    }
 }

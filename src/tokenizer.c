@@ -122,6 +122,7 @@ TokenArray tokenize(const char *buf, size_t buf_size) {
                 break;
             case ' ':
             case '\t':
+                column_width++;
             case '\r':
                 break;
             case '+':
@@ -154,6 +155,10 @@ TokenArray tokenize(const char *buf, size_t buf_size) {
                 break;
             case ')':
                 tok.type = TOKEN_CLOSE_PAREN;
+                array_append(tokens, tok);
+                break;
+            case ';':
+                tok.type = TOKEN_SEMICOLON;
                 array_append(tokens, tok);
                 break;
             case ':':

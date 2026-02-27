@@ -3,13 +3,14 @@
 #include "common.h"
 #include "ir.h"
 
-int current_vreg = 0;
+int vreg_count = 0;
+int stack_offset = 4;
 
 IROp generate_load_imm_ir(InstList *ir, IROp imm) {
     Inst inst;
     IROp dest = {
         .type = IR_OP_VREG,
-        .vreg = current_vreg++,
+        .vreg = vreg_count++,
     };
     inst.type = INST_LOADI;
     inst.dest = dest;
@@ -31,7 +32,7 @@ IROp generate_expr_ir(InstList *ir, AST *expr) {
     Inst inst;
     IROp dest = {
         .type = IR_OP_VREG,
-        .vreg = current_vreg++,
+        .vreg = vreg_count++,
     };
     inst.dest = dest;
     inst.arg1 = generate_expr_ir(ir, expr->left);
@@ -139,9 +140,9 @@ void pretty_print_ir(InstList ir) {
 
 IntervalArray create_live_intervals_from_ir(InstList ir) {
     IntervalArray intervals;
-    array_init(intervals, current_vreg);
+    array_init(intervals, vreg_count);
 
-    for (int vreg = 0; vreg < current_vreg; vreg++) {
+    for (int vreg = 0; vreg < vreg_count; vreg++) {
         Interval interval = {0};
         interval.vreg = vreg;
         // find start
@@ -187,8 +188,8 @@ bool register_is_free[] = { 1, 1, 1, 1, };
 // NOTE: assumes intervals is already sorted
 LocationArray linear_scan_register_allocation(IntervalArray *intervals) {
     LocationArray locations = {0};
-    array_init(locations, current_vreg);
-    locations.count = current_vreg;
+    array_init(locations, vreg_count);
+    locations.count = vreg_count;
     IntervalArray active = {0};
 
     for (int i = 0; i < intervals->count; i++) {
@@ -219,7 +220,7 @@ LocationArray linear_scan_register_allocation(IntervalArray *intervals) {
             // Spill interval i
             assert(0);
         } else {
-            // allocate register
+            // Allocate register
             for (int k = 0; k < 4; k++) {
                 if (register_is_free[k]) {
                     register_is_free[k] = false;

@@ -1,5 +1,4 @@
 #include <stdio.h>
-#include <sys/_types/_null.h>
 
 #include "parser.h"
 #include "ast.h"
@@ -123,7 +122,7 @@ AST *parse_expression(ParserState *parser, int min_prec) {
             break;
         case TOKEN_IDENTIFIER:
             left->type = AST_SYMBOL;
-            left->symbol = tok.identifier;
+            left->symbol.ident = tok.identifier;
             break;
         case TOKEN_OPEN_PAREN:
             free(left);
@@ -166,70 +165,73 @@ AST *parse_expression(ParserState *parser, int min_prec) {
 AST *parse_statement(ParserState *parser) {
     Token tok;
 
-    // NOTE: changed to calloc here because array macros need array to be initialized to all zero
-    AST *statement = (AST *)calloc(1, sizeof(AST));
+    AST *statement = calloc(1, sizeof(AST));
 
     if (match_next_token(parser, &tok, TOKEN_OPEN_CURLY)) {
         statement->type = AST_BLOCK;
 
-        statement->block.symbol_table = (SymbolTable *) calloc(1, sizeof(SymbolTable));
-        statement->block.symbol_table->prev = parser->cur_symbol_table;
-        parser->cur_symbol_table = statement->block.symbol_table;
+        SymbolTable *symbol_table = calloc(1, sizeof(SymbolTable));
+        symbol_table->prev = parser->cur_symbol_table;
+        parser->cur_symbol_table = symbol_table;
 
         while (!match_next_token(parser, &tok, TOKEN_CLOSE_CURLY)) {
             AST *s = parse_statement(parser);
             array_append(statement->block, s);
         }
 
-        parser->cur_symbol_table = statement->block.symbol_table->prev;
-        //expect_next_token(parser, &tok, TOKEN_CLOSE_CURLY);
+        parser->cur_symbol_table = symbol_table->prev;
+
+        if (!expect_next_token(parser, &tok, TOKEN_CLOSE_CURLY)) return NULL;
     } else if (match_next_token(parser, &tok, TOKEN_IDENTIFIER)) {
         Token ident = tok;
         if (match_next_token(parser, &tok, TOKEN_COLON)) {
             if (!match_next_token(parser, &tok, TOKEN_IDENTIFIER)) return NULL;
             if (!match_next_token(parser, &tok, TOKEN_EQUALS)) return NULL;
 
-            statement->type = AST_DECLARATION;
-            statement->symbol = ident.identifier;
-            insert_symbol(parser, statement->symbol, SYM_TYPE_VARIABLE);
-
-            statement->expr = parse_expression(parser, 0);
+            statement->type = AST_DECL;
+            AST *symbol = malloc(sizeof(AST));
+            symbol->type = AST_SYMBOL;
+            symbol->symbol.ident = ident.identifier;
+            statement->decl.symbol = symbol;
+            insert_symbol(parser, symbol->symbol.ident, SYM_TYPE_VARIABLE);
+            statement->decl.expr = parse_expression(parser, 0);
         } else if (match_next_token(parser, &tok, TOKEN_COLON_EQUALS)) {
-            statement->type = AST_DECLARATION;
-            statement->symbol = ident.identifier;
-            insert_symbol(parser, statement->symbol, SYM_TYPE_VARIABLE);
-
-            statement->expr = parse_expression(parser, 0);
+            statement->type = AST_DECL;
+            AST *symbol = malloc(sizeof(AST));
+            symbol->type = AST_SYMBOL;
+            symbol->symbol.ident = ident.identifier;
+            statement->decl.symbol = symbol;
+            insert_symbol(parser, symbol->symbol.ident, SYM_TYPE_VARIABLE);
+            statement->decl.expr = parse_expression(parser, 0);
         } else if (match_next_token(parser, &tok, TOKEN_EQUALS)) {
             statement->type = AST_ASSIGNMENT;
-            statement->symbol = ident.identifier;
-            insert_symbol(parser, statement->symbol, SYM_TYPE_VARIABLE);
-
-            statement->expr = parse_expression(parser, 0);
+            AST *symbol = malloc(sizeof(AST));
+            symbol->type = AST_SYMBOL;
+            symbol->symbol.ident = ident.identifier;
+            statement->decl.symbol = symbol;
+            statement->decl.expr = parse_expression(parser, 0);
         }
     } else if (match_next_token(parser, &tok, TOKEN_RETURN)) {
         statement->type = AST_RETURN;
-        statement->expr = parse_expression(parser, 0);
-    }
-    else {
+        statement->decl.expr = parse_expression(parser, 0);
+    } else {
         statement = parse_expression(parser, 0);
     }
+
+    if (!match_next_token(parser, &tok, TOKEN_SEMICOLON)) return NULL;
 
     return statement;
 }
 
 AST *parse_program(ParserState *parser) {
-    AST *ret = parse_statement(parser);
-    if (parser->error) return NULL;
+    AST *program = calloc(1, sizeof(AST));
+    program->type = AST_PROGRAM;
 
-    // TODO: I'm not sure if it's better to pass pointer to local tok
-    // or have tok be a global variable, but switching to local pointer
-    // cleaned up parser code a lot from previous solution
-    Token tok;
-    if (!expect_next_token(parser, &tok, TOKEN_EOF)) {
-        free(ret);
-        return NULL;
+    while (peek_next_token_type(parser) != TOKEN_EOF) {
+        array_append(program->program, parse_statement(parser));
     }
+    // NOTE: probably doesn't need to be done but consumes EOF for sake of completion
+    get_next_token(parser);
 
-    return ret;
+    return program;
 }

@@ -2,13 +2,14 @@
 #define SYMBOL_TABLE_H
 
 #include "common.h"
-#include <sys/_types/_null.h>
+
 typedef enum {
     SYM_TYPE_VARIABLE,
 } SymbolType;
 
 typedef struct {
     SymbolType type;
+    int stack_offset;
 } SymbolData;
 
 typedef struct symbol_table_t {

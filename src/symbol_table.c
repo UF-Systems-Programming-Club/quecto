@@ -1,5 +1,6 @@
-#include "symbol_table.h"
 #include <stdio.h>
+
+#include "symbol_table.h"
 #include "common.h"
 
 void print_symbol_table(SymbolTable *symbol_table, int indent) {
