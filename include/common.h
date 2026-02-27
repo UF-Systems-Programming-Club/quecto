@@ -70,4 +70,11 @@ void ht_insert(HashTable *ht, const char *str, void *item);
 void ht_resize(HashTable *ht);
 void *ht_search(HashTable *ht, const char *str);
 
+// for printing
+
+extern const char* tabs;
+
+#define print_indent(extra, fmt, ...) \
+    printf("%.*s" fmt, indent +(extra), tabs, ##__VA_ARGS__);
+
 #endif

@@ -1,8 +1,10 @@
 #include <stdio.h>
+#include <sys/_types/_null.h>
 
 #include "parser.h"
 #include "ast.h"
 #include "common.h"
+#include "symbol_table.h"
 #include "tokenizer.h"
 
 int get_token_precedence_table[] = {
@@ -92,6 +94,17 @@ bool expect_next_token_multiple(ParserState *parser, Token *tok, int count, ...)
     return false;
 }
 
+void insert_symbol(ParserState *parser, const char *symbol, SymbolType type) {
+    if (parser->cur_symbol_table == NULL) return;
+
+    HashTable *table = &parser->cur_symbol_table->table;
+
+    SymbolData *data = (SymbolData*) calloc(1, sizeof(SymbolData));
+    data->type = type;
+
+    ht_insert(table, symbol, data);
+}
+
 AST *parse_expression(ParserState *parser, int min_prec) {
     Token tok;
     if (!expect_next_token_multiple(parser, &tok, 3, TOKEN_INT_LIT, TOKEN_FLOAT_LIT, TOKEN_OPEN_PAREN))
@@ -155,13 +168,17 @@ AST *parse_statement(ParserState *parser) {
     if (match_next_token(parser, &tok, TOKEN_OPEN_CURLY)) {
         statement->type = AST_BLOCK;
 
+        statement->block.symbol_table = (SymbolTable *) calloc(1, sizeof(SymbolTable));
+        statement->block.symbol_table->prev = parser->cur_symbol_table;
+        parser->cur_symbol_table = statement->block.symbol_table;
+
         while (!match_next_token(parser, &tok, TOKEN_CLOSE_CURLY)) {
             AST *s = parse_statement(parser);
             array_append(statement->block, s);
         }
 
-        expect_next_token(parser, &tok, TOKEN_CLOSE_CURLY);
-
+        parser->cur_symbol_table = statement->block.symbol_table->prev;
+        //expect_next_token(parser, &tok, TOKEN_CLOSE_CURLY);
     } else if (match_next_token(parser, &tok, TOKEN_IDENTIFIER)) {
         Token ident = tok;
         if (match_next_token(parser, &tok, TOKEN_COLON)) {
@@ -170,16 +187,27 @@ AST *parse_statement(ParserState *parser) {
 
             statement->type = AST_DECLARATION;
             statement->symbol = ident.identifier;
+            insert_symbol(parser, statement->symbol, SYM_TYPE_VARIABLE);
+
             statement->expr = parse_expression(parser, 0);
         } else if (match_next_token(parser, &tok, TOKEN_COLON_EQUALS)) {
             statement->type = AST_DECLARATION;
             statement->symbol = ident.identifier;
+            insert_symbol(parser, statement->symbol, SYM_TYPE_VARIABLE);
+
+            statement->expr = parse_expression(parser, 0);
+        } else if (match_next_token(parser, &tok, TOKEN_EQUALS)) {
+            statement->type = AST_ASSIGNMENT;
+            statement->symbol = ident.identifier;
+            insert_symbol(parser, statement->symbol, SYM_TYPE_VARIABLE);
+
             statement->expr = parse_expression(parser, 0);
         }
     } else if (match_next_token(parser, &tok, TOKEN_RETURN)) {
         statement->type = AST_RETURN;
         statement->expr = parse_expression(parser, 0);
-    } else {
+    }
+    else {
         statement = parse_expression(parser, 0);
     }
 

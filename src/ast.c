@@ -1,8 +1,9 @@
 #include <stdio.h>
 
 #include "ast.h"
+#include "symbol_table.h"
 
-void print_ast(AST* ast) {
+void print_ast(AST* ast, int indent) {
     switch (ast->type) {
         case AST_FLOAT_LIT:
             printf("%f", ast->float_lit);
@@ -10,13 +11,17 @@ void print_ast(AST* ast) {
         case AST_INT_LIT:
             printf("%d", ast->int_lit);
             break;
+        case AST_ASSIGNMENT:
+            print_indent(0, "%s = ", ast->symbol);
+            print_ast(ast->expr, 0);
+            break;
         case AST_DECLARATION:
-            printf("%s := ", ast->symbol);
-            print_ast(ast->expr);
+            print_indent(0, "%s := ", ast->symbol);
+            print_ast(ast->expr, indent + 1);
             break;
         case AST_BINARY_OP:
             printf("(");
-            print_ast(ast->left);
+            print_ast(ast->left, 0);
             switch (ast->op) {
                 case OP_PLUS:
                 printf(" + ");
@@ -30,25 +35,26 @@ void print_ast(AST* ast) {
                 case OP_MULTIPLY:
                 printf(" * ");
                 break;
-                case OP_ASSIGN:
-                printf(" = ");
-                break;
             }
-            print_ast(ast->right);
+            print_ast(ast->right, 0);
             printf(")");
             break;
         case AST_BLOCK:
-            printf("{\n");
+            print_indent(0, "{\n");
+            print_indent(1, "symbols = [\n");
+            print_symbol_table(ast->block.symbol_table, indent + 1);
+            print_indent(1, "],\n")
+            print_indent(1, "block = [\n");
             for (int i = 0; i < ast->block.count; i++) {
-                printf("\t");
-                print_ast(ast->block.items[i]);
+                print_ast(ast->block.items[i], indent + 2);
                 printf(",\n");
             }
-            printf("}\n");
+            print_indent(1, "]\n");
+            print_indent(0, "}");
             break;
         case AST_RETURN:
-            printf("return ");
-            print_ast(ast->expr);
+            print_indent(0, "return ");
+            print_ast(ast->expr, 0);
             break;
         default:
             printf("unknown\n");

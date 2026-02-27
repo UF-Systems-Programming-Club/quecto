@@ -45,7 +45,7 @@ int main(int argc, char **argv) {
     AST *ast = parse_program(&parser);
 
     if (!parser.error) {
-        print_ast(ast);
+        print_ast(ast, 0);
         printf("\n\n");
 
         InstList ir = {0};
@@ -93,5 +93,5 @@ int main(int argc, char **argv) {
         fprintf(out, "\tsyscall\n");
 
         fclose(out);
-    }
+        }
 }

@@ -11,6 +11,7 @@ InstList adhere_ir_to_machine_spec(InstList ir) {
             case INST_SUB:
             case INST_MUL:
             case INST_DIV: // TODO: div can't be here for x64
+            {
                 Inst mov;
                 mov.type = INST_MOV;
                 mov.dest = inst.dest;
@@ -19,6 +20,7 @@ InstList adhere_ir_to_machine_spec(InstList ir) {
                 inst.arg1 = inst.dest;
                 array_append(machine_ir, inst);
                 break;
+            }
             case INST_LOADI:
                 array_append(machine_ir, inst);
                 break;

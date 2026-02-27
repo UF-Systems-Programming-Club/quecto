@@ -2,6 +2,7 @@
 #define PARSER_H
 
 #include "common.h"
+#include "symbol_table.h"
 #include "tokenizer.h"
 #include "ast.h"
 
@@ -9,6 +10,7 @@ typedef struct {
     TokenArray tokens;
     int current;
     bool error;
+    SymbolTable *cur_symbol_table;
 } ParserState;
 
 AST *parse_program(ParserState *parser);

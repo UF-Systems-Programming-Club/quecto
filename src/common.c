@@ -1,5 +1,8 @@
 #include "common.h"
 
+// for printing
+const char *tabs = "\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t";
+
 void ht_resize(HashTable *ht) {
     size_t new_capacity = ht->capacity * 2;
     if (ht->capacity == 0) new_capacity = 256;
@@ -57,4 +60,3 @@ void *ht_search(HashTable *ht, const char *str) {
 
     return NULL;
 }
-
