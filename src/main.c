@@ -47,9 +47,6 @@ int main(int argc, char **argv) {
     if (!parser.error) {
         print_ast(ast, 0);
         printf("\n\n");
-        return 0;
-    }
-    {
         InstList ir = {0};
         generate_ir_from_ast(&ir, ast);
         pretty_print_ir(ir);
