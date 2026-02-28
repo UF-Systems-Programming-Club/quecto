@@ -23,6 +23,8 @@ InstList adhere_ir_to_machine_spec(InstList ir) {
 
                 break;
             }
+            case INST_LOAD:
+            case INST_STORE:
             case INST_MOV:
             case INST_LOADI:
                 array_append(machine_ir, inst);
@@ -38,22 +40,19 @@ void generate_assembly_from_ir(FILE *out, InstList ir, LocationArray location) {
     // need to implement register rewriter
     for (int i = 0; i < ir.count; i++) {
         Inst inst = ir.items[i];
-        int dest = location.items[inst.dest.vreg].register_index;
-        int arg1 = location.items[inst.arg1.vreg].register_index;
-        int arg2 = location.items[inst.arg2.vreg].register_index;
         switch (inst.type) {
             case INST_ADD:
                 switch (inst.arg2.type) {
                     case IR_OP_VREG:
                         fprintf(out,
                                 "\tadd\t%s, %s\n",
-                                registers[dest],
-                                registers[arg2]);
+                                registers[location.items[inst.dest.vreg].register_index],
+                                registers[location.items[inst.arg2.vreg].register_index]);
                         break;
                     case IR_OP_IMM:
                         fprintf(out,
                                 "\tadd\t%s, %d\n",
-                                registers[dest],
+                                registers[location.items[inst.dest.vreg].register_index],
                                 inst.arg2.imm);
                         break;
                 }
@@ -63,13 +62,13 @@ void generate_assembly_from_ir(FILE *out, InstList ir, LocationArray location) {
                     case IR_OP_VREG:
                         fprintf(out,
                                 "\tsub\t%s, %s\n",
-                                registers[dest],
-                                registers[arg2]);
+                                registers[location.items[inst.dest.vreg].register_index],
+                                registers[location.items[inst.arg2.vreg].register_index]);
                         break;
                     case IR_OP_IMM:
                         fprintf(out,
                                 "\tsub\t%s, %d\n",
-                                registers[dest],
+                                registers[location.items[inst.dest.vreg].register_index],
                                 inst.arg2.imm);
                         break;
                 }
@@ -79,29 +78,35 @@ void generate_assembly_from_ir(FILE *out, InstList ir, LocationArray location) {
                     case IR_OP_VREG:
                         fprintf(out,
                                 "\timul\t%s, %s\n",
-                                registers[dest],
-                                registers[arg2]);
+                                registers[location.items[inst.dest.vreg].register_index],
+                                registers[location.items[inst.arg2.vreg].register_index]);
                         break;
                     case IR_OP_IMM:
                         fprintf(out,
                                 "\timul\t%s, %d\n",
-                                registers[dest],
+                                registers[location.items[inst.dest.vreg].register_index],
                                 inst.arg2.imm);
                         break;
                 }
+                break;
+            case INST_STORE:
+                fprintf(out, "\tmov\t[rbp - %d], %s\n", inst.dest.stack_offset, registers[location.items[inst.arg1.vreg].register_index]);
+                break;
+            case INST_LOAD:
+                fprintf(out, "\tmov\t%s, [rbp - %d]\n", registers[location.items[inst.dest.vreg].register_index], inst.arg1.stack_offset);
                 break;
             case INST_DIV:
                 assert(0);
                 break;
             case INST_MOV:
-                if (dest != arg1) {
+                if (location.items[inst.dest.vreg].register_index != location.items[inst.arg1.vreg].register_index) {
                     fprintf(out, "\tmov\t%s, %s\n",
-                            registers[dest],
-                            registers[arg1]);
+                            registers[location.items[inst.dest.vreg].register_index],
+                            registers[location.items[inst.arg1.vreg].register_index]);
                 }
                 break;
             case INST_LOADI:
-                fprintf(out, "\tmov\t%s, %d\n", registers[dest], inst.arg1.imm);
+                fprintf(out, "\tmov\t%s, %d\n", registers[location.items[inst.dest.vreg].register_index], inst.arg1.imm);
                 break;
             default:
                 assert(0);

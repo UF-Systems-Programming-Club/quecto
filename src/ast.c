@@ -23,13 +23,13 @@ void print_ast(AST* ast, int indent) {
             print_ast(ast->decl.symbol, 0);
             print_indent(0, " = ");
             print_ast(ast->decl.expr, 0);
-            printf("\n");
+            printf(";\n");
             break;
         case AST_DECL:
             print_ast(ast->decl.symbol, 0);
             print_indent(0, " := ");
             print_ast(ast->decl.expr, indent + 1);
-            printf("\n");
+            printf(";\n");
             break;
         case AST_BINARY_OP:
             printf("(");

@@ -8,7 +8,7 @@ typedef enum {
     INST_SUB,
     INST_MUL,
     INST_DIV,
-    INST_LOAD,
+    INST_LOAD, // TODO: currently load and store operate on the stack. will need to seprate stack loads from regular loads
     INST_STORE,
     INST_MOV,
     INST_LOADI,
@@ -18,6 +18,7 @@ typedef enum {
     IR_OP_VREG,
     IR_OP_IMM,
     IR_OP_REG,
+    IR_OP_STACK,
 } IROpType;
 
 typedef struct {
@@ -26,6 +27,7 @@ typedef struct {
         int vreg;
         int reg;
         int imm;
+        int stack_offset;
     };
 } IROp;
 

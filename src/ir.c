@@ -20,69 +20,96 @@ IROp generate_load_imm_ir(InstList *ir, IROp imm) {
     return dest;
 }
 
+IROp generate_load_ir(InstList *ir, int stack_offset) {
+    Inst inst;
+    inst.type = INST_LOAD;
+    inst.dest.type = IR_OP_VREG;
+    inst.dest.vreg = vreg_count++;
+    inst.arg1.type = IR_OP_STACK;
+    inst.arg1.stack_offset = stack_offset;
+    array_append(*ir, inst);
+    return inst.dest;
+}
+
 IROp generate_expr_ir(InstList *ir, AST *expr) {
     if (expr->type == AST_INT_LIT) {
-        IROp res = {
-            .type = IR_OP_IMM,
-            .imm = expr->int_lit
-        };
+        IROp imm;
+        imm.type = IR_OP_IMM;
+        imm.imm = expr->int_lit;
+        IROp res = generate_load_imm_ir(ir, imm);
         return res;
+    }
+    if (expr->type == AST_SYMBOL) {
+        SymbolData *var = get_symbol(expr->symbol.symbol_table, 
+                                     expr->symbol.ident);
+        return generate_load_ir(ir, var->stack_offset);
     }
 
     Inst inst;
-    IROp dest = {
-        .type = IR_OP_VREG,
-        .vreg = vreg_count++,
-    };
-    inst.dest = dest;
+    inst.dest.type = IR_OP_VREG;
+    inst.dest.vreg = vreg_count++;
     inst.arg1 = generate_expr_ir(ir, expr->left);
-    inst.arg2 = generate_expr_ir(ir, expr->right);
+    if (expr->right->type == AST_INT_LIT) {
+        inst.arg2.type = IR_OP_IMM;
+        inst.arg2.imm = expr->right->int_lit;
+    } else {
+        inst.arg2 = generate_expr_ir(ir, expr->right);
+    }
 
     switch (expr->op) {
-        case OP_PLUS:
-            if (inst.arg1.type == IR_OP_IMM) {
-                if (inst.arg2.type == IR_OP_VREG) {
-                    IROp temp = inst.arg1;
-                    inst.arg1 = inst.arg2;
-                    inst.arg2 = temp;
-                } else {
-                    inst.arg1 = generate_load_imm_ir(ir, inst.arg1);
-                }
-            }
-            inst.type = INST_ADD;
-            break;
-        case OP_MINUS:
-            if (inst.arg1.type == IR_OP_IMM) {
-                inst.arg1 = generate_load_imm_ir(ir, inst.arg1);
-            }
-            inst.type = INST_SUB;
-            break;
-        case OP_MULTIPLY:
-            if (inst.arg1.type == IR_OP_IMM) {
-                if (inst.arg2.type == IR_OP_VREG) {
-                    IROp temp = inst.arg1;
-                    inst.arg1 = inst.arg2;
-                    inst.arg2 = temp;
-                } else {
-                    inst.arg1 = generate_load_imm_ir(ir, inst.arg1);
-                }
-            }
-            inst.type = INST_MUL;
-            break;
-        case OP_DIVIDE:
-            if (inst.arg1.type == IR_OP_IMM) {
-                inst.arg1 = generate_load_imm_ir(ir, inst.arg1);
-            }
-            inst.type = INST_DIV;
-            break;
+        case OP_PLUS:     inst.type = INST_ADD; break;
+        case OP_MINUS:    inst.type = INST_SUB; break;
+        case OP_MULTIPLY: inst.type = INST_MUL; break;
+        case OP_DIVIDE:   inst.type = INST_DIV; break;
     }
     array_append(*ir, inst);
-    return dest;
+
+    return inst.dest;
+}
+
+void generate_store_ir(InstList *ir, int stack_offset, IROp vreg) {
+    Inst store;
+    store.type = INST_STORE;
+    store.dest.type = IR_OP_STACK;
+    store.dest.stack_offset = stack_offset;
+    store.arg1 = vreg;
+    array_append(*ir, store);
 }
 
 void generate_ir_from_ast(InstList *ir, AST *ast) {
-    // TODO: assumes ast is an expression only for now
-    generate_expr_ir(ir, ast);
+    // Assumes AST is an AST_PROGRAM which should be guaranteed by parsing and static analysis
+    // Could probably change function name to indicate that fact though
+    for (int i = 0; i < ast->program.count; i++) {
+        printf("out here\n");
+        AST *statement = ast->program.items[i];
+        switch (statement->type) {
+            case AST_DECL: {
+                IROp expr = generate_expr_ir(ir, statement->decl.expr);
+                SymbolData *var = get_symbol(statement->decl.symbol->symbol.symbol_table, 
+                                             statement->decl.symbol->symbol.ident);
+                var->stack_offset = stack_offset;
+                stack_offset += 4;
+
+                generate_store_ir(ir, var->stack_offset, expr);
+                break;
+            }
+            case AST_ASSIGNMENT: {
+                IROp expr = generate_expr_ir(ir, statement->decl.expr);
+                SymbolData *var = get_symbol(statement->decl.symbol->symbol.symbol_table, 
+                                             statement->decl.symbol->symbol.ident);
+                generate_store_ir(ir, var->stack_offset, expr);
+                break;
+            }
+            case AST_RETURN:
+                assert(0 && "TODO");
+                break;
+            case AST_BINARY_OP:
+                generate_expr_ir(ir, ast->program.items[i]);
+                break;
+            default:
+                assert(0 && "should never be in here");
+        }
+    }
 }
 
 void print_ir_op(IROp op) {
@@ -125,6 +152,12 @@ void pretty_print_ir(InstList ir) {
                 printf(", ");
                 print_ir_op(inst.arg2);
                 printf("\n");
+                break;
+            case INST_LOAD:
+                printf("\tr%d = [bp - %d]\n", inst.dest.vreg, inst.arg1.stack_offset);
+                break;
+            case INST_STORE:
+                printf("\t[bp - %d] = r%d\n", inst.dest.stack_offset, inst.arg1.vreg); 
                 break;
             case INST_MOV:
                 printf("\tr%d = r%d\n", inst.dest.vreg, inst.arg1.vreg);

@@ -93,17 +93,6 @@ bool expect_next_token_multiple(ParserState *parser, Token *tok, int count, ...)
     return false;
 }
 
-void insert_symbol(ParserState *parser, const char *symbol, SymbolType type) {
-    if (parser->cur_symbol_table == NULL) return;
-
-    HashTable *table = &parser->cur_symbol_table->table;
-
-    SymbolData *data = (SymbolData*) calloc(1, sizeof(SymbolData));
-    data->type = type;
-
-    ht_insert(table, symbol, data);
-}
-
 AST *parse_expression(ParserState *parser, int min_prec) {
     Token tok;
     if (!expect_next_token_multiple(parser, &tok, 4, TOKEN_INT_LIT, TOKEN_FLOAT_LIT, TOKEN_IDENTIFIER, TOKEN_OPEN_PAREN))
@@ -122,6 +111,7 @@ AST *parse_expression(ParserState *parser, int min_prec) {
             break;
         case TOKEN_IDENTIFIER:
             left->type = AST_SYMBOL;
+            left->symbol.symbol_table = parser->cur_symbol_table;
             left->symbol.ident = tok.identifier;
             break;
         case TOKEN_OPEN_PAREN:
@@ -139,18 +129,10 @@ AST *parse_expression(ParserState *parser, int min_prec) {
         op->left = left;
         tok = *get_next_token(parser);
         switch (tok.type) {
-            case TOKEN_PLUS:
-                op->op = OP_PLUS;
-                break;
-            case TOKEN_MINUS:
-                op->op = OP_MINUS;
-                break;
-            case TOKEN_MULTIPLY:
-                op->op = OP_MULTIPLY;
-                break;
-            case TOKEN_DIVIDE:
-                op->op = OP_DIVIDE;
-                break;
+            case TOKEN_PLUS:     op->op = OP_PLUS;     break;
+            case TOKEN_MINUS:    op->op = OP_MINUS;    break;
+            case TOKEN_MULTIPLY: op->op = OP_MULTIPLY; break;
+            case TOKEN_DIVIDE:   op->op = OP_DIVIDE;   break;
         }
 
         op->right = parse_expression(parser, get_token_type_precedence(tok.type));
@@ -192,22 +174,25 @@ AST *parse_statement(ParserState *parser) {
             AST *symbol = malloc(sizeof(AST));
             symbol->type = AST_SYMBOL;
             symbol->symbol.ident = ident.identifier;
+            symbol->symbol.symbol_table = parser->cur_symbol_table;
             statement->decl.symbol = symbol;
-            insert_symbol(parser, symbol->symbol.ident, SYM_TYPE_VARIABLE);
+            insert_symbol(parser->cur_symbol_table, symbol->symbol.ident, SYM_TYPE_VARIABLE);
             statement->decl.expr = parse_expression(parser, 0);
         } else if (match_next_token(parser, &tok, TOKEN_COLON_EQUALS)) {
             statement->type = AST_DECL;
             AST *symbol = malloc(sizeof(AST));
             symbol->type = AST_SYMBOL;
             symbol->symbol.ident = ident.identifier;
+            symbol->symbol.symbol_table = parser->cur_symbol_table;
             statement->decl.symbol = symbol;
-            insert_symbol(parser, symbol->symbol.ident, SYM_TYPE_VARIABLE);
+            insert_symbol(parser->cur_symbol_table, symbol->symbol.ident, SYM_TYPE_VARIABLE);
             statement->decl.expr = parse_expression(parser, 0);
         } else if (match_next_token(parser, &tok, TOKEN_EQUALS)) {
             statement->type = AST_ASSIGNMENT;
             AST *symbol = malloc(sizeof(AST));
             symbol->type = AST_SYMBOL;
             symbol->symbol.ident = ident.identifier;
+            symbol->symbol.symbol_table = parser->cur_symbol_table;
             statement->decl.symbol = symbol;
             statement->decl.expr = parse_expression(parser, 0);
         }

@@ -8,3 +8,8 @@ debug: src/*.c
 
 tests: tests/test.c include/*.h src/tokenizer.c
 	gcc -I include tests/test.c src/tokenizer.c -o test
+
+out: out.S
+	nasm -felf64 -o out.o out.S
+	ld -o out out.o
+	rm out.o

@@ -46,11 +46,14 @@ int main(int argc, char **argv) {
 
     AST *ast = parse_program(&parser);
 
+    print_symbol_table(parser.cur_symbol_table, 0);
+    printf("\n");
+
     if (!parser.error) {
         print_ast(ast, 0);
         printf("\n");
 
-        /*InstList ir = {0};
+        InstList ir = {0};
         generate_ir_from_ast(&ir, ast);
         pretty_print_ir(ir);
         printf("\n");
@@ -87,6 +90,7 @@ int main(int argc, char **argv) {
         fprintf(out, "\tglobal\t" ENTRY_SYMBOL "\n\n");
         fprintf(out, "\tsection\t.text\n");
         fprintf(out, ENTRY_SYMBOL ":\n");
+        fprintf(out, "\tmov\trbp, rsp\n");
 
         generate_assembly_from_ir(out, ir, locations);
 
@@ -94,6 +98,6 @@ int main(int argc, char **argv) {
         fprintf(out, "\tmov\teax, " EXIT_STATUS "\n");
         fprintf(out, "\tsyscall\n");
 
-        fclose(out);*/
+        fclose(out);
     }
 }
