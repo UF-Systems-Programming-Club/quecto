@@ -1,17 +1,17 @@
-#include "ir.h"
+#include "bytecode.h"
 #include "codegen.h"
 
 // NOTE: for linux x64 only rn. makes it so that it is 2AC instead of 3AC, and will do more in the future
-InstList adhere_ir_to_machine_spec(InstList ir) {
-    InstList machine_ir = {0};
+BytecodeArray adhere_ir_to_machine_spec(BytecodeArray ir) {
+    BytecodeArray machine_ir = {0};
     for (int i = 0; i < ir.count; i++) {
-        Inst inst = ir.items[i];
-        switch (inst.type) {
+        Bytecode inst = ir.items[i];
+        switch (inst.opcode) {
             case INST_ADD:
             case INST_SUB:
             case INST_MUL: {
-                Inst mov;
-                mov.type = INST_MOV;
+                Bytecode mov;
+                mov.opcode = INST_MOV;
                 mov.dest = inst.dest;
                 mov.arg1 = inst.arg1;
                 array_append(machine_ir, mov);
@@ -36,20 +36,20 @@ InstList adhere_ir_to_machine_spec(InstList ir) {
     return machine_ir;
 }
 
-void generate_assembly_from_ir(FILE *out, InstList ir, LocationArray location) {
+void generate_assembly_from_ir(FILE *out, BytecodeArray ir, LocationArray location) {
     // need to implement register rewriter
     for (int i = 0; i < ir.count; i++) {
-        Inst inst = ir.items[i];
-        switch (inst.type) {
+        Bytecode inst = ir.items[i];
+        switch (inst.opcode) {
             case INST_ADD:
                 switch (inst.arg2.type) {
-                    case IR_OP_VREG:
+                    case OPERAND_VREG:
                         fprintf(out,
                                 "\tadd\t%s, %s\n",
                                 registers[location.items[inst.dest.vreg].register_index],
                                 registers[location.items[inst.arg2.vreg].register_index]);
                         break;
-                    case IR_OP_IMM:
+                    case OPERAND_IMM:
                         fprintf(out,
                                 "\tadd\t%s, %d\n",
                                 registers[location.items[inst.dest.vreg].register_index],
@@ -59,13 +59,13 @@ void generate_assembly_from_ir(FILE *out, InstList ir, LocationArray location) {
                 break;
             case INST_SUB:
                 switch (inst.arg2.type) {
-                    case IR_OP_VREG:
+                    case OPERAND_VREG:
                         fprintf(out,
                                 "\tsub\t%s, %s\n",
                                 registers[location.items[inst.dest.vreg].register_index],
                                 registers[location.items[inst.arg2.vreg].register_index]);
                         break;
-                    case IR_OP_IMM:
+                    case OPERAND_IMM:
                         fprintf(out,
                                 "\tsub\t%s, %d\n",
                                 registers[location.items[inst.dest.vreg].register_index],
@@ -75,13 +75,13 @@ void generate_assembly_from_ir(FILE *out, InstList ir, LocationArray location) {
                 break;
             case INST_MUL:
                 switch (inst.arg2.type) {
-                    case IR_OP_VREG:
+                    case OPERAND_VREG:
                         fprintf(out,
                                 "\timul\t%s, %s\n",
                                 registers[location.items[inst.dest.vreg].register_index],
                                 registers[location.items[inst.arg2.vreg].register_index]);
                         break;
-                    case IR_OP_IMM:
+                    case OPERAND_IMM:
                         fprintf(out,
                                 "\timul\t%s, %d\n",
                                 registers[location.items[inst.dest.vreg].register_index],

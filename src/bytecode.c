@@ -1,18 +1,18 @@
 #include <stdio.h>
 
 #include "common.h"
-#include "ir.h"
+#include "bytecode.h"
 
 int vreg_count = 0;
-int stack_offset = 4;
+int stack_offset = 0;
 
-IROp generate_load_imm_ir(InstList *ir, IROp imm) {
-    Inst inst;
-    IROp dest = {
-        .type = IR_OP_VREG,
+Operand generate_load_imm_ir(BytecodeArray *ir, Operand imm) {
+    Bytecode inst;
+    Operand dest = {
+        .type = OPERAND_VREG,
         .vreg = vreg_count++,
     };
-    inst.type = INST_LOADI;
+    inst.opcode = INST_LOADI;
     inst.dest = dest;
     inst.arg1 = imm;
 
@@ -20,83 +20,82 @@ IROp generate_load_imm_ir(InstList *ir, IROp imm) {
     return dest;
 }
 
-IROp generate_load_ir(InstList *ir, int stack_offset) {
-    Inst inst;
-    inst.type = INST_LOAD;
-    inst.dest.type = IR_OP_VREG;
+Operand generate_load_ir(BytecodeArray *ir, int stack_offset) {
+    Bytecode inst;
+    inst.opcode = INST_LOAD;
+    inst.dest.type = OPERAND_VREG;
     inst.dest.vreg = vreg_count++;
-    inst.arg1.type = IR_OP_STACK;
+    inst.arg1.type = OPERAND_STACK;
     inst.arg1.stack_offset = stack_offset;
     array_append(*ir, inst);
     return inst.dest;
 }
 
-IROp generate_expr_ir(InstList *ir, AST *expr) {
+Operand generate_expr_ir(BytecodeArray *ir, AST *expr) {
     if (expr->type == AST_INT_LIT) {
-        IROp imm;
-        imm.type = IR_OP_IMM;
+        Operand imm;
+        imm.type = OPERAND_IMM;
         imm.imm = expr->int_lit;
-        IROp res = generate_load_imm_ir(ir, imm);
+        Operand res = generate_load_imm_ir(ir, imm);
         return res;
     }
     if (expr->type == AST_SYMBOL) {
-        SymbolData *var = get_symbol(expr->symbol.symbol_table, 
-                                     expr->symbol.ident);
+        SymbolData *var = get_symbol(expr->symbol_table, 
+                                     expr->ident);
         return generate_load_ir(ir, var->stack_offset);
     }
 
-    Inst inst;
-    inst.dest.type = IR_OP_VREG;
+    Bytecode inst;
+    inst.dest.type = OPERAND_VREG;
     inst.dest.vreg = vreg_count++;
     inst.arg1 = generate_expr_ir(ir, expr->left);
     if (expr->right->type == AST_INT_LIT) {
-        inst.arg2.type = IR_OP_IMM;
+        inst.arg2.type = OPERAND_IMM;
         inst.arg2.imm = expr->right->int_lit;
     } else {
         inst.arg2 = generate_expr_ir(ir, expr->right);
     }
 
     switch (expr->op) {
-        case OP_PLUS:     inst.type = INST_ADD; break;
-        case OP_MINUS:    inst.type = INST_SUB; break;
-        case OP_MULTIPLY: inst.type = INST_MUL; break;
-        case OP_DIVIDE:   inst.type = INST_DIV; break;
+        case OP_PLUS:     inst.opcode = INST_ADD; break;
+        case OP_MINUS:    inst.opcode = INST_SUB; break;
+        case OP_MULTIPLY: inst.opcode = INST_MUL; break;
+        case OP_DIVIDE:   inst.opcode = INST_DIV; break;
     }
     array_append(*ir, inst);
 
     return inst.dest;
 }
 
-void generate_store_ir(InstList *ir, int stack_offset, IROp vreg) {
-    Inst store;
-    store.type = INST_STORE;
-    store.dest.type = IR_OP_STACK;
+void generate_store_ir(BytecodeArray *ir, int stack_offset, Operand vreg) {
+    Bytecode store;
+    store.opcode = INST_STORE;
+    store.dest.type = OPERAND_STACK;
     store.dest.stack_offset = stack_offset;
     store.arg1 = vreg;
     array_append(*ir, store);
 }
 
-void generate_ir_from_ast(InstList *ir, AST *ast) {
+void generate_ir_from_ast(BytecodeArray *ir, AST *ast) {
     // Assumes AST is an AST_PROGRAM which should be guaranteed by parsing and static analysis
     // Could probably change function name to indicate that fact though
-    for (int i = 0; i < ast->program.count; i++) {
-        printf("out here\n");
-        AST *statement = ast->program.items[i];
+    for (int i = 0; i < ast->count; i++) {
+        AST *statement = ast->items[i];
         switch (statement->type) {
             case AST_DECL: {
-                IROp expr = generate_expr_ir(ir, statement->decl.expr);
-                SymbolData *var = get_symbol(statement->decl.symbol->symbol.symbol_table, 
-                                             statement->decl.symbol->symbol.ident);
-                var->stack_offset = stack_offset;
+                Operand expr = generate_expr_ir(ir, statement->expr);
+                SymbolData *var = get_symbol(statement->symbol->symbol_table, 
+                                             statement->symbol->ident);
                 stack_offset += 4;
+                var->stack_offset = stack_offset;
 
                 generate_store_ir(ir, var->stack_offset, expr);
                 break;
             }
             case AST_ASSIGNMENT: {
-                IROp expr = generate_expr_ir(ir, statement->decl.expr);
-                SymbolData *var = get_symbol(statement->decl.symbol->symbol.symbol_table, 
-                                             statement->decl.symbol->symbol.ident);
+                Operand expr = generate_expr_ir(ir, statement->expr);
+                SymbolData *var = get_symbol(statement->symbol->symbol_table, 
+                                             statement->symbol->ident);
                 generate_store_ir(ir, var->stack_offset, expr);
                 break;
             }
@@ -104,7 +103,7 @@ void generate_ir_from_ast(InstList *ir, AST *ast) {
                 assert(0 && "TODO");
                 break;
             case AST_BINARY_OP:
-                generate_expr_ir(ir, ast->program.items[i]);
+                generate_expr_ir(ir, ast->items[i]);
                 break;
             default:
                 assert(0 && "should never be in here");
@@ -112,19 +111,19 @@ void generate_ir_from_ast(InstList *ir, AST *ast) {
     }
 }
 
-void print_ir_op(IROp op) {
-    if (op.type == IR_OP_IMM) {
+void print_ir_op(Operand op) {
+    if (op.type == OPERAND_IMM) {
         printf("%d", op.imm);
     } else {
         printf("r%d", op.vreg);
     }
 }
 
-void pretty_print_ir(InstList ir) {
+void pretty_print_ir(BytecodeArray ir) {
     for (int i = 0; i < ir.count; i++) {
-        Inst inst = ir.items[i];
+        Bytecode inst = ir.items[i];
         printf("%d: ", i);
-        switch (inst.type) {
+        switch (inst.opcode) {
             case INST_ADD:
                 printf("\tr%d = add ", inst.dest.vreg);
                 print_ir_op(inst.arg1);
@@ -171,7 +170,7 @@ void pretty_print_ir(InstList ir) {
     }
 }
 
-IntervalArray create_live_intervals_from_ir(InstList ir) {
+IntervalArray create_live_intervals_from_ir(BytecodeArray ir) {
     IntervalArray intervals;
     array_init(intervals, vreg_count);
 
@@ -180,7 +179,7 @@ IntervalArray create_live_intervals_from_ir(InstList ir) {
         interval.vreg = vreg;
         // find start
         for (int i = 0; i < ir.count; i++) {
-            if (ir.items[i].dest.type == IR_OP_VREG && ir.items[i].dest.vreg == vreg) {
+            if (ir.items[i].dest.type == OPERAND_VREG && ir.items[i].dest.vreg == vreg) {
                 interval.start = i;
                 break;
             }
@@ -188,11 +187,11 @@ IntervalArray create_live_intervals_from_ir(InstList ir) {
 
         // find end
         for (int i = ir.count - 1; i >= 0; i--) {
-            if (ir.items[i].arg1.type == IR_OP_VREG && ir.items[i].arg1.vreg == vreg) {
+            if (ir.items[i].arg1.type == OPERAND_VREG && ir.items[i].arg1.vreg == vreg) {
                 interval.end = i;
                 break;
             }
-            if (ir.items[i].arg2.type == IR_OP_VREG && ir.items[i].arg2.vreg == vreg) {
+            if (ir.items[i].arg2.type == OPERAND_VREG && ir.items[i].arg2.vreg == vreg) {
                 interval.end = i;
                 break;
             }

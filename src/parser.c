@@ -111,8 +111,8 @@ AST *parse_expression(ParserState *parser, int min_prec) {
             break;
         case TOKEN_IDENTIFIER:
             left->type = AST_SYMBOL;
-            left->symbol.symbol_table = parser->cur_symbol_table;
-            left->symbol.ident = tok.identifier;
+            left->symbol_table = parser->cur_symbol_table;
+            left->ident = tok.identifier;
             break;
         case TOKEN_OPEN_PAREN:
             free(left);
@@ -123,6 +123,8 @@ AST *parse_expression(ParserState *parser, int min_prec) {
             break;
     }
 
+    // NOTE: utilizes the fact that get precedence returns -1 when the next token is
+    // not an operator
     while (get_token_type_precedence(peek_next_token_type(parser)) > min_prec) {
         AST *op = (AST *)malloc(sizeof(AST));
         op->type = AST_BINARY_OP;
@@ -152,13 +154,14 @@ AST *parse_statement(ParserState *parser) {
     if (match_next_token(parser, &tok, TOKEN_OPEN_CURLY)) {
         statement->type = AST_BLOCK;
 
+        // create a symbol table for new scope
         SymbolTable *symbol_table = calloc(1, sizeof(SymbolTable));
         symbol_table->prev = parser->cur_symbol_table;
         parser->cur_symbol_table = symbol_table;
 
         while (!match_next_token(parser, &tok, TOKEN_CLOSE_CURLY)) {
             AST *s = parse_statement(parser);
-            array_append(statement->block, s);
+            array_append(*statement, s);
         }
 
         parser->cur_symbol_table = symbol_table->prev;
@@ -166,39 +169,29 @@ AST *parse_statement(ParserState *parser) {
         if (!expect_next_token(parser, &tok, TOKEN_CLOSE_CURLY)) return NULL;
     } else if (match_next_token(parser, &tok, TOKEN_IDENTIFIER)) {
         Token ident = tok;
+        AST *symbol = malloc(sizeof(AST));
+        symbol->type = AST_SYMBOL;
+        symbol->ident = ident.identifier;
+        symbol->symbol_table = parser->cur_symbol_table;
+        statement->symbol = symbol;
+
         if (match_next_token(parser, &tok, TOKEN_COLON)) {
-            if (!match_next_token(parser, &tok, TOKEN_IDENTIFIER)) return NULL;
+            if (match_next_token(parser, &tok, TOKEN_IDENTIFIER)) { printf("types not implemented yet\n"); assert(0); }
             if (!match_next_token(parser, &tok, TOKEN_EQUALS)) return NULL;
 
             statement->type = AST_DECL;
-            AST *symbol = malloc(sizeof(AST));
-            symbol->type = AST_SYMBOL;
-            symbol->symbol.ident = ident.identifier;
-            symbol->symbol.symbol_table = parser->cur_symbol_table;
-            statement->decl.symbol = symbol;
-            insert_symbol(parser->cur_symbol_table, symbol->symbol.ident, SYM_TYPE_VARIABLE);
-            statement->decl.expr = parse_expression(parser, 0);
-        } else if (match_next_token(parser, &tok, TOKEN_COLON_EQUALS)) {
-            statement->type = AST_DECL;
-            AST *symbol = malloc(sizeof(AST));
-            symbol->type = AST_SYMBOL;
-            symbol->symbol.ident = ident.identifier;
-            symbol->symbol.symbol_table = parser->cur_symbol_table;
-            statement->decl.symbol = symbol;
-            insert_symbol(parser->cur_symbol_table, symbol->symbol.ident, SYM_TYPE_VARIABLE);
-            statement->decl.expr = parse_expression(parser, 0);
+            insert_symbol(parser->cur_symbol_table, symbol->ident, SYM_TYPE_VARIABLE);
+            statement->expr = parse_expression(parser, 0);
         } else if (match_next_token(parser, &tok, TOKEN_EQUALS)) {
             statement->type = AST_ASSIGNMENT;
-            AST *symbol = malloc(sizeof(AST));
-            symbol->type = AST_SYMBOL;
-            symbol->symbol.ident = ident.identifier;
-            symbol->symbol.symbol_table = parser->cur_symbol_table;
-            statement->decl.symbol = symbol;
-            statement->decl.expr = parse_expression(parser, 0);
+            statement->expr = parse_expression(parser, 0);
+        } else {
+            free(symbol);
+            statement = parse_expression(parser, 0);
         }
     } else if (match_next_token(parser, &tok, TOKEN_RETURN)) {
         statement->type = AST_RETURN;
-        statement->decl.expr = parse_expression(parser, 0);
+        statement->expr = parse_expression(parser, 0);
     } else {
         statement = parse_expression(parser, 0);
     }
@@ -213,7 +206,7 @@ AST *parse_program(ParserState *parser) {
     program->type = AST_PROGRAM;
 
     while (peek_next_token_type(parser) != TOKEN_EOF) {
-        array_append(program->program, parse_statement(parser));
+        array_append(*program, parse_statement(parser));
     }
     // NOTE: probably doesn't need to be done but consumes EOF for sake of completion
     get_next_token(parser);

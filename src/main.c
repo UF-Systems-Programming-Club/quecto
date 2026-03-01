@@ -4,7 +4,7 @@
 #include "tokenizer.h"
 #include "parser.h"
 #include "ast.h"
-#include "ir.h"
+#include "bytecode.h"
 #include "codegen.h"
 
 #ifdef __MACH__
@@ -46,14 +46,15 @@ int main(int argc, char **argv) {
 
     AST *ast = parse_program(&parser);
 
-    print_symbol_table(parser.cur_symbol_table, 0);
-    printf("\n");
 
     if (!parser.error) {
+        print_symbol_table(parser.cur_symbol_table, 0);
+        printf("\n");
+
         print_ast(ast, 0);
         printf("\n");
 
-        InstList ir = {0};
+        BytecodeArray ir = {0};
         generate_ir_from_ast(&ir, ast);
         pretty_print_ir(ir);
         printf("\n");

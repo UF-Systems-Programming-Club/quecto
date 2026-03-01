@@ -17,7 +17,6 @@ const char *token_to_string_table[] = {
     [TOKEN_SEMICOLON] = ";",
     [TOKEN_COLON] = ":",
     [TOKEN_EQUALS] = "=",
-    [TOKEN_COLON_EQUALS] = ":=",
     [TOKEN_INT_LIT] = "integer literal",
     [TOKEN_FLOAT_LIT] = "float literal",
     [TOKEN_IDENTIFIER] = "identifier",
@@ -90,7 +89,6 @@ void print_token(Token tok) {
         case TOKEN_IDENTIFIER:   printf("%s\n", tok.identifier); break;
         case TOKEN_COLON:        printf(":\n"); break;
         case TOKEN_EQUALS:       printf("=\n"); break;
-        case TOKEN_COLON_EQUALS: printf(":=\n"); break;
         case TOKEN_RETURN:       printf("return\n"); break;
         case TOKEN_CLOSE_PAREN:  printf(")\n"); break;
 
@@ -162,12 +160,7 @@ TokenArray tokenize(const char *buf, size_t buf_size) {
                 array_append(tokens, tok);
                 break;
             case ':':
-                if (next < buf_size && buf[next] == '=') {
-                    next++;
-                    tok.type = TOKEN_COLON_EQUALS;
-                } else {
-                    tok.type = TOKEN_COLON;
-                }
+                tok.type = TOKEN_COLON;
                 array_append(tokens, tok);
                 break;
             case '=':

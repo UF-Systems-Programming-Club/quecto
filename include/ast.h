@@ -27,28 +27,36 @@ typedef enum {
 typedef struct AST {
     ASTType type;
     union {
-        // TODO: should probably have anonymous structs inside the union? not sure, this would
-        // be a pretty agressive renaming though, lots of changes
+        // Program and block
         struct {
             struct AST **items;
             size_t count;
             size_t capacity;
-        } program, block;
-        // Binary op
+        };
+
+        // Binary op for expressions
         struct {
             BinaryOp op;
             struct AST *left;
             struct AST *right;
         };
+
         // Declaration and Assignment
         struct {
             struct AST *symbol;
             struct AST *expr;
-        } decl, assignment;
+        };
+
+        // Symbol
         struct {
+            // NOTE: each 
             SymbolTable *symbol_table;
-            char *ident;
-        } symbol;
+            const char *ident; // NOTE: this is a pointer to the tokenized identifier
+                               // so every symbol has a unique string but not the
+                               // authority to do anything to it (which makes sense)
+        };
+
+        // number literals in expressions
         unsigned int int_lit;
         float float_lit;
     };

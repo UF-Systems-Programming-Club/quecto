@@ -5,16 +5,16 @@ This isn't a super strict grammar with like BNF or anything, just a nice referen
 | means or
 { } means optional if surrounding
 
-program = *(statement) EOF
+program = (statement)* EOF
 
-statement = (expr        |
-             declaration |
-             assignment  |
-             return) ';'
+statement = (expr       |
+             decl       |
+             assignment |
+             return)   ';'
 
-declaration = identifer : {type} = expr
+decl = identifer : {type} = expr
 assignment = identifier = expr
 return = return expr
-expr = ( '(' expr ')' | number | identifier ) *(operator expr)
+expr = ( '(' expr ')' | number | identifier ) (operator expr)*
 
-identifier = (_|a-z|A-Z) *(a-z|A-Z|0-9|_)
+identifier = (_|a-z|A-Z) (a-z|A-Z|0-9|_)*
