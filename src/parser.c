@@ -126,7 +126,7 @@ AST *parse_expression(ParserState *parser, int min_prec) {
     // NOTE: utilizes the fact that get precedence returns -1 when the next token is
     // not an operator
     while (get_token_type_precedence(peek_next_token_type(parser)) > min_prec) {
-        AST *op = (AST *)malloc(sizeof(AST));
+        AST *op = malloc(sizeof(AST));
         op->type = AST_BINARY_OP;
         op->left = left;
         tok = *get_next_token(parser);
@@ -167,6 +167,7 @@ AST *parse_statement(ParserState *parser) {
         parser->cur_symbol_table = symbol_table->prev;
 
         if (!expect_next_token(parser, &tok, TOKEN_CLOSE_CURLY)) return NULL;
+        return statement;
     } else if (match_next_token(parser, &tok, TOKEN_IDENTIFIER)) {
         Token ident = tok;
         AST *symbol = malloc(sizeof(AST));

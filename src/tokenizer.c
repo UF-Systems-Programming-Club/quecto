@@ -27,7 +27,7 @@ const char *token_to_string_table[] = {
 static_assert(sizeof(token_to_string_table) / sizeof(char *) == TOKEN_COUNT,
               "Every token must have a corresponding entry in the token to string table, so add an entry probably");
 
-int int_from_str(const char* a, size_t len) {
+int int_from_str(const char *a, size_t len) {
     int tens = 1;
     int accum = 0;
     for (int i = len - 1; i >= 0; i--) {

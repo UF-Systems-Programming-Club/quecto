@@ -23,7 +23,7 @@ int main(int argc, char **argv) {
 
     fseek(f, 0, SEEK_SET);
 
-    char *buf = (char *)malloc(fsize + 1);
+    char *buf = malloc(fsize + 1);
     fread(buf, 1, fsize, f);
     fclose(f);
 
@@ -46,7 +46,6 @@ int main(int argc, char **argv) {
 
     AST *ast = parse_program(&parser);
 
-
     if (!parser.error) {
         print_symbol_table(parser.cur_symbol_table, 0);
         printf("\n");
@@ -54,16 +53,16 @@ int main(int argc, char **argv) {
         print_ast(ast, 0);
         printf("\n");
 
-        BytecodeArray ir = {0};
-        generate_ir_from_ast(&ir, ast);
-        pretty_print_ir(ir);
+        Bytecode bytecode = {0};
+        gen_bytecode_from_ast(&bytecode, ast);
+        pretty_print_bytecode(bytecode);
         printf("\n");
 
-        ir = adhere_ir_to_machine_spec(ir);
-        pretty_print_ir(ir);
+        bytecode = adhere_bytecode_to_machine_spec(bytecode);
+        pretty_print_bytecode(bytecode);
         printf("\n");
 
-        IntervalArray intervals = create_live_intervals_from_ir(ir);
+        IntervalArray intervals = create_live_intervals_from_bytecode(bytecode);
         // Bubble sort
         for (int i = 0; i < intervals.count - 1; i++) {
             bool swapped = false;
@@ -91,13 +90,15 @@ int main(int argc, char **argv) {
         fprintf(out, "\tglobal\t" ENTRY_SYMBOL "\n\n");
         fprintf(out, "\tsection\t.text\n");
         fprintf(out, ENTRY_SYMBOL ":\n");
-        fprintf(out, "\tmov\trbp, rsp\n");
-
-        generate_assembly_from_ir(out, ir, locations);
-
-        fprintf(out, "\tmov\tedi, %d\n", 0);
+        fprintf(out, "\tcall\tmain\n");
+        fprintf(out, "\tmov\tedi, eax\n");
         fprintf(out, "\tmov\teax, " EXIT_STATUS "\n");
-        fprintf(out, "\tsyscall\n");
+        fprintf(out, "\tsyscall\n\n");
+
+
+        fprintf(out, "main:\n");
+        fprintf(out, "\tmov\trbp, rsp\n");
+        generate_assembly_from_bytecode(out, bytecode, locations);
 
         fclose(out);
     }

@@ -4,16 +4,17 @@
 #include "ast.h"
 
 typedef enum {
-    INST_ADD,
-    INST_SUB,
-    INST_MUL,
-    INST_DIV,
-    INST_LOAD, // TODO: currently load and store operate on the stack.
-               // will need to seprate stack loads from regular loads
-    INST_STORE,
-    INST_MOV,
-    INST_LOADI,
-} OpCode;
+    OPCODE_ADD,
+    OPCODE_SUB,
+    OPCODE_MUL,
+    OPCODE_DIV,
+    OPCODE_LOAD, // TODO: currently load and store operate on the stack.
+               // will need to seperate stack loads from regular loads
+    OPCODE_STORE,
+    OPCODE_MOV,
+    OPCODE_LOADI,
+    OPCODE_RET,
+} Opcode;
 
 typedef enum {
     OPERAND_VREG,
@@ -33,17 +34,17 @@ typedef struct {
 } Operand;
 
 typedef struct {
-    OpCode opcode;
+    Opcode opcode;
     Operand dest;
     Operand arg1;
     Operand arg2;
-} Bytecode;
+} Instr;
 
 typedef struct {
-    Bytecode *items;
+    Instr *items;
     size_t count;
     size_t capacity;
-} BytecodeArray;
+} Bytecode;
 
 typedef enum {
     LOC_REGISTER,
@@ -83,11 +84,10 @@ extern int vreg_count;
 extern const char *registers[];
 extern bool register_is_free[];
 
-Operand generate_expr_ir(BytecodeArray *ir, AST *expr);
-void generate_ir_from_ast(BytecodeArray *ir, AST *ast);
-void pretty_print_ir(BytecodeArray ir);
+void gen_bytecode_from_ast(Bytecode *bytecode, AST *ast);
+void pretty_print_bytecode(Bytecode bytecode);
 
-IntervalArray create_live_intervals_from_ir(BytecodeArray ir);
+IntervalArray create_live_intervals_from_bytecode(Bytecode bytecode);
 void print_live_intervals(IntervalArray intervals);
 LocationArray linear_scan_register_allocation(IntervalArray *intervals);
 

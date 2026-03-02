@@ -49,7 +49,6 @@ typedef struct AST {
 
         // Symbol
         struct {
-            // NOTE: each 
             SymbolTable *symbol_table;
             const char *ident; // NOTE: this is a pointer to the tokenized identifier
                                // so every symbol has a unique string but not the
