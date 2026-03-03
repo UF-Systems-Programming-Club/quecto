@@ -77,4 +77,18 @@ extern const char* tabs;
 #define print_indent(extra, fmt, ...) \
     printf("%.*s" fmt, indent +(extra), tabs, ##__VA_ARGS__);
 
+// currently only a fixed sized arena
+typedef struct {
+    uint8_t* data;
+    size_t size;
+    size_t capacity;
+} Arena;
+
+void arena_create(Arena *a, size_t capacity);
+void *arena_alloc(Arena *a, size_t size);
+void arena_clear(Arena *a);
+void arena_free(Arena *a);
+#define arena_alloc_type(arena_ptr, type) \
+    (type *)arena_alloc((arena_ptr), sizeof(type))
+
 #endif

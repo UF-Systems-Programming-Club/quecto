@@ -18,7 +18,7 @@ typedef struct SymbolTable {
 } SymbolTable;
 
 void print_symbol_table(SymbolTable *symbol_table, int indent);
-void insert_symbol(SymbolTable *symbol_table, const char *symbol, SymbolType type);
+void insert_symbol(Arena *arena, SymbolTable *symbol_table, const char *symbol, SymbolType type);
 void *get_symbol(SymbolTable *symbol_table, const char *str);
 
 #endif

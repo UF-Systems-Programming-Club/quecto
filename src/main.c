@@ -39,10 +39,14 @@ int main(int argc, char **argv) {
     }
     printf("\n");
 
+    Arena ast_arena;
+    arena_create(&ast_arena, 1024 * 1024);
+
     ParserState parser = {0};
     parser.tokens = tokens;
+    parser.arena = &ast_arena;
     // global symbol table initialization
-    parser.cur_symbol_table = calloc(1, sizeof(SymbolTable));
+    parser.cur_symbol_table = arena_alloc_type(&ast_arena, SymbolTable);
 
     AST *ast = parse_program(&parser);
 
@@ -102,4 +106,5 @@ int main(int argc, char **argv) {
 
         fclose(out);
     }
+    arena_free(&ast_arena);
 }

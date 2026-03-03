@@ -113,7 +113,7 @@ AST *parse_expression(ParserState *parser, int min_prec) {
     if (!expect_next_token_multiple(parser, &tok, 4, TOKEN_INT_LIT, TOKEN_FLOAT_LIT, TOKEN_IDENTIFIER, TOKEN_OPEN_PAREN))
         return NULL;
 
-    AST *left = (AST *)malloc(sizeof(AST));
+    AST *left = arena_alloc_type(parser->arena, AST);
 
     switch (tok.type) {
         case TOKEN_INT_LIT:
@@ -130,7 +130,6 @@ AST *parse_expression(ParserState *parser, int min_prec) {
             left->ident = tok.identifier;
             break;
         case TOKEN_OPEN_PAREN:
-            free(left);
             left = parse_expression(parser, 0);
             if (parser->error) return NULL;
 
@@ -141,7 +140,7 @@ AST *parse_expression(ParserState *parser, int min_prec) {
     // NOTE: utilizes the fact that get precedence returns -1 when the next token is
     // not an operator
     while (get_token_type_precedence(peek_next_token_type(parser)) > min_prec) {
-        AST *op = malloc(sizeof(AST));
+        AST *op = arena_alloc_type(parser->arena, AST);
         op->type = AST_BINARY_OP;
         op->left = left;
         tok = *get_next_token(parser);
@@ -169,7 +168,7 @@ AST *parse_expression(ParserState *parser, int min_prec) {
 AST *parse_statement(ParserState *parser) {
     Token tok;
 
-    AST *statement = calloc(1, sizeof(AST));
+    AST *statement = arena_alloc_type(parser->arena, AST);
 
     if (match_next_token(parser, &tok, TOKEN_OPEN_CURLY)) {
         statement->type = AST_BLOCK;
@@ -190,7 +189,7 @@ AST *parse_statement(ParserState *parser) {
         return statement;
     } else if (match_next_token(parser, &tok, TOKEN_IDENTIFIER)) {
         Token ident = tok;
-        AST *symbol = malloc(sizeof(AST));
+        AST *symbol = arena_alloc_type(parser->arena, AST);
         symbol->type = AST_SYMBOL;
         symbol->ident = ident.identifier;
         symbol->symbol_table = parser->cur_symbol_table;
@@ -201,7 +200,7 @@ AST *parse_statement(ParserState *parser) {
             if (!match_next_token(parser, &tok, TOKEN_EQUALS)) return NULL;
 
             statement->type = AST_DECL;
-            insert_symbol(parser->cur_symbol_table, symbol->ident, SYM_TYPE_VARIABLE);
+            insert_symbol(parser->arena, parser->cur_symbol_table, symbol->ident, SYM_TYPE_VARIABLE);
             statement->expr = parse_expression(parser, 0);
         } else if (match_next_token(parser, &tok, TOKEN_EQUALS)) {
             statement->type = AST_ASSIGNMENT;
@@ -223,7 +222,7 @@ AST *parse_statement(ParserState *parser) {
 }
 
 AST *parse_program(ParserState *parser) {
-    AST *program = calloc(1, sizeof(AST));
+    AST *program = arena_alloc_type(parser->arena, AST);
     program->type = AST_PROGRAM;
 
     while (peek_next_token_type(parser) != TOKEN_EOF) {

@@ -11,6 +11,7 @@ typedef struct {
     int current;
     bool error;
     SymbolTable *cur_symbol_table;
+    Arena *arena;
 } ParserState;
 
 AST *parse_program(ParserState *parser);

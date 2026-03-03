@@ -3,10 +3,10 @@
 #include "symbol_table.h"
 #include "common.h"
 
-void insert_symbol(SymbolTable *symbol_table, const char *symbol, SymbolType type) {
+void insert_symbol(Arena *arena, SymbolTable *symbol_table, const char *symbol, SymbolType type) {
     HashTable *table = &symbol_table->table;
 
-    SymbolData *data = calloc(1, sizeof(SymbolData));
+    SymbolData *data = arena_alloc_type(arena, SymbolData);
     data->type = type;
 
     ht_insert(table, symbol, data);

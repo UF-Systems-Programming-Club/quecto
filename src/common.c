@@ -60,3 +60,43 @@ void *ht_search(HashTable *ht, const char *str) {
 
     return NULL;
 }
+
+void arena_create(Arena *a, size_t capacity) {
+    a->capacity = capacity;
+    a->size = 0;
+    a->data = malloc(capacity);
+    if (!a->data) {
+        fprintf(stderr, "Failed to create arena of capacity %zu\n", capacity);
+        exit(1);
+    }
+}
+
+void *arena_alloc(Arena *a, size_t size) {
+    // 8 byte alignment
+    size_t alignment = sizeof(void *);
+    size_t aligned_size = (size + (alignment - 1)) & ~(alignment - 1);
+
+    if (a->size + aligned_size > a->capacity) {
+        fprintf(stderr, "Arena overflow (capacity %zu)", a->capacity);
+        exit(1);
+    }
+
+    void *ptr = a->data + a->size;
+    a->size += aligned_size;
+
+    // zero initialize
+    memset(ptr, 0, aligned_size);
+    return ptr;
+}
+
+void arena_reset(Arena *a) {
+    a->size = 0;
+}
+
+void arena_free(Arena *a) {
+    free(a->data);
+    a->data = NULL;
+    a->capacity = 0;
+    a->size = 0;
+}
+
