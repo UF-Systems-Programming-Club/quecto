@@ -12,6 +12,7 @@ typedef enum {
     AST_DECL,
     AST_ASSIGNMENT,
     AST_RETURN,
+    AST_IF,
     AST_SYMBOL,
     AST_INT_LIT,
     AST_FLOAT_LIT,
@@ -50,6 +51,12 @@ typedef struct AST {
         struct {
             struct AST *symbol;
             struct AST *expr;
+        };
+
+        // If
+        struct {
+            struct AST *condition;
+            struct AST *block;
         };
 
         // Symbol

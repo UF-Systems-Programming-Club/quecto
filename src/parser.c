@@ -185,7 +185,7 @@ AST *parse_statement(ParserState *parser) {
 
         parser->cur_symbol_table = symbol_table->prev;
 
-        if (!expect_next_token(parser, &tok, TOKEN_CLOSE_CURLY)) return NULL;
+        //if (!expect_next_token(parser, &tok, TOKEN_CLOSE_CURLY)) return NULL;
         return statement;
     } else if (match_next_token(parser, &tok, TOKEN_IDENTIFIER)) {
         Token ident = tok;
@@ -212,6 +212,11 @@ AST *parse_statement(ParserState *parser) {
     } else if (match_next_token(parser, &tok, TOKEN_RETURN)) {
         statement->type = AST_RETURN;
         statement->expr = parse_expression(parser, 0);
+    } else if (match_next_token(parser, &tok, TOKEN_IF)) {
+        statement->type = AST_IF;
+        statement->condition = parse_expression(parser, 0);
+        statement->block = parse_statement(parser);
+        return statement;
     } else {
         statement = parse_expression(parser, 0);
     }

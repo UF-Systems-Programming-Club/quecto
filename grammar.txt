@@ -10,8 +10,10 @@ program = (statement)* EOF
 statement = (expr       |
              decl       |
              assignment |
+             if         |
              return)   ';'
 
+if = if expr block
 decl = identifer : {type} = expr
 assignment = identifier = expr
 return = return expr

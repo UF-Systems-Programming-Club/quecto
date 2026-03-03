@@ -26,6 +26,7 @@ const char *token_to_string_table[] = {
     [TOKEN_FLOAT_LIT] = "float literal",
     [TOKEN_IDENTIFIER] = "identifier",
     [TOKEN_RETURN] = "return",
+    [TOKEN_IF] = "if",
     [TOKEN_EOF] = "end of file"
 };
 
@@ -100,6 +101,7 @@ void print_token(Token tok) {
         case TOKEN_LESS_THAN:       printf("<\n"); break;
         case TOKEN_GREATER_THAN:    printf(">\n"); break;
         case TOKEN_RETURN:          printf("return\n"); break;
+        case TOKEN_IF:              printf("if\n"); break;
         case TOKEN_CLOSE_PAREN:     printf(")\n"); break;
 
         default:                assert(0 && "Every token needs to be able to be printed, so add entry");
@@ -203,6 +205,8 @@ TokenArray tokenize(const char *buf, size_t buf_size) {
 
                     if (strncmp(&buf[start], "return", next - start) == 0) {
                         tok.type = TOKEN_RETURN;
+                    } else if (strncmp(&buf[start], "if", next - start) == 0) {
+                        tok.type = TOKEN_IF;
                     } else {
                         tok.identifier = (char*) malloc(next - start + 1);
                         strncpy(tok.identifier, &buf[start], next - start);
