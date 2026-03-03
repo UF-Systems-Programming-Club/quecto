@@ -177,7 +177,6 @@ void pretty_print_bytecode(Bytecode bytecode) {
                 printf(", ");
                 print_bytecode_op(instr.arg2);
                 printf("\n");
->>>>>>> f61df6d (added physical register constraints)
                 break;
             case OPCODE_LOAD:
                 printf("\tr%d = [bp - %d]\n", instr.dest.vreg, instr.arg1.stack_offset);

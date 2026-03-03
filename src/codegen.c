@@ -52,7 +52,7 @@ Bytecode adhere_bytecode_to_machine_spec(Bytecode bytecode, PhysRegs *pregs) {
                 instr.dest.reg = 0;
                 instr.arg1.type = OPERAND_REG;
                 instr.arg1.reg = 2;
-                instr.
+                // instr.
 
                 array_append(machine_bytecode, instr);
                 array_append(machine_bytecode, copy);
