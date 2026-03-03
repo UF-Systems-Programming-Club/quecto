@@ -90,7 +90,7 @@ void gen_bytecode_from_ast(Bytecode *bytecode, AST *ast) {
         switch (statement->type) {
             case AST_DECL: {
                 Operand expr = generate_expr_bytecode(bytecode, statement->expr);
-                SymbolData *var = get_symbol(statement->symbol->symbol_table, 
+                SymbolData *var = get_symbol(statement->symbol->symbol_table,
                                              statement->symbol->ident);
                 stack_offset += 4;
                 var->stack_offset = stack_offset;
@@ -100,7 +100,7 @@ void gen_bytecode_from_ast(Bytecode *bytecode, AST *ast) {
             }
             case AST_ASSIGNMENT: {
                 Operand expr = generate_expr_bytecode(bytecode, statement->expr);
-                SymbolData *var = get_symbol(statement->symbol->symbol_table, 
+                SymbolData *var = get_symbol(statement->symbol->symbol_table,
                                              statement->symbol->ident);
                 generate_store_bytecode(bytecode, var->stack_offset, expr);
                 break;
@@ -133,6 +133,16 @@ void print_bytecode_op(Operand op) {
     }
 }
 
+void print_bytecode_operation(const char *name, Operand dst, Operand arg1, Operand arg2) {
+    printf("\t");
+    print_bytecode_op(dst);
+    printf(" = %s ", name);
+    print_bytecode_op(arg1);
+    printf(", ");
+    print_bytecode_op(arg2);
+    printf("\n");
+}
+
 void pretty_print_bytecode(Bytecode bytecode) {
     // TODO: this function needs to be reworked to support
     // multiple operand types. I need to decide on what types
@@ -143,40 +153,31 @@ void pretty_print_bytecode(Bytecode bytecode) {
         printf("%d: ", i);
         switch (instr.opcode) {
             case OPCODE_ADD:
-                printf("\t");
-                print_bytecode_op(instr.dest);
-                printf(" = add ");
-                print_bytecode_op(instr.arg1);
-                printf(", ");
-                print_bytecode_op(instr.arg2);
-                printf("\n");
+                print_bytecode_operation("add", instr.dest, instr.arg1, instr.arg2);
                 break;
             case OPCODE_SUB:
-                printf("\t");
-                print_bytecode_op(instr.dest);
-                printf(" = sub ");
-                print_bytecode_op(instr.arg1);
-                printf(", ");
-                print_bytecode_op(instr.arg2);
-                printf("\n");
+                print_bytecode_operation("sub", instr.dest, instr.arg1, instr.arg2);
                 break;
             case OPCODE_MUL:
-                printf("\t");
-                print_bytecode_op(instr.dest);
-                printf(" = mul ");
-                print_bytecode_op(instr.arg1);
-                printf(", ");
-                print_bytecode_op(instr.arg2);
-                printf("\n");
+                print_bytecode_operation("mul", instr.dest, instr.arg1, instr.arg2);
                 break;
             case OPCODE_DIV:
-                printf("\t");
-                print_bytecode_op(instr.dest);
-                printf(" = div ");
-                print_bytecode_op(instr.arg1);
-                printf(", ");
-                print_bytecode_op(instr.arg2);
-                printf("\n");
+                print_bytecode_operation("div", instr.dest, instr.arg1, instr.arg2);
+                break;
+            case OPCODE_CMP_EQ:
+                print_bytecode_operation("c.eq", instr.dest, instr.arg1, instr.arg2);
+                break;
+            case OPCODE_CMP_LT:
+                print_bytecode_operation("c.lt", instr.dest, instr.arg1, instr.arg2);
+                break;
+            case OPCODE_CMP_GT:
+                print_bytecode_operation("c.gt", instr.dest, instr.arg1, instr.arg2);
+                break;
+            case OPCODE_CMP_LEQ:
+                print_bytecode_operation("c.le", instr.dest, instr.arg1, instr.arg2);
+                break;
+            case OPCODE_CMP_GEQ:
+                print_bytecode_operation("c.ge", instr.dest, instr.arg1, instr.arg2);
                 break;
             case OPCODE_LOAD:
                 printf("\tr%d = [bp - %d]\n", instr.dest.vreg, instr.arg1.stack_offset);
