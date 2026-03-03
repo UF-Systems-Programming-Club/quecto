@@ -7,17 +7,32 @@
 #include "tokenizer.h"
 
 int get_token_precedence_table[] = {
-    [TOKEN_PLUS] = 1,
-    [TOKEN_MINUS] = 1,
-    [TOKEN_MULTIPLY] = 2,
-    [TOKEN_DIVIDE] = 2,
+    [TOKEN_EQUALS_EQUALS] = 1,
+    [TOKEN_GREATER_EQUALS] = 1,
+    [TOKEN_LESS_EQUALS] = 1,
+    [TOKEN_LESS_THAN] = 1,
+    [TOKEN_GREATER_THAN] = 1,
+    [TOKEN_PLUS] = 2,
+    [TOKEN_MINUS] = 2,
+    [TOKEN_MULTIPLY] = 3,
+    [TOKEN_DIVIDE] = 3,
 };
 
 bool token_is_operator(TokenType type) {
-    return type == TOKEN_PLUS     ||
-           type == TOKEN_MINUS    ||
-           type == TOKEN_MULTIPLY ||
-           type == TOKEN_DIVIDE;
+    switch (type) {
+        case TOKEN_EQUALS_EQUALS:
+        case TOKEN_GREATER_EQUALS:
+        case TOKEN_LESS_EQUALS:
+        case TOKEN_LESS_THAN:
+        case TOKEN_GREATER_THAN:
+        case TOKEN_PLUS:
+        case TOKEN_MINUS:
+        case TOKEN_MULTIPLY:
+        case TOKEN_DIVIDE:
+            return true;
+        default:
+            return false;
+    }
 }
 
 int get_token_type_precedence(TokenType type) {
@@ -131,10 +146,15 @@ AST *parse_expression(ParserState *parser, int min_prec) {
         op->left = left;
         tok = *get_next_token(parser);
         switch (tok.type) {
-            case TOKEN_PLUS:     op->op = OP_PLUS;     break;
-            case TOKEN_MINUS:    op->op = OP_MINUS;    break;
-            case TOKEN_MULTIPLY: op->op = OP_MULTIPLY; break;
-            case TOKEN_DIVIDE:   op->op = OP_DIVIDE;   break;
+            case TOKEN_EQUALS_EQUALS:   op->op = OP_EQUALS; break;
+            case TOKEN_LESS_THAN:       op->op = OP_LESS_THAN; break;
+            case TOKEN_GREATER_THAN:    op->op = OP_GREATER_THAN; break;
+            case TOKEN_LESS_EQUALS:     op->op = OP_LESS_EQUALS; break;
+            case TOKEN_GREATER_EQUALS:  op->op = OP_GREATER_EQUALS; break;
+            case TOKEN_PLUS:            op->op = OP_PLUS;     break;
+            case TOKEN_MINUS:           op->op = OP_MINUS;    break;
+            case TOKEN_MULTIPLY:        op->op = OP_MULTIPLY; break;
+            case TOKEN_DIVIDE:          op->op = OP_DIVIDE;   break;
         }
 
         op->right = parse_expression(parser, get_token_type_precedence(tok.type));

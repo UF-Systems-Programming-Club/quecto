@@ -35,10 +35,15 @@ void print_ast(AST* ast, int indent) {
             printf("(");
             print_ast(ast->left, 0);
             switch (ast->op) {
-                case OP_PLUS:     printf(" + "); break;
-                case OP_MINUS:    printf(" - "); break;
-                case OP_DIVIDE:   printf(" / "); break;
-                case OP_MULTIPLY: printf(" * "); break;
+                case OP_EQUALS:         printf(" == "); break;
+                case OP_LESS_THAN:      printf(" < "); break;
+                case OP_GREATER_THAN:   printf(" > "); break;
+                case OP_LESS_EQUALS:    printf(" <= "); break;
+                case OP_GREATER_EQUALS: printf(" >= "); break;
+                case OP_PLUS:           printf(" + "); break;
+                case OP_MINUS:          printf(" - "); break;
+                case OP_DIVIDE:         printf(" / "); break;
+                case OP_MULTIPLY:       printf(" * "); break;
             }
             print_ast(ast->right, 0);
             printf(")");

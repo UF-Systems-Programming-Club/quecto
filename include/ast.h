@@ -18,6 +18,11 @@ typedef enum {
 } ASTType;
 
 typedef enum {
+    OP_EQUALS,
+    OP_LESS_EQUALS,
+    OP_GREATER_EQUALS,
+    OP_LESS_THAN,
+    OP_GREATER_THAN,
     OP_PLUS,
     OP_MINUS,
     OP_MULTIPLY,
