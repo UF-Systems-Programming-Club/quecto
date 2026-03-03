@@ -206,7 +206,6 @@ AST *parse_statement(ParserState *parser) {
             statement->type = AST_ASSIGNMENT;
             statement->expr = parse_expression(parser, 0);
         } else {
-            free(symbol);
             statement = parse_expression(parser, 0);
         }
     } else if (match_next_token(parser, &tok, TOKEN_RETURN)) {
