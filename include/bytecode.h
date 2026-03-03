@@ -16,7 +16,7 @@ typedef enum {
     OPCODE_LOAD, // TODO: currently load and store operate on the stack.
                // will need to seperate stack loads from regular loads
     OPCODE_STORE,
-    OPCODE_MOV,
+    OPCODE_COPY,
     OPCODE_LOADI,
     OPCODE_RET,
 } Opcode;
@@ -83,7 +83,8 @@ typedef struct {
 } IntervalArray;
 
 typedef struct {
-} IntervalSet;
+    IntervalArray regs[4]; // TODO: change this to be dependent on the backend (but still static)
+} PhysRegs; // Structure to record the info of hardware and ABI constraints on registers for allocator
 
 extern int vreg_count;
 extern const char *registers[];
@@ -95,6 +96,6 @@ void pretty_print_bytecode(Bytecode bytecode);
 
 IntervalArray create_live_intervals_from_bytecode(Bytecode bytecode);
 void print_live_intervals(IntervalArray intervals);
-LocationArray linear_scan_register_allocation(IntervalArray *intervals);
+LocationArray linear_scan_register_allocation(IntervalArray *intervals, PhysRegs *pregs);
 
 #endif

@@ -6,9 +6,8 @@
 // This function essentially performs any and all transformations to
 // the bytecode that are necessary before register allocation occurs
 // (e.g. 3AC to 2AC conversion for x64, respecting calling conventions, etc;)
-Bytecode adhere_bytecode_to_machine_spec(Bytecode bytecode);
+Bytecode adhere_bytecode_to_machine_spec(Bytecode bytecode, PhysRegs *pregs);
 
-// This functino should be moved to
 void generate_assembly_from_bytecode(FILE *out, Bytecode bytecode, LocationArray location);
 
 // TODO: locations should probably not be passed in here and instead we have some
@@ -22,7 +21,7 @@ void gen_mul(FILE *out, Instr instr, LocationArray location);
 void gen_div(FILE *out, Instr instr, LocationArray location);
 void gen_load(FILE *out, Instr instr, LocationArray location);
 void gen_store(FILE *out, Instr instr, LocationArray location);
-void gen_mov(FILE *out, Instr instr, LocationArray location);
+void gen_copy(FILE *out, Instr instr, LocationArray location);
 void gen_loadi(FILE *out, Instr instr, LocationArray location);
 void gen_ret(FILE *out, Instr instr, LocationArray location);
 

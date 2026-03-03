@@ -7,7 +7,7 @@
 int vreg_count = 0;
 int stack_offset = 0;
 
-Operand generate_load_imm_ir(Bytecode *ir, Operand imm) {
+Operand generate_load_imm_bytecode(Bytecode *bytecode, Operand imm) {
     Instr instr;
     Operand dest = {
         .type = OPERAND_VREG,
@@ -17,44 +17,44 @@ Operand generate_load_imm_ir(Bytecode *ir, Operand imm) {
     instr.dest = dest;
     instr.arg1 = imm;
 
-    array_append(*ir, instr);
+    array_append(*bytecode, instr);
     return dest;
 }
 
-Operand generate_load_ir(Bytecode *ir, int stack_offset) {
+Operand generate_load_bytecode(Bytecode *bytecode, int stack_offset) {
     Instr instr;
     instr.opcode = OPCODE_LOAD;
     instr.dest.type = OPERAND_VREG;
     instr.dest.vreg = vreg_count++;
     instr.arg1.type = OPERAND_STACK;
     instr.arg1.stack_offset = stack_offset;
-    array_append(*ir, instr);
+    array_append(*bytecode, instr);
     return instr.dest;
 }
 
-Operand generate_expr_ir(Bytecode *ir, AST *expr) {
+Operand generate_expr_bytecode(Bytecode *bytecode, AST *expr) {
     if (expr->type == AST_INT_LIT) {
         Operand imm;
         imm.type = OPERAND_IMM;
         imm.imm = expr->int_lit;
-        Operand res = generate_load_imm_ir(ir, imm);
+        Operand res = generate_load_imm_bytecode(bytecode, imm);
         return res;
     }
     if (expr->type == AST_SYMBOL) {
         SymbolData *var = get_symbol(expr->symbol_table,
                                      expr->ident);
-        return generate_load_ir(ir, var->stack_offset);
+        return generate_load_bytecode(bytecode, var->stack_offset);
     }
 
     Instr instr;
     instr.dest.type = OPERAND_VREG;
     instr.dest.vreg = vreg_count++;
-    instr.arg1 = generate_expr_ir(ir, expr->left);
+    instr.arg1 = generate_expr_bytecode(bytecode, expr->left);
     if (expr->right->type == AST_INT_LIT) {
         instr.arg2.type = OPERAND_IMM;
         instr.arg2.imm = expr->right->int_lit;
     } else {
-        instr.arg2 = generate_expr_ir(ir, expr->right);
+        instr.arg2 = generate_expr_bytecode(bytecode, expr->right);
     }
 
     switch (expr->op) {
@@ -68,18 +68,18 @@ Operand generate_expr_ir(Bytecode *ir, AST *expr) {
         case OP_LESS_EQUALS:    instr.opcode = OPCODE_CMP_LEQ; break;
         case OP_GREATER_EQUALS: instr.opcode = OPCODE_CMP_GEQ; break;
     }
-    array_append(*ir, instr);
+    array_append(*bytecode, instr);
 
     return instr.dest;
 }
 
-void generate_store_ir(Bytecode *ir, int stack_offset, Operand vreg) {
+void generate_store_bytecode(Bytecode *bytecode, int stack_offset, Operand vreg) {
     Instr store;
     store.opcode = OPCODE_STORE;
     store.dest.type = OPERAND_STACK;
     store.dest.stack_offset = stack_offset;
     store.arg1 = vreg;
-    array_append(*ir, store);
+    array_append(*bytecode, store);
 }
 
 void gen_bytecode_from_ast(Bytecode *bytecode, AST *ast) {
@@ -89,32 +89,33 @@ void gen_bytecode_from_ast(Bytecode *bytecode, AST *ast) {
         AST *statement = ast->items[i];
         switch (statement->type) {
             case AST_DECL: {
-                Operand expr = generate_expr_ir(bytecode, statement->expr);
-                SymbolData *var = get_symbol(statement->symbol->symbol_table,
+                Operand expr = generate_expr_bytecode(bytecode, statement->expr);
+                SymbolData *var = get_symbol(statement->symbol->symbol_table, 
                                              statement->symbol->ident);
                 stack_offset += 4;
                 var->stack_offset = stack_offset;
 
-                generate_store_ir(bytecode, var->stack_offset, expr);
+                generate_store_bytecode(bytecode, var->stack_offset, expr);
                 break;
             }
             case AST_ASSIGNMENT: {
-                Operand expr = generate_expr_ir(bytecode, statement->expr);
-                SymbolData *var = get_symbol(statement->symbol->symbol_table,
+                Operand expr = generate_expr_bytecode(bytecode, statement->expr);
+                SymbolData *var = get_symbol(statement->symbol->symbol_table, 
                                              statement->symbol->ident);
-                generate_store_ir(bytecode, var->stack_offset, expr);
+                generate_store_bytecode(bytecode, var->stack_offset, expr);
                 break;
             }
             case AST_RETURN: {
                 // TODO: in the future should probably have a return stack similar to function param stack
+                // to support multiple return values
                 Instr instr;
                 instr.opcode = OPCODE_RET;
-                instr.arg1 = generate_expr_ir(bytecode, statement->expr);
+                instr.arg1 = generate_expr_bytecode(bytecode, statement->expr);
                 array_append(*bytecode, instr);
                 break;
             }
             case AST_BINARY_OP:
-                generate_expr_ir(bytecode, ast->items[i]);
+                generate_expr_bytecode(bytecode, ast->items[i]);
                 break;
             default:
                 assert(0 && "should never be in here");
@@ -122,53 +123,61 @@ void gen_bytecode_from_ast(Bytecode *bytecode, AST *ast) {
     }
 }
 
-void print_ir_op(Operand op) {
+void print_bytecode_op(Operand op) {
     if (op.type == OPERAND_IMM) {
         printf("%d", op.imm);
-    } else {
+    } else if (op.type == OPERAND_VREG) {
         printf("r%d", op.vreg);
+    } else {
+        printf("%s", registers[op.reg]);
     }
 }
 
-void print_ir_operation(const char* oper_name, int dst, Operand arg1, Operand arg2) {
-    printf("\tr%d = %s ", dst, oper_name);
-    print_ir_op(arg1);
-    printf(", ");
-    print_ir_op(arg2);
-    printf("\n");
-}
-
-void pretty_print_bytecode(Bytecode ir) {
-    for (int i = 0; i < ir.count; i++) {
-        Instr instr = ir.items[i];
+void pretty_print_bytecode(Bytecode bytecode) {
+    // TODO: this function needs to be reworked to support
+    // multiple operand types. I need to decide on what types
+    // of operands each instruction can support, and if immediate
+    // arithemtic should have separate instructions or not (leaning towards no for now)
+    for (int i = 0; i < bytecode.count; i++) {
+        Instr instr = bytecode.items[i];
         printf("%d: ", i);
         switch (instr.opcode) {
             case OPCODE_ADD:
-                print_ir_operation("add", instr.dest.vreg, instr.arg1, instr.arg2);
+                printf("\t");
+                print_bytecode_op(instr.dest);
+                printf(" = add ");
+                print_bytecode_op(instr.arg1);
+                printf(", ");
+                print_bytecode_op(instr.arg2);
+                printf("\n");
                 break;
             case OPCODE_SUB:
-                print_ir_operation("sub", instr.dest.vreg, instr.arg1, instr.arg2);
+                printf("\t");
+                print_bytecode_op(instr.dest);
+                printf(" = sub ");
+                print_bytecode_op(instr.arg1);
+                printf(", ");
+                print_bytecode_op(instr.arg2);
+                printf("\n");
                 break;
             case OPCODE_MUL:
-                print_ir_operation("mul", instr.dest.vreg, instr.arg1, instr.arg2);
+                printf("\t");
+                print_bytecode_op(instr.dest);
+                printf(" = mul ");
+                print_bytecode_op(instr.arg1);
+                printf(", ");
+                print_bytecode_op(instr.arg2);
+                printf("\n");
                 break;
             case OPCODE_DIV:
-                print_ir_operation("div", instr.dest.vreg, instr.arg1, instr.arg2);
-                break;
-            case OPCODE_CMP_EQ:
-                print_ir_operation("c.eq", instr.dest.vreg, instr.arg1, instr.arg2);
-                break;
-            case OPCODE_CMP_LT:
-                print_ir_operation("c.lt", instr.dest.vreg, instr.arg1, instr.arg2);
-                break;
-            case OPCODE_CMP_GT:
-                print_ir_operation("c.gt", instr.dest.vreg, instr.arg1, instr.arg2);
-                break;
-            case OPCODE_CMP_LEQ:
-                print_ir_operation("c.le", instr.dest.vreg, instr.arg1, instr.arg2);
-                break;
-            case OPCODE_CMP_GEQ:
-                print_ir_operation("c.ge", instr.dest.vreg, instr.arg1, instr.arg2);
+                printf("\t");
+                print_bytecode_op(instr.dest);
+                printf(" = div ");
+                print_bytecode_op(instr.arg1);
+                printf(", ");
+                print_bytecode_op(instr.arg2);
+                printf("\n");
+>>>>>>> f61df6d (added physical register constraints)
                 break;
             case OPCODE_LOAD:
                 printf("\tr%d = [bp - %d]\n", instr.dest.vreg, instr.arg1.stack_offset);
@@ -176,17 +185,25 @@ void pretty_print_bytecode(Bytecode ir) {
             case OPCODE_STORE:
                 printf("\t[bp - %d] = r%d\n", instr.dest.stack_offset, instr.arg1.vreg);
                 break;
-            case OPCODE_MOV:
-                printf("\tr%d = r%d\n", instr.dest.vreg, instr.arg1.vreg);
+            case OPCODE_COPY:
+                printf("\t");
+                print_bytecode_op(instr.dest);
+                printf(" = ");
+                print_bytecode_op(instr.arg1);
+                printf("\n");
                 break;
             case OPCODE_LOADI:
-                printf("\tr%d = loadi %d\n", instr.dest.vreg, instr.arg1.imm);
+                printf("\t");
+                print_bytecode_op(instr.dest);
+                printf(" = loadi ");
+                print_bytecode_op(instr.arg1);
+                printf("\n");
                 break;
             case OPCODE_RET:
                 printf("\tret r%d\n", instr.arg1.vreg);
                 break;
             default:
-                printf("error unrecognized instrruction in ir\n");
+                printf("error unrecognized instruction in bytecode\n");
         }
     }
 }
@@ -243,7 +260,7 @@ const char *registers_8bit_low[] = { // NOTE: this is meant to be a temporary so
 bool register_is_free[] = { 1, 1, 1, 1, };
 
 // NOTE: assumes intervals is already sorted
-LocationArray linear_scan_register_allocation(IntervalArray *intervals) {
+LocationArray linear_scan_register_allocation(IntervalArray *intervals, PhysRegs *pregs) {
     LocationArray locations = {0};
     array_init(locations, vreg_count);
     locations.count = vreg_count;

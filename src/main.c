@@ -16,7 +16,7 @@
 #endif
 
 int main(int argc, char **argv) {
-    FILE *f = fopen("hello.q", "r");
+    FILE *f = fopen("examples/hello.q", "r");
 
     fseek(f, 0, SEEK_END);
     long fsize = ftell(f);
@@ -62,7 +62,8 @@ int main(int argc, char **argv) {
         pretty_print_bytecode(bytecode);
         printf("\n");
 
-        bytecode = adhere_bytecode_to_machine_spec(bytecode);
+        PhysRegs pregs = {0};
+        bytecode = adhere_bytecode_to_machine_spec(bytecode, &pregs);
         pretty_print_bytecode(bytecode);
         printf("\n");
 
@@ -81,10 +82,11 @@ int main(int argc, char **argv) {
             if (!swapped)
                 break;
         }
+
         print_live_intervals(intervals);
         printf("\n");
 
-        LocationArray locations = linear_scan_register_allocation(&intervals);
+        LocationArray locations = linear_scan_register_allocation(&intervals, &pregs);
         for (int i = 0; i < locations.count; i++) {
             printf("r%d @ %s\n", i, registers[locations.items[i].register_index]);
         }
