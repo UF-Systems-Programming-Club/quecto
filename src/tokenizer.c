@@ -17,6 +17,11 @@ const char *token_to_string_table[] = {
     [TOKEN_SEMICOLON] = ";",
     [TOKEN_COLON] = ":",
     [TOKEN_EQUALS] = "=",
+    [TOKEN_EQUALS_EQUALS] = "==",
+    [TOKEN_LESS_EQUALS] = "<=",
+    [TOKEN_GREATER_EQUALS] = ">=",
+    [TOKEN_LESS_THAN] = "<",
+    [TOKEN_GREATER_THAN] = ">",
     [TOKEN_INT_LIT] = "integer literal",
     [TOKEN_FLOAT_LIT] = "float literal",
     [TOKEN_IDENTIFIER] = "identifier",
@@ -75,22 +80,27 @@ bool is_alpha(char c) {
 
 void print_token(Token tok) {
     switch (tok.type) {
-        case TOKEN_PLUS:         printf("+\n"); break;
-        case TOKEN_MINUS:        printf("-\n"); break;
-        case TOKEN_MULTIPLY:     printf("*\n"); break;
-        case TOKEN_DIVIDE:       printf("/\n"); break;
-        case TOKEN_SEMICOLON:    printf(";\n"); break;
-        case TOKEN_INT_LIT:      printf("%u\n", tok.int_lit); break;
-        case TOKEN_FLOAT_LIT:    printf("%.2f\n", tok.float_lit); break;
-        case TOKEN_EOF:          printf("EOF\n"); break;
-        case TOKEN_OPEN_PAREN:   printf("(\n"); break;
-        case TOKEN_OPEN_CURLY:   printf("{\n"); break;
-        case TOKEN_CLOSE_CURLY:  printf("}\n"); break;
-        case TOKEN_IDENTIFIER:   printf("%s\n", tok.identifier); break;
-        case TOKEN_COLON:        printf(":\n"); break;
-        case TOKEN_EQUALS:       printf("=\n"); break;
-        case TOKEN_RETURN:       printf("return\n"); break;
-        case TOKEN_CLOSE_PAREN:  printf(")\n"); break;
+        case TOKEN_PLUS:            printf("+\n"); break;
+        case TOKEN_MINUS:           printf("-\n"); break;
+        case TOKEN_MULTIPLY:        printf("*\n"); break;
+        case TOKEN_DIVIDE:          printf("/\n"); break;
+        case TOKEN_SEMICOLON:       printf(";\n"); break;
+        case TOKEN_INT_LIT:         printf("%u\n", tok.int_lit); break;
+        case TOKEN_FLOAT_LIT:       printf("%.2f\n", tok.float_lit); break;
+        case TOKEN_EOF:             printf("EOF\n"); break;
+        case TOKEN_OPEN_PAREN:      printf("(\n"); break;
+        case TOKEN_OPEN_CURLY:      printf("{\n"); break;
+        case TOKEN_CLOSE_CURLY:     printf("}\n"); break;
+        case TOKEN_IDENTIFIER:      printf("%s\n", tok.identifier); break;
+        case TOKEN_COLON:           printf(":\n"); break;
+        case TOKEN_EQUALS:          printf("=\n"); break;
+        case TOKEN_EQUALS_EQUALS:   printf("==\n"); break;
+        case TOKEN_LESS_EQUALS:     printf("<=\n"); break;
+        case TOKEN_GREATER_EQUALS:  printf(">=\n"); break;
+        case TOKEN_LESS_THAN:       printf("<\n"); break;
+        case TOKEN_GREATER_THAN:    printf(">\n"); break;
+        case TOKEN_RETURN:          printf("return\n"); break;
+        case TOKEN_CLOSE_PAREN:     printf(")\n"); break;
 
         default:                assert(0 && "Every token needs to be able to be printed, so add entry");
     }
@@ -163,8 +173,25 @@ TokenArray tokenize(const char *buf, size_t buf_size) {
                 tok.type = TOKEN_COLON;
                 array_append(tokens, tok);
                 break;
+            case '<':
+                switch (buf[next]) {
+                    case '=':   tok.type = TOKEN_LESS_EQUALS; next++; break;
+                    default:    tok.type = TOKEN_LESS_THAN;    break;
+                }
+                array_append(tokens, tok);
+                break;
+            case '>':
+                switch (buf[next]) {
+                    case '=':   tok.type = TOKEN_GREATER_EQUALS; next++; break;
+                    default:    tok.type = TOKEN_GREATER_THAN;    break;
+                }
+                array_append(tokens, tok);
+                break;
             case '=':
-                tok.type = TOKEN_EQUALS;
+                switch (buf[next]) {
+                    case '=':   tok.type = TOKEN_EQUALS_EQUALS; next++; break;
+                    default:    tok.type = TOKEN_EQUALS;    break;
+                }
                 array_append(tokens, tok);
                 break;
             default:

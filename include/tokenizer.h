@@ -19,6 +19,11 @@ typedef enum {
     TOKEN_IDENTIFIER,
     TOKEN_COLON,
     TOKEN_EQUALS,
+    TOKEN_EQUALS_EQUALS,
+    TOKEN_LESS_EQUALS,
+    TOKEN_GREATER_EQUALS,
+    TOKEN_LESS_THAN,
+    TOKEN_GREATER_THAN,
     TOKEN_RETURN,
 
     TOKEN_COUNT // Make sure this token is the last one
