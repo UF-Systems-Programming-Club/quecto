@@ -8,6 +8,11 @@ typedef enum {
     OPCODE_SUB,
     OPCODE_MUL,
     OPCODE_DIV,
+    OPCODE_CMP_EQ,
+    OPCODE_CMP_LT,
+    OPCODE_CMP_GT,
+    OPCODE_CMP_LEQ,
+    OPCODE_CMP_GEQ,
     OPCODE_LOAD, // TODO: currently load and store operate on the stack.
                // will need to seperate stack loads from regular loads
     OPCODE_STORE,
@@ -82,6 +87,7 @@ typedef struct {
 
 extern int vreg_count;
 extern const char *registers[];
+extern const char *registers_8bit_low[];
 extern bool register_is_free[];
 
 void gen_bytecode_from_ast(Bytecode *bytecode, AST *ast);

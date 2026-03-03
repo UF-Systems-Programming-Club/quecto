@@ -1,12 +1,22 @@
 #include "bytecode.h"
 #include "codegen.h"
 
+const char *cmp_x86_instruction_from_opcode[] = {
+    [OPCODE_CMP_EQ] = "sete",
+    [OPCODE_CMP_LT] = "setl",
+    [OPCODE_CMP_GT] = "setg",
+    [OPCODE_CMP_LEQ] = "setle",
+    [OPCODE_CMP_GEQ] = "setge"
+};
+
 // NOTE: for linux x64 only rn. makes it so that it is 2AC instead of 3AC, and will do more in the future
 Bytecode adhere_bytecode_to_machine_spec(Bytecode ir) {
     Bytecode machine_ir = {0};
     for (int i = 0; i < ir.count; i++) {
         Instr instr = ir.items[i];
         switch (instr.opcode) {
+            // NOTE: I dont think its required for the equality operations to be changed as
+            // CMP sets flags and a second instruction (i.e setl) is required to get result
             case OPCODE_ADD:
             case OPCODE_SUB:
             case OPCODE_MUL: {
@@ -28,6 +38,11 @@ Bytecode adhere_bytecode_to_machine_spec(Bytecode ir) {
             case OPCODE_STORE:
             case OPCODE_MOV:
             case OPCODE_LOADI:
+            case OPCODE_CMP_EQ:
+            case OPCODE_CMP_LT:
+            case OPCODE_CMP_GT:
+            case OPCODE_CMP_LEQ:
+            case OPCODE_CMP_GEQ:
                 array_append(machine_ir, instr);
                 break;
             default:
@@ -42,6 +57,34 @@ void generate_assembly_from_bytecode(FILE *out, Bytecode ir, LocationArray locat
     for (int i = 0; i < ir.count; i++) {
         Instr instr = ir.items[i];
         switch (instr.opcode) {
+            case OPCODE_CMP_EQ:
+            case OPCODE_CMP_LT:
+            case OPCODE_CMP_GT:
+            case OPCODE_CMP_LEQ:
+            case OPCODE_CMP_GEQ:
+                switch (instr.arg2.type) {
+                    case OPERAND_VREG:
+                        fprintf(out,
+                            "\tcmp\t%s,%s\n",
+                            registers[location.items[instr.arg1.vreg].register_index],
+                            registers[location.items[instr.arg2.vreg].register_index]);
+                        break;
+                    case OPERAND_IMM:
+                        fprintf(out,
+                                "\tcmp\t%s, %d\n",
+                                registers[location.items[instr.arg1.vreg].register_index],
+                                instr.arg2.imm);
+                        break;
+                }
+                fprintf(out,
+                        "\t%s\t%s\n",
+                        cmp_x86_instruction_from_opcode[instr.opcode],
+                        registers_8bit_low[location.items[instr.dest.vreg].register_index]); // set 8-bit reg
+                fprintf(out,
+                        "\tmovzx\t%s, %s\n",
+                        registers[location.items[instr.dest.vreg].register_index],
+                        registers_8bit_low[location.items[instr.dest.vreg].register_index]); // zero extend to rest (not optimal but we are only dealing with 32-bit regs in x86 so far)
+                break;
             case OPCODE_ADD:
                 switch (instr.arg2.type) {
                     case OPERAND_VREG:

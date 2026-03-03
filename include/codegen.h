@@ -8,7 +8,7 @@
 // (e.g. 3AC to 2AC conversion for x64, respecting calling conventions, etc;)
 Bytecode adhere_bytecode_to_machine_spec(Bytecode bytecode);
 
-// This functino should be moved to 
+// This functino should be moved to
 void generate_assembly_from_bytecode(FILE *out, Bytecode bytecode, LocationArray location);
 
 // TODO: locations should probably not be passed in here and instead we have some

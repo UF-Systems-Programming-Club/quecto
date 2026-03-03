@@ -1,5 +1,6 @@
 #include <stdio.h>
 
+#include "ast.h"
 #include "common.h"
 #include "bytecode.h"
 
@@ -40,7 +41,7 @@ Operand generate_expr_ir(Bytecode *ir, AST *expr) {
         return res;
     }
     if (expr->type == AST_SYMBOL) {
-        SymbolData *var = get_symbol(expr->symbol_table, 
+        SymbolData *var = get_symbol(expr->symbol_table,
                                      expr->ident);
         return generate_load_ir(ir, var->stack_offset);
     }
@@ -57,10 +58,15 @@ Operand generate_expr_ir(Bytecode *ir, AST *expr) {
     }
 
     switch (expr->op) {
-        case OP_PLUS:     instr.opcode = OPCODE_ADD; break;
-        case OP_MINUS:    instr.opcode = OPCODE_SUB; break;
-        case OP_MULTIPLY: instr.opcode = OPCODE_MUL; break;
-        case OP_DIVIDE:   instr.opcode = OPCODE_DIV; break;
+        case OP_PLUS:           instr.opcode = OPCODE_ADD; break;
+        case OP_MINUS:          instr.opcode = OPCODE_SUB; break;
+        case OP_MULTIPLY:       instr.opcode = OPCODE_MUL; break;
+        case OP_DIVIDE:         instr.opcode = OPCODE_DIV; break;
+        case OP_EQUALS:         instr.opcode = OPCODE_CMP_EQ; break;
+        case OP_LESS_THAN:      instr.opcode = OPCODE_CMP_LT; break;
+        case OP_GREATER_THAN:   instr.opcode = OPCODE_CMP_GT; break;
+        case OP_LESS_EQUALS:    instr.opcode = OPCODE_CMP_LEQ; break;
+        case OP_GREATER_EQUALS: instr.opcode = OPCODE_CMP_GEQ; break;
     }
     array_append(*ir, instr);
 
@@ -84,7 +90,7 @@ void gen_bytecode_from_ast(Bytecode *bytecode, AST *ast) {
         switch (statement->type) {
             case AST_DECL: {
                 Operand expr = generate_expr_ir(bytecode, statement->expr);
-                SymbolData *var = get_symbol(statement->symbol->symbol_table, 
+                SymbolData *var = get_symbol(statement->symbol->symbol_table,
                                              statement->symbol->ident);
                 stack_offset += 4;
                 var->stack_offset = stack_offset;
@@ -94,7 +100,7 @@ void gen_bytecode_from_ast(Bytecode *bytecode, AST *ast) {
             }
             case AST_ASSIGNMENT: {
                 Operand expr = generate_expr_ir(bytecode, statement->expr);
-                SymbolData *var = get_symbol(statement->symbol->symbol_table, 
+                SymbolData *var = get_symbol(statement->symbol->symbol_table,
                                              statement->symbol->ident);
                 generate_store_ir(bytecode, var->stack_offset, expr);
                 break;
@@ -124,44 +130,51 @@ void print_ir_op(Operand op) {
     }
 }
 
+void print_ir_operation(const char* oper_name, int dst, Operand arg1, Operand arg2) {
+    printf("\tr%d = %s ", dst, oper_name);
+    print_ir_op(arg1);
+    printf(", ");
+    print_ir_op(arg2);
+    printf("\n");
+}
+
 void pretty_print_bytecode(Bytecode ir) {
     for (int i = 0; i < ir.count; i++) {
         Instr instr = ir.items[i];
         printf("%d: ", i);
         switch (instr.opcode) {
             case OPCODE_ADD:
-                printf("\tr%d = add ", instr.dest.vreg);
-                print_ir_op(instr.arg1);
-                printf(", ");
-                print_ir_op(instr.arg2);
-                printf("\n");
+                print_ir_operation("add", instr.dest.vreg, instr.arg1, instr.arg2);
                 break;
             case OPCODE_SUB:
-                printf("\tr%d = sub ", instr.dest.vreg);
-                print_ir_op(instr.arg1);
-                printf(", ");
-                print_ir_op(instr.arg2);
-                printf("\n");
+                print_ir_operation("sub", instr.dest.vreg, instr.arg1, instr.arg2);
                 break;
             case OPCODE_MUL:
-                printf("\tr%d = mul ", instr.dest.vreg);
-                print_ir_op(instr.arg1);
-                printf(", ");
-                print_ir_op(instr.arg2);
-                printf("\n");
+                print_ir_operation("mul", instr.dest.vreg, instr.arg1, instr.arg2);
                 break;
             case OPCODE_DIV:
-                printf("\tr%d = div ", instr.dest.vreg);
-                print_ir_op(instr.arg1);
-                printf(", ");
-                print_ir_op(instr.arg2);
-                printf("\n");
+                print_ir_operation("div", instr.dest.vreg, instr.arg1, instr.arg2);
+                break;
+            case OPCODE_CMP_EQ:
+                print_ir_operation("c.eq", instr.dest.vreg, instr.arg1, instr.arg2);
+                break;
+            case OPCODE_CMP_LT:
+                print_ir_operation("c.lt", instr.dest.vreg, instr.arg1, instr.arg2);
+                break;
+            case OPCODE_CMP_GT:
+                print_ir_operation("c.gt", instr.dest.vreg, instr.arg1, instr.arg2);
+                break;
+            case OPCODE_CMP_LEQ:
+                print_ir_operation("c.le", instr.dest.vreg, instr.arg1, instr.arg2);
+                break;
+            case OPCODE_CMP_GEQ:
+                print_ir_operation("c.ge", instr.dest.vreg, instr.arg1, instr.arg2);
                 break;
             case OPCODE_LOAD:
                 printf("\tr%d = [bp - %d]\n", instr.dest.vreg, instr.arg1.stack_offset);
                 break;
             case OPCODE_STORE:
-                printf("\t[bp - %d] = r%d\n", instr.dest.stack_offset, instr.arg1.vreg); 
+                printf("\t[bp - %d] = r%d\n", instr.dest.stack_offset, instr.arg1.vreg);
                 break;
             case OPCODE_MOV:
                 printf("\tr%d = r%d\n", instr.dest.vreg, instr.arg1.vreg);
@@ -219,6 +232,10 @@ void print_live_intervals(IntervalArray intervals) {
 
 const char *registers[] = {
     "eax", "ecx", "edx", "edi",
+};
+
+const char *registers_8bit_low[] = { // NOTE: this is meant to be a temporary solution for accessing lower 8 bits for setCC instructions
+    "al", "cl", "dl", "dil",
 };
 
 // TODO: will need to turn this into an interval set to perform register pre-allocation
