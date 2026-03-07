@@ -4,6 +4,7 @@
 
 #include "tokenizer.h"
 #include "common.h"
+#include "error.h"
 
 const char *token_to_string_table[] = {
     [TOKEN_PLUS] = "+",
@@ -81,31 +82,32 @@ bool is_alpha(char c) {
 
 void print_token(Token tok) {
     switch (tok.type) {
-        case TOKEN_PLUS:            printf("+\n"); break;
-        case TOKEN_MINUS:           printf("-\n"); break;
-        case TOKEN_MULTIPLY:        printf("*\n"); break;
-        case TOKEN_DIVIDE:          printf("/\n"); break;
-        case TOKEN_SEMICOLON:       printf(";\n"); break;
-        case TOKEN_INT_LIT:         printf("%u\n", tok.int_lit); break;
-        case TOKEN_FLOAT_LIT:       printf("%.2f\n", tok.float_lit); break;
-        case TOKEN_EOF:             printf("EOF\n"); break;
-        case TOKEN_OPEN_PAREN:      printf("(\n"); break;
-        case TOKEN_OPEN_CURLY:      printf("{\n"); break;
-        case TOKEN_CLOSE_CURLY:     printf("}\n"); break;
-        case TOKEN_IDENTIFIER:      printf("%s\n", tok.identifier); break;
-        case TOKEN_COLON:           printf(":\n"); break;
-        case TOKEN_EQUALS:          printf("=\n"); break;
-        case TOKEN_EQUALS_EQUALS:   printf("==\n"); break;
-        case TOKEN_LESS_EQUALS:     printf("<=\n"); break;
-        case TOKEN_GREATER_EQUALS:  printf(">=\n"); break;
-        case TOKEN_LESS_THAN:       printf("<\n"); break;
-        case TOKEN_GREATER_THAN:    printf(">\n"); break;
-        case TOKEN_RETURN:          printf("return\n"); break;
-        case TOKEN_IF:              printf("if\n"); break;
-        case TOKEN_CLOSE_PAREN:     printf(")\n"); break;
+        case TOKEN_PLUS:            printf("+"); break;
+        case TOKEN_MINUS:           printf("-"); break;
+        case TOKEN_MULTIPLY:        printf("*"); break;
+        case TOKEN_DIVIDE:          printf("/"); break;
+        case TOKEN_SEMICOLON:       printf(";"); break;
+        case TOKEN_INT_LIT:         printf("%u", tok.int_lit); break;
+        case TOKEN_FLOAT_LIT:       printf("%.2f", tok.float_lit); break;
+        case TOKEN_EOF:             printf("EOF"); break;
+        case TOKEN_OPEN_PAREN:      printf("("); break;
+        case TOKEN_CLOSE_PAREN:     printf(")"); break;
+        case TOKEN_OPEN_CURLY:      printf("{"); break;
+        case TOKEN_CLOSE_CURLY:     printf("}"); break;
+        case TOKEN_IDENTIFIER:      printf("%s", tok.identifier); break;
+        case TOKEN_COLON:           printf(":"); break;
+        case TOKEN_EQUALS:          printf("="); break;
+        case TOKEN_EQUALS_EQUALS:   printf("=="); break;
+        case TOKEN_LESS_EQUALS:     printf("<="); break;
+        case TOKEN_GREATER_EQUALS:  printf(">="); break;
+        case TOKEN_LESS_THAN:       printf("<"); break;
+        case TOKEN_GREATER_THAN:    printf(">"); break;
+        case TOKEN_RETURN:          printf("return"); break;
+        case TOKEN_IF:              printf("if"); break;
 
         default:                assert(0 && "Every token needs to be able to be printed, so add entry");
     }
+    printf("\n");
 }
 
 TokenArray tokenize(const char *buf, size_t buf_size) {
@@ -127,12 +129,11 @@ TokenArray tokenize(const char *buf, size_t buf_size) {
 
         switch (c) {
             case '\n':
-                column = 1;
+                column = 0;
                 row++;
                 break;
             case ' ':
             case '\t':
-                column_width++;
             case '\r':
                 break;
             case '+':
@@ -208,7 +209,7 @@ TokenArray tokenize(const char *buf, size_t buf_size) {
                     } else if (strncmp(&buf[start], "if", next - start) == 0) {
                         tok.type = TOKEN_IF;
                     } else {
-                        tok.identifier = (char*) malloc(next - start + 1);
+                        tok.identifier = (char *)malloc(next - start + 1);
                         strncpy(tok.identifier, &buf[start], next - start);
                         tok.identifier[next - start] = '\0';
                     }
@@ -227,7 +228,7 @@ TokenArray tokenize(const char *buf, size_t buf_size) {
                     }
 
                     if (num_decimal_points > 1)
-                        printf("tokenizing error: too many decimal points in float literal\n");
+                        report_error(tok.row, tok.col, "too many decimal points in float literal");
 
                     switch (tok.type) {
                         case TOKEN_FLOAT_LIT:
@@ -238,11 +239,11 @@ TokenArray tokenize(const char *buf, size_t buf_size) {
                             break;
                     }
 
-                    column_width = next - start;
                     array_append(tokens, tok);
                 } else {
-                    printf("tokenizing error: unrecognized character \"%c\"\n", c);
+                    report_error(tok.row, tok.col, "unrecognized character \'%c\'", c);
                 }
+                column_width = next - start;
                 break;
         }
 

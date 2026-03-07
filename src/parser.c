@@ -5,6 +5,7 @@
 #include "common.h"
 #include "symbol_table.h"
 #include "tokenizer.h"
+#include "error.h"
 
 int get_token_precedence_table[] = {
     [TOKEN_EQUALS_EQUALS] = 1,
@@ -45,18 +46,6 @@ Token *get_next_token(ParserState *parser) {
     return &parser->tokens.items[parser->current++];
 }
 
-int print_parser_error(ParserState *parser, const char *format, ...) {
-    va_list args;
-    va_start(args, format);
-
-    Token *tok = get_next_token(parser);
-    printf("parser error at (line: %d, column: %d): ", tok->row, tok->col);
-    int result = vprintf(format, args);
-
-    va_end(args);
-    return result;
-}
-
 TokenType peek_next_token_type(ParserState *parser) {
     if (parser->current >= parser->tokens.count) return parser->tokens.items[parser->tokens.count - 1].type;
 
@@ -75,10 +64,9 @@ bool expect_next_token(ParserState *parser, Token *tok, TokenType type) {
     if (match_next_token(parser, tok, type)) {
         return true;
     } else {
-        print_parser_error(parser,"expected \"%s\" but got \"%s\" instead\n",
-            token_to_string_table[type],
-            token_to_string_table[peek_next_token_type(parser)]);
-        parser->error = true;
+        report_error(tok->row, tok->col, "expected \"%s\" but got \"%s\" instead",
+                     token_to_string_table[type],
+                     token_to_string_table[peek_next_token_type(parser)]);
         return false;
     }
 }
@@ -96,8 +84,7 @@ bool expect_next_token_multiple(ParserState *parser, Token *tok, int count, ...)
     va_end(args);
     va_start(args, count);
 
-    parser->error = true;
-    print_parser_error(parser, "");
+    report_error(tok->row, tok->col, "");
     for (int i = 0; i < count - 1; i++) {
         printf("\"%s\", ", token_to_string_table[va_arg(args, TokenType)]);
     }
@@ -125,13 +112,17 @@ AST *parse_expression(ParserState *parser, int min_prec) {
             left->float_lit = tok.float_lit;
             break;
         case TOKEN_IDENTIFIER:
+            if (get_symbol(parser->cur_symbol_table, tok.identifier) == NULL) {
+                report_error(tok.row, tok.col, "undeclared identifier");
+                return NULL;
+            }
             left->type = AST_SYMBOL;
             left->symbol_table = parser->cur_symbol_table;
             left->ident = tok.identifier;
             break;
         case TOKEN_OPEN_PAREN:
             left = parse_expression(parser, 0);
-            if (parser->error) return NULL;
+            if (left == NULL) return NULL;
 
             if (!expect_next_token(parser, &tok, TOKEN_CLOSE_PAREN)) return NULL;
             break;
@@ -157,7 +148,7 @@ AST *parse_expression(ParserState *parser, int min_prec) {
         }
 
         op->right = parse_expression(parser, get_token_type_precedence(tok.type));
-        if (parser->error) return NULL;
+        if (op->right == NULL) return NULL;
 
         left = op;
     }
@@ -197,7 +188,7 @@ AST *parse_statement(ParserState *parser) {
 
         if (match_next_token(parser, &tok, TOKEN_COLON)) {
             if (match_next_token(parser, &tok, TOKEN_IDENTIFIER)) { printf("types not implemented yet\n"); assert(0); }
-            if (!match_next_token(parser, &tok, TOKEN_EQUALS)) return NULL;
+            if (!expect_next_token(parser, &tok, TOKEN_EQUALS)) return NULL;
 
             statement->type = AST_DECL;
             insert_symbol(parser->arena, parser->cur_symbol_table, symbol->ident, SYM_TYPE_VARIABLE);
@@ -229,8 +220,11 @@ AST *parse_program(ParserState *parser) {
     AST *program = arena_alloc_type(parser->arena, AST);
     program->type = AST_PROGRAM;
 
+    // TODO: implement error synchronization
     while (peek_next_token_type(parser) != TOKEN_EOF) {
-        array_append(*program, parse_statement(parser));
+        AST *statement = parse_statement(parser);
+        if (statement == NULL) return program;
+        array_append(*program, statement);
     }
     // NOTE: probably doesn't need to be done but consumes EOF for sake of completion
     get_next_token(parser);

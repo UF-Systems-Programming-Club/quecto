@@ -89,9 +89,24 @@ typedef struct {
 extern int vreg_count;
 extern const char *registers[];
 extern const char *registers_8bit_low[];
-extern bool register_is_free[];
+extern bool active_registers[];
 
-void gen_bytecode_from_ast(Bytecode *bytecode, AST *ast);
+Operand gen_add_instr(Bytecode *bytecode, Operand left, Operand right);
+Operand gen_sub_instr(Bytecode *bytecode, Operand left, Operand right);
+Operand gen_mul_instr(Bytecode *bytecode, Operand left, Operand right);
+Operand gen_div_instr(Bytecode *bytecode, Operand left, Operand right);
+/*void gen_cmp_eq_instr(Bytecode *bytecode, );
+void gen_cmp_lt_instr(Bytecode *bytecode, );
+void gen_cmp_gt_instr(Bytecode *bytecode, );
+void gen_cmp_leq_instr(Bytecode *bytecode, );
+void gen_cmp_geq_instr(Bytecode *bytecode, );*/
+Operand gen_load_instr(Bytecode *bytecode, int stack_offset);
+Operand gen_store_instr(Bytecode *bytecode, int stack_offset, int vreg);
+// void gen_copy_instr(Bytecode *bytecode, );
+Operand gen_loadi_instr(Bytecode *bytecode, int imm);
+// void gen_ret_instr(Bytecode *bytecode, );
+
+void gen_ast_bytecode(Bytecode *bytecode, AST *ast);
 void pretty_print_bytecode(Bytecode bytecode);
 
 IntervalArray create_live_intervals_from_bytecode(Bytecode bytecode);

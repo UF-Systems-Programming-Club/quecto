@@ -59,7 +59,7 @@ void print_ast(AST* ast, int indent) {
         case AST_RETURN:
             print_indent(0, "return ");
             print_ast(ast->expr, 0);
-            printf(";");
+            printf(";\n");
             break;
         case AST_IF:
             print_indent(0, "if ");

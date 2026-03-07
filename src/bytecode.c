@@ -7,55 +7,64 @@
 int vreg_count = 0;
 int stack_offset = 0;
 
-Operand generate_load_imm_bytecode(Bytecode *bytecode, Operand imm) {
-    Instr instr;
-    Operand dest = {
-        .type = OPERAND_VREG,
-        .vreg = vreg_count++,
-    };
-    instr.opcode = OPCODE_LOADI;
-    instr.dest = dest;
-    instr.arg1 = imm;
+// NOTE: in the future these instructions will hold more information like
+// size of type, signed or unsigned, etc;
 
-    array_append(*bytecode, instr);
-    return dest;
+Operand gen_add_instr(Bytecode *bytecode, Operand left, Operand right) {
 }
 
-Operand generate_load_bytecode(Bytecode *bytecode, int stack_offset) {
-    Instr instr;
-    instr.opcode = OPCODE_LOAD;
-    instr.dest.type = OPERAND_VREG;
-    instr.dest.vreg = vreg_count++;
-    instr.arg1.type = OPERAND_STACK;
-    instr.arg1.stack_offset = stack_offset;
-    array_append(*bytecode, instr);
-    return instr.dest;
+Operand gen_loadi_instr(Bytecode *bytecode, int imm) {
+    Instr loadi;
+    loadi.opcode = OPCODE_LOADI;
+    loadi.dest.type = OPERAND_VREG;
+    loadi.dest.vreg = vreg_count++;
+    loadi.arg1.type = OPERAND_IMM;
+    loadi.arg1.imm = imm;
+    array_append(*bytecode, loadi);
+    return loadi.dest;
 }
 
-Operand generate_expr_bytecode(Bytecode *bytecode, AST *expr) {
+Operand gen_load_instr(Bytecode *bytecode, int stack_offset) {
+    Instr load;
+    load.opcode = OPCODE_LOAD;
+    load.dest.type = OPERAND_VREG;
+    load.dest.vreg = vreg_count++;
+    load.arg1.type = OPERAND_STACK;
+    load.arg1.stack_offset = stack_offset;
+    array_append(*bytecode, load);
+    return load.dest;
+}
+
+Operand gen_store_instr(Bytecode *bytecode, int stack_offset, int vreg) {
+    Instr store;
+    store.opcode = OPCODE_STORE;
+    store.dest.type = OPERAND_STACK;
+    store.dest.vreg = stack_offset;
+    store.arg1.type = OPERAND_VREG;
+    store.arg1.vreg = vreg;
+    array_append(*bytecode, store);
+    return store.dest;
+}
+
+Operand gen_int_lit_bytecode(Bytecode *bytecode, AST *int_lit) {
+    return gen_loadi_instr(bytecode, int_lit->int_lit);
+}
+
+Operand gen_expr_bytecode(Bytecode *bytecode, AST *expr) {
     if (expr->type == AST_INT_LIT) {
-        Operand imm;
-        imm.type = OPERAND_IMM;
-        imm.imm = expr->int_lit;
-        Operand res = generate_load_imm_bytecode(bytecode, imm);
-        return res;
+        return gen_int_lit_bytecode(bytecode, expr);
     }
     if (expr->type == AST_SYMBOL) {
         SymbolData *var = get_symbol(expr->symbol_table,
                                      expr->ident);
-        return generate_load_bytecode(bytecode, var->stack_offset);
+        return gen_load_instr(bytecode, var->stack_offset);
     }
 
     Instr instr;
     instr.dest.type = OPERAND_VREG;
     instr.dest.vreg = vreg_count++;
-    instr.arg1 = generate_expr_bytecode(bytecode, expr->left);
-    if (expr->right->type == AST_INT_LIT) {
-        instr.arg2.type = OPERAND_IMM;
-        instr.arg2.imm = expr->right->int_lit;
-    } else {
-        instr.arg2 = generate_expr_bytecode(bytecode, expr->right);
-    }
+    instr.arg1 = gen_expr_bytecode(bytecode, expr->left);
+    instr.arg2 = gen_expr_bytecode(bytecode, expr->right);
 
     switch (expr->op) {
         case OP_PLUS:           instr.opcode = OPCODE_ADD; break;
@@ -73,36 +82,27 @@ Operand generate_expr_bytecode(Bytecode *bytecode, AST *expr) {
     return instr.dest;
 }
 
-void generate_store_bytecode(Bytecode *bytecode, int stack_offset, Operand vreg) {
-    Instr store;
-    store.opcode = OPCODE_STORE;
-    store.dest.type = OPERAND_STACK;
-    store.dest.stack_offset = stack_offset;
-    store.arg1 = vreg;
-    array_append(*bytecode, store);
-}
-
-void gen_bytecode_from_ast(Bytecode *bytecode, AST *ast) {
+void gen_ast_bytecode(Bytecode *bytecode, AST *ast) {
     // Assumes AST is an AST_PROGRAM which should be guaranteed by parsing and static analysis
     // Could probably change function name to indicate that fact though
     for (int i = 0; i < ast->count; i++) {
         AST *statement = ast->items[i];
         switch (statement->type) {
             case AST_DECL: {
-                Operand expr = generate_expr_bytecode(bytecode, statement->expr);
+                Operand expr = gen_expr_bytecode(bytecode, statement->expr);
                 SymbolData *var = get_symbol(statement->symbol->symbol_table,
                                              statement->symbol->ident);
                 stack_offset += 4;
                 var->stack_offset = stack_offset;
 
-                generate_store_bytecode(bytecode, var->stack_offset, expr);
+                gen_store_instr(bytecode, var->stack_offset, expr.vreg);
                 break;
             }
             case AST_ASSIGNMENT: {
-                Operand expr = generate_expr_bytecode(bytecode, statement->expr);
+                Operand expr = gen_expr_bytecode(bytecode, statement->expr);
                 SymbolData *var = get_symbol(statement->symbol->symbol_table,
                                              statement->symbol->ident);
-                generate_store_bytecode(bytecode, var->stack_offset, expr);
+                gen_store_instr(bytecode, var->stack_offset, expr.vreg);
                 break;
             }
             case AST_RETURN: {
@@ -110,15 +110,15 @@ void gen_bytecode_from_ast(Bytecode *bytecode, AST *ast) {
                 // to support multiple return values
                 Instr instr;
                 instr.opcode = OPCODE_RET;
-                instr.arg1 = generate_expr_bytecode(bytecode, statement->expr);
+                instr.arg1 = gen_expr_bytecode(bytecode, statement->expr);
                 array_append(*bytecode, instr);
                 break;
             }
             case AST_BINARY_OP:
-                generate_expr_bytecode(bytecode, ast->items[i]);
+                gen_expr_bytecode(bytecode, ast->items[i]);
                 break;
             default:
-                assert(0 && "should never be in here");
+                assert(0 && "unsupported statement type");
         }
     }
 }
@@ -255,9 +255,7 @@ const char *registers_8bit_low[] = { // NOTE: this is meant to be a temporary so
     "al", "cl", "dl", "dil",
 };
 
-// TODO: will need to turn this into an interval set to perform register pre-allocation
-// for procedures and operations that require specific registers
-bool register_is_free[] = { 1, 1, 1, 1, };
+bool active_registers[] = { 1, 1, 1, 1, };
 
 // NOTE: assumes intervals is already sorted
 LocationArray linear_scan_register_allocation(IntervalArray *intervals, PhysRegs *pregs) {
@@ -277,7 +275,7 @@ LocationArray linear_scan_register_allocation(IntervalArray *intervals, PhysRegs
             if (active.items[j].end > intervals->items[i].start) break;
 
             // free register
-            register_is_free[locations.items[active.items[j].vreg].register_index] = true;
+            active_registers[locations.items[active.items[j].vreg].register_index] = true;
 
             // remove interval from active
             int k = j;
@@ -296,10 +294,8 @@ LocationArray linear_scan_register_allocation(IntervalArray *intervals, PhysRegs
         } else {
             // Allocate register
             for (int k = 0; k < 4; k++) {
-                if (register_is_free[k]) {
-                    register_is_free[k] = false;
-                    /*interval->loc.type = LOC_REGISTER;
-                    interval->loc.register_index = k;*/
+                if (active_registers[k]) {
+                    active_registers[k] = false;
                     location.type = LOC_REGISTER;
                     location.register_index = k;
                     break;
