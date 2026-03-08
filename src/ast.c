@@ -79,6 +79,12 @@ void print_ast(AST* ast, int indent) {
             print_indent(0, "else\n");
             print_ast(ast->then, indent);
             break;
+        case AST_WHILE:
+            print_indent(0, "while ");
+            print_ast(ast->condition, 0);
+            printf("\n");
+            print_ast(ast->then, indent);
+            break;
         default:
             printf("unknown\n");
             break;

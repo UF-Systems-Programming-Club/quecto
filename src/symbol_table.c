@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <sys/_types/_null.h>
 
 #include "symbol_table.h"
 #include "common.h"
@@ -13,7 +14,13 @@ void insert_symbol(Arena *arena, SymbolTable *symbol_table, const char *symbol, 
 }
 
 void *get_symbol(SymbolTable *symbol_table, const char *str) {
-    return ht_search(&symbol_table->table, str);
+    SymbolTable *table = symbol_table;
+    while (table != NULL) {
+        void *result = ht_search(&table->table, str);
+        if (result != NULL) return result;
+        table = table->prev;
+    }
+    return NULL;
 }
 
 void print_symbol_table(SymbolTable *symbol_table, int indent) {

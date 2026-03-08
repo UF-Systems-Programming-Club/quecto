@@ -17,7 +17,7 @@
 #endif
 
 int main(int argc, char **argv) {
-    FILE *f = fopen("examples/branch.q", "r");
+    FILE *f = fopen("examples/loop.q", "r");
 
     fseek(f, 0, SEEK_END);
     long fsize = ftell(f);

@@ -1,4 +1,5 @@
 #include "common.h"
+#include <sys/_types/_null.h>
 
 // for printing
 const char *tabs = "\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t";
@@ -48,6 +49,8 @@ void ht_insert(HashTable *ht, const char *str, void *item) {
 }
 
 void *ht_search(HashTable *ht, const char *str) {
+    if (ht->capacity == 0) return NULL;
+
     uint64_t hash = fnv1a_hash(str);
     size_t index = hash % ht->capacity;
     while (ht->keys[index] != NULL) {
@@ -99,4 +102,3 @@ void arena_free(Arena *a) {
     a->capacity = 0;
     a->size = 0;
 }
-

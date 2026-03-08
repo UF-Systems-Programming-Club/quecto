@@ -181,6 +181,21 @@ void gen_ast_bytecode(Bytecode *bytecode, AST *ast) {
                 gen_label(bytecode, end_label);
                 break;
             }
+            case AST_WHILE: {
+                Operand begin_label = create_label();
+                Operand end_label = create_label();
+
+                gen_label(bytecode, begin_label);
+
+                Operand expr = gen_expr_bytecode(bytecode, statement->condition);
+                gen_conditional_jump(bytecode, OPCODE_JMP_NEQ, end_label, expr);
+
+                gen_ast_bytecode(bytecode, statement->then);
+                gen_jmp(bytecode, begin_label);
+                gen_label(bytecode, end_label);
+
+                break;
+            }
             case AST_BINARY_OP:
                 gen_expr_bytecode(bytecode, statement);
                 break;

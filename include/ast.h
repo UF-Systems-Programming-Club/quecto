@@ -15,6 +15,7 @@ typedef enum {
     AST_IF,
     AST_ELIF,
     AST_ELSE,
+    AST_WHILE,
     AST_SYMBOL,
     AST_INT_LIT,
     AST_FLOAT_LIT,
@@ -55,7 +56,7 @@ typedef struct AST {
             struct AST *expr;
         };
 
-        // If, Elif, Else
+        // If, Elif, Else, While
         struct {
             struct AST *condition; // NULL for else statements
             struct AST *then;

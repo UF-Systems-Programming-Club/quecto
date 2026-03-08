@@ -19,6 +19,7 @@ const char *token_to_string_table[] = {
     [TOKEN_COLON] = ":",
     [TOKEN_EQUALS] = "=",
     [TOKEN_EQUALS_EQUALS] = "==",
+    [TOKEN_ARROW] = "=>",
     [TOKEN_LESS_EQUALS] = "<=",
     [TOKEN_GREATER_EQUALS] = ">=",
     [TOKEN_LESS_THAN] = "<",
@@ -30,6 +31,8 @@ const char *token_to_string_table[] = {
     [TOKEN_IF] = "if",
     [TOKEN_ELIF] = "elif",
     [TOKEN_ELSE] = "else",
+    [TOKEN_WHILE] = "while",
+    [TOKEN_PROCEDURE] = "proc",
     [TOKEN_EOF] = "end of file"
 };
 
@@ -108,6 +111,9 @@ void print_token(Token tok) {
         case TOKEN_IF:              printf("if"); break;
         case TOKEN_ELIF:            printf("elif"); break;
         case TOKEN_ELSE:            printf("else"); break;
+        case TOKEN_WHILE:           printf("while"); break;
+        case TOKEN_PROCEDURE:       printf("proc"); break;
+        case TOKEN_ARROW:           printf("=>"); break;
 
         default:                assert(0 && "Every token needs to be able to be printed, so add entry");
     }
@@ -197,6 +203,7 @@ TokenArray tokenize(const char *buf, size_t buf_size) {
             case '=':
                 switch (buf[next]) {
                     case '=':   tok.type = TOKEN_EQUALS_EQUALS; next++; break;
+                    case '>':   tok.type = TOKEN_ARROW; next++; break;
                     default:    tok.type = TOKEN_EQUALS;    break;
                 }
                 array_append(tokens, tok);
@@ -216,6 +223,10 @@ TokenArray tokenize(const char *buf, size_t buf_size) {
                         tok.type = TOKEN_ELIF;
                     } else if (strncmp(&buf[start], "else", sizeof("else") - 1) == 0) {
                         tok.type = TOKEN_ELSE;
+                    } else if (strncmp(&buf[start], "proc", sizeof("proc") - 1) == 0) {
+                        tok.type = TOKEN_PROCEDURE;
+                    } else if (strncmp(&buf[start], "while", sizeof("while") - 1) == 0) {
+                        tok.type = TOKEN_WHILE;
                     } else {
                         tok.identifier = (char *)malloc(next - start + 1);
                         strncpy(tok.identifier, &buf[start], next - start);

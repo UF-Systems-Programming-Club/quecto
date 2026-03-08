@@ -11,9 +11,11 @@ statement = (expr       |
              decl       |
              assignment |
              if         |
+             while      |
              return)   ';'
 
-if = if expr block
+if = if expr block (elif expr block)* (else block)
+while = while expr block
 decl = identifer : {type} = expr
 assignment = identifier = expr
 return = return expr

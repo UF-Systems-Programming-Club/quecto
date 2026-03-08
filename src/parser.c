@@ -236,6 +236,13 @@ AST *parse_statement(ParserState *parser) {
         statement->otherwise = parse_if_chain(parser);
 
         return statement;
+    } else if (match_next_token(parser, &tok, TOKEN_WHILE)) {
+        statement->type = AST_WHILE;
+        statement->condition = parse_expression(parser, 0);
+        statement-> then = parse_statement(parser);
+        statement->otherwise = NULL;
+
+        return statement;
     } else {
         statement = parse_expression(parser, 0);
     }
