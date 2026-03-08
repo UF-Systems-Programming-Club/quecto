@@ -26,6 +26,8 @@ typedef enum {
     TOKEN_GREATER_THAN,
     TOKEN_RETURN,
     TOKEN_IF,
+    TOKEN_ELIF,
+    TOKEN_ELSE,
 
     TOKEN_COUNT // Make sure this token is the last one
                 // listed in the enum, as this is assumed by compile time assertions

@@ -17,7 +17,7 @@
 #endif
 
 int main(int argc, char **argv) {
-    FILE *f = fopen("examples/hello.q", "r");
+    FILE *f = fopen("examples/branch.q", "r");
 
     fseek(f, 0, SEEK_END);
     long fsize = ftell(f);
@@ -36,10 +36,10 @@ int main(int argc, char **argv) {
     TokenArray tokens = tokenize(src, src_size);
     if (error) return 0;
 
-    /*for (int i = 0; i < tokens.count; i++) {
+    for (int i = 0; i < tokens.count; i++) {
         print_token(tokens.items[i]);
     }
-    printf("\n");*/
+    printf("\n");
 
     Arena ast_arena;
     arena_create(&ast_arena, 1024 * 1024);
@@ -51,13 +51,16 @@ int main(int argc, char **argv) {
     parser.cur_symbol_table = arena_alloc_type(&ast_arena, SymbolTable);
 
     AST *ast = parse_program(&parser);
+
+    print_ast(ast, 0);
+    printf("\n");
+
+    return 0;
     if (error) return 0;
 
-    // print_symbol_table(parser.cur_symbol_table, 0);
-    // printf("\n");
+    print_symbol_table(parser.cur_symbol_table, 0);
+    printf("\n");
 
-    // print_ast(ast, 0);
-    // printf("\n");
 
     Bytecode bytecode = {0};
     gen_ast_bytecode(&bytecode, ast);

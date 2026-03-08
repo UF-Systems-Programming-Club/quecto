@@ -65,7 +65,19 @@ void print_ast(AST* ast, int indent) {
             print_indent(0, "if ");
             print_ast(ast->condition, 0);
             printf("\n");
-            print_ast(ast->block, indent);
+            print_ast(ast->then, indent);
+            if (ast->otherwise) print_ast(ast->otherwise, indent);
+            break;
+        case AST_ELIF:
+            print_indent(0, "elif ");
+            print_ast(ast->condition, 0);
+            printf("\n");
+            print_ast(ast->then, indent);
+            if (ast->otherwise) print_ast(ast->otherwise, indent);
+            break;
+        case AST_ELSE:
+            print_indent(0, "else\n");
+            print_ast(ast->then, indent);
             break;
         default:
             printf("unknown\n");

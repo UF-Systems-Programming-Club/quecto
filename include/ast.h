@@ -13,6 +13,8 @@ typedef enum {
     AST_ASSIGNMENT,
     AST_RETURN,
     AST_IF,
+    AST_ELIF,
+    AST_ELSE,
     AST_SYMBOL,
     AST_INT_LIT,
     AST_FLOAT_LIT,
@@ -53,10 +55,11 @@ typedef struct AST {
             struct AST *expr;
         };
 
-        // If
+        // If, Elif, Else
         struct {
-            struct AST *condition;
-            struct AST *block;
+            struct AST *condition; // NULL for else statements
+            struct AST *then;
+            struct AST *otherwise; // else (cant name it else b/c keyword and cant think of a better word)
         };
 
         // Symbol

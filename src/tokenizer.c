@@ -28,6 +28,8 @@ const char *token_to_string_table[] = {
     [TOKEN_IDENTIFIER] = "identifier",
     [TOKEN_RETURN] = "return",
     [TOKEN_IF] = "if",
+    [TOKEN_ELIF] = "elif",
+    [TOKEN_ELSE] = "else",
     [TOKEN_EOF] = "end of file"
 };
 
@@ -104,6 +106,8 @@ void print_token(Token tok) {
         case TOKEN_GREATER_THAN:    printf(">"); break;
         case TOKEN_RETURN:          printf("return"); break;
         case TOKEN_IF:              printf("if"); break;
+        case TOKEN_ELIF:            printf("elif"); break;
+        case TOKEN_ELSE:            printf("else"); break;
 
         default:                assert(0 && "Every token needs to be able to be printed, so add entry");
     }
@@ -204,10 +208,14 @@ TokenArray tokenize(const char *buf, size_t buf_size) {
                         next++;
                     }
 
-                    if (strncmp(&buf[start], "return", next - start) == 0) {
+                    if (strncmp(&buf[start], "return", sizeof("return") - 1) == 0) {
                         tok.type = TOKEN_RETURN;
-                    } else if (strncmp(&buf[start], "if", next - start) == 0) {
+                    } else if (strncmp(&buf[start], "if", sizeof("if") - 1) == 0) {
                         tok.type = TOKEN_IF;
+                    } else if (strncmp(&buf[start], "elif", sizeof("elif") - 1) == 0) {
+                        tok.type = TOKEN_ELIF;
+                    } else if (strncmp(&buf[start], "else", sizeof("else") - 1) == 0) {
+                        tok.type = TOKEN_ELSE;
                     } else {
                         tok.identifier = (char *)malloc(next - start + 1);
                         strncpy(tok.identifier, &buf[start], next - start);

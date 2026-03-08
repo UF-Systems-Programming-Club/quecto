@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <sys/_types/_null.h>
 
 #include "parser.h"
 #include "ast.h"
@@ -156,6 +157,31 @@ AST *parse_expression(ParserState *parser, int min_prec) {
     return left;
 }
 
+AST *parse_if_chain(ParserState *parser) {
+    Token tok;
+    if (match_next_token(parser, &tok, TOKEN_ELIF)) {
+        AST *statement = arena_alloc_type(parser->arena, AST);
+
+        statement->type = AST_ELIF;
+        statement->condition = parse_expression(parser, 0);
+        statement->then = parse_statement(parser);
+        statement->otherwise = parse_if_chain(parser);
+
+        return statement;
+    } else if (match_next_token(parser, &tok, TOKEN_ELSE)) {
+        AST *statement = arena_alloc_type(parser->arena, AST);
+
+        statement->type = AST_ELSE;
+        statement->condition = NULL;
+        statement->then = parse_statement(parser);
+        statement->otherwise = NULL;
+
+        return statement;
+    }
+
+    return NULL;
+}
+
 AST *parse_statement(ParserState *parser) {
     Token tok;
 
@@ -205,7 +231,9 @@ AST *parse_statement(ParserState *parser) {
     } else if (match_next_token(parser, &tok, TOKEN_IF)) {
         statement->type = AST_IF;
         statement->condition = parse_expression(parser, 0);
-        statement->block = parse_statement(parser);
+        statement->then = parse_statement(parser);
+        statement->otherwise = parse_if_chain(parser);
+
         return statement;
     } else {
         statement = parse_expression(parser, 0);
@@ -223,7 +251,7 @@ AST *parse_program(ParserState *parser) {
     // TODO: implement error synchronization
     while (peek_next_token_type(parser) != TOKEN_EOF) {
         AST *statement = parse_statement(parser);
-        if (statement == NULL) return program;
+        if (statement == NULL) { return program; }
         array_append(*program, statement);
     }
     // NOTE: probably doesn't need to be done but consumes EOF for sake of completion
