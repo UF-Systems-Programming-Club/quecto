@@ -49,6 +49,9 @@ Bytecode adhere_bytecode_to_machine_spec(Bytecode bytecode, PhysRegs *pregs) {
             case OPCODE_CMP_GEQ:
             case OPCODE_JMP:
             case OPCODE_JMP_NEQ:
+            case OPCODE_PROC_BEGIN:
+            case OPCODE_PROC_END:
+            case OPCODE_CALL:
             case OPCODE_LABEL:
                 array_append(machine_code, instr);
                 break;
@@ -60,7 +63,7 @@ Bytecode adhere_bytecode_to_machine_spec(Bytecode bytecode, PhysRegs *pregs) {
     return machine_code;
 }
 
-void emit_assembly_from_bytecode(FILE *out, Bytecode bytecode, LocationArray location) {
+void emit_assembly_from_bytecode(FILE *out, Bytecode bytecode, LocationArray location, IntervalArray interval) {
     for (int i = 0; i < bytecode.count; i++) {
         Instr instr = bytecode.items[i];
         switch (instr.opcode) {
@@ -123,20 +126,60 @@ void emit_assembly_from_bytecode(FILE *out, Bytecode bytecode, LocationArray loc
                 break;
             case OPCODE_RET:
                 fprintf(out, "\tmov\t%s, %s\n", registers[0], registers[location.items[instr.arg1.vreg].register_index]);
-                fprintf(out, "\tret\n");
+                // fprintf(out, "\tret\n");
                 break;
             case OPCODE_JMP_NEQ:
                 fprintf(out,
                         "\tcmp\t%s,%d\n",
                         registers[location.items[instr.arg1.vreg].register_index],
                         1);
-                fprintf(out, "\tjne\t.%s\n", instr.dest.label_name);
+                fprintf(out, "\tjne\t%s\n", instr.dest.label_name);
                 break;
             case OPCODE_JMP:
-                fprintf(out, "\tjmp\t.%s\n", instr.dest.label_name);
+                fprintf(out, "\tjmp\t%s\n", instr.dest.label_name);
+                break;
+            case OPCODE_CALL: {
+
+                // preliminary spilling live registers to slots after local variables
+
+                size_t offset = 0;
+                for (int j = 0; j < interval.count; j++) {
+                    Interval span = interval.items[j];
+                    if (span.start < i && i < span.end) {
+                        offset += 4;
+                        fprintf(out, "\tmov\t[rbp - %d], %s\n", offset + 8, registers[location.items[span.vreg].register_index]);
+                    }
+                }
+
+                fprintf(out, "\tcall\t%s\n", instr.arg1.label_name);
+                if (instr.dest.type == OPERAND_VREG)
+                    fprintf(out, "\tmov\t%s, %s\n",
+                                    registers[location.items[instr.dest.vreg].register_index],
+                                    "eax");
+
+                for (int j = 0; j < interval.count; j++) {
+                    Interval span = interval.items[j];
+                    if (span.start < i && i < span.end) {
+                        fprintf(out, "\tmov\t%s, [rbp - %d]\n", registers[location.items[span.vreg].register_index], offset + 8);
+                        offset -= 4;
+                    }
+                }
+
+                break;
+            }
+            case OPCODE_PROC_BEGIN:
+                fprintf(out, "%s:\n", instr.dest.label_name);
+                fprintf(out, "\tpush\trbp\n");
+                fprintf(out, "\tmov\trbp, rsp\n");
+                if (instr.arg1.imm > 0 ) fprintf(out, "\tsub\trsp, %d\n", 16); // hardcoded for now
+                break;
+            case OPCODE_PROC_END:
+                if (instr.arg1.imm > 0 ) fprintf(out, "\tadd\trsp, %d\n", 16);
+                fprintf(out, "\tpop\trbp\n");
+                fprintf(out, "\tret\n");
                 break;
             case OPCODE_LABEL:
-                fprintf(out, ".%s:\n", instr.dest.label_name);
+                fprintf(out, "%s:\n", instr.dest.label_name);
                 break;
             default:
                 assert(0);

@@ -8,6 +8,8 @@
 typedef enum {
     AST_PROGRAM,
     AST_BINARY_OP,
+    AST_PROCEDURE,
+    AST_CALL,
     AST_BLOCK,
     AST_DECL,
     AST_ASSIGNMENT,
@@ -43,11 +45,25 @@ typedef struct AST {
             size_t capacity;
         };
 
+        // Procedure
+        struct {
+            struct AST *name;
+            struct AST *body;
+        };
+
         // Binary op for expressions
         struct {
             BinaryOp op;
             struct AST *left;
             struct AST *right;
+        };
+
+        // Calls
+        struct {
+            struct AST *callee;
+            struct AST **params;
+            size_t pcount;
+            size_t pcapacity;
         };
 
         // Declaration and Assignment

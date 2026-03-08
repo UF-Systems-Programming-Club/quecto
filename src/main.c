@@ -17,7 +17,7 @@
 #endif
 
 int main(int argc, char **argv) {
-    FILE *f = fopen("examples/loop.q", "r");
+    FILE *f = fopen("examples/proc.q", "r");
 
     fseek(f, 0, SEEK_END);
     long fsize = ftell(f);
@@ -109,9 +109,7 @@ int main(int argc, char **argv) {
     fprintf(out, "\tsyscall\n\n");
 
 
-    fprintf(out, "main:\n");
-    fprintf(out, "\tmov\trbp, rsp\n");
-    emit_assembly_from_bytecode(out, bytecode, locations);
+    emit_assembly_from_bytecode(out, bytecode, locations, intervals);
 
     fclose(out);
     arena_free(&ast_arena);

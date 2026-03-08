@@ -23,16 +23,20 @@ typedef enum {
     OPCODE_JMP,
     OPCODE_JMP_EQ,
     OPCODE_JMP_NEQ,
+    OPCODE_CALL,
 
-    OPCODE_LABEL,
+    OPCODE_LABEL,      // TODO: might not be the best to conflict metadata on bytecode with operands. this is just for time being
+    OPCODE_PROC_BEGIN, // dest is proc name, arg1 is max stack offset
+    OPCODE_PROC_END,   // dest is proc name, arg1 is max stack offset
 } Opcode;
 
 typedef enum {
+    OPERAND_INVALID, // dont know if this is best approach
     OPERAND_VREG,
     OPERAND_IMM,
     OPERAND_REG,
     OPERAND_STACK,
-    OPERAND_LABEL, // this may be kinda gross but for experimentation as it stands
+    OPERAND_LABEL, // LABEL, PROC_BEGIN, PROC_END
 } OperandType;
 
 typedef struct {

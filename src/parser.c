@@ -1,5 +1,4 @@
 #include <stdio.h>
-#include <sys/_types/_null.h>
 
 #include "parser.h"
 #include "ast.h"
@@ -117,6 +116,18 @@ AST *parse_expression(ParserState *parser, int min_prec) {
                 report_error(tok.row, tok.col, "undeclared identifier");
                 return NULL;
             }
+
+            Token gbg;
+            if (match_next_token(parser, &gbg, TOKEN_OPEN_PAREN)) {
+                expect_next_token(parser, &gbg, TOKEN_CLOSE_PAREN);
+                left->type = AST_CALL;
+                left->callee = arena_alloc_type(parser->arena, AST);
+                left->callee->type = AST_SYMBOL;
+                left->callee->symbol_table = parser->cur_symbol_table;
+                left->callee->ident = tok.identifier;
+                break;
+            }
+
             left->type = AST_SYMBOL;
             left->symbol_table = parser->cur_symbol_table;
             left->ident = tok.identifier;
@@ -252,13 +263,58 @@ AST *parse_statement(ParserState *parser) {
     return statement;
 }
 
+AST *parse_procedure(ParserState *parser) {
+    Token tok;
+
+    AST *procedure = arena_alloc_type(parser->arena, AST);
+    procedure->type = AST_PROCEDURE;
+
+    expect_next_token(parser, &tok, TOKEN_PROCEDURE);
+    expect_next_token(parser, &tok, TOKEN_IDENTIFIER);
+
+    insert_symbol(parser->arena, parser->cur_symbol_table, tok.identifier, SYM_TYPE_PROCEDURE);
+
+    procedure->name = arena_alloc_type(parser->arena, AST);
+    procedure->name->type = AST_SYMBOL;
+    procedure->name->ident = tok.identifier;
+
+    expect_next_token(parser, &tok, TOKEN_OPEN_PAREN);
+    while (!match_next_token(parser, &tok, TOKEN_CLOSE_PAREN)) {
+        get_next_token(parser);
+    }
+    expect_next_token(parser, &tok, TOKEN_ARROW);
+
+    expect_next_token(parser, &tok, TOKEN_OPEN_PAREN);
+    while (!match_next_token(parser, &tok, TOKEN_CLOSE_PAREN)) {
+        get_next_token(parser);
+    }
+
+    procedure->body = arena_alloc_type(parser->arena, AST);
+    procedure->body->type = AST_BLOCK;
+
+    SymbolTable *symbol_table = calloc(1, sizeof(SymbolTable));
+    symbol_table->prev = parser->cur_symbol_table;
+    parser->cur_symbol_table = symbol_table;
+
+    expect_next_token(parser, &tok, TOKEN_OPEN_CURLY);
+
+    while (!match_next_token(parser, &tok, TOKEN_CLOSE_CURLY)) {
+        AST *s = parse_statement(parser);
+        array_append(*procedure->body, s);
+    }
+
+    parser->cur_symbol_table = symbol_table->prev;
+
+    return procedure;
+}
+
 AST *parse_program(ParserState *parser) {
     AST *program = arena_alloc_type(parser->arena, AST);
     program->type = AST_PROGRAM;
 
     // TODO: implement error synchronization
     while (peek_next_token_type(parser) != TOKEN_EOF) {
-        AST *statement = parse_statement(parser);
+        AST *statement = parse_procedure(parser);
         if (statement == NULL) { return program; }
         array_append(*program, statement);
     }

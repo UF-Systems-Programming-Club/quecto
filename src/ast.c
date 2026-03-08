@@ -11,6 +11,16 @@ void print_ast(AST* ast, int indent) {
                 print_ast(ast->items[i], 0);
             }
             break;
+        case AST_PROCEDURE:
+            print_indent(0, "proc ");
+            print_ast(ast->name, 0);
+            printf("() => ()\n");
+            print_ast(ast->body, 0);
+            break;
+        case AST_CALL:
+            print_ast(ast->callee, indent);
+            printf("()");
+            break;
         case AST_SYMBOL:
             print_indent(0, "%s", ast->ident);
             break;
@@ -21,7 +31,7 @@ void print_ast(AST* ast, int indent) {
             print_indent(0, "%d", ast->int_lit);
             break;
         case AST_ASSIGNMENT:
-            print_ast(ast->symbol, 0);
+            print_ast(ast->symbol, indent);
             printf(" = ");
             print_ast(ast->expr, 0);
             printf(";\n");

@@ -5,6 +5,7 @@
 
 typedef enum {
     SYM_TYPE_VARIABLE,
+    SYM_TYPE_PROCEDURE,
 } SymbolType;
 
 typedef struct {

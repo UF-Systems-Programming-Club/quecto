@@ -5,15 +5,21 @@ This isn't a super strict grammar with like BNF or anything, just a nice referen
 | means or
 { } means optional if surrounding
 
-program = (statement)* EOF
+program = (proc)* EOF
+
+
+proc = proc identifer( param_list ) => ( param_list ) block
 
 statement = (expr       |
              decl       |
              assignment |
              if         |
              while      |
+             block      |
              return)   ';'
 
+
+block = '{' (statement)* '}'
 if = if expr block (elif expr block)* (else block)
 while = while expr block
 decl = identifer : {type} = expr

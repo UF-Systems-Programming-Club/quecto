@@ -10,6 +10,10 @@ int stack_offset = 0;
 // NOTE: in the future these instructions will hold more information like
 // size of type, signed or unsigned, etc;
 
+int get_stack_offset() {
+    return stack_offset;
+}
+
 Operand gen_add_instr(Bytecode *bytecode, Operand left, Operand right) {
 }
 
@@ -36,7 +40,14 @@ Operand create_label() {
     Operand lab;
     lab.type = OPERAND_LABEL;
     lab.label_name = calloc(8, sizeof(char));
-    snprintf(lab.label_name, 8, "LBL%d", count++);
+    snprintf(lab.label_name, 8, ".LBL%d", count++);
+    return lab;
+}
+
+Operand create_label_from(const char *str) {
+    Operand lab;
+    lab.type = OPERAND_LABEL;
+    lab.label_name = strdup(str);
     return lab;
 }
 
@@ -45,6 +56,20 @@ void gen_label(Bytecode *bytecode, Operand label) {
     lab.opcode = OPCODE_LABEL;
     lab.dest = label;
     array_append(*bytecode, lab);
+}
+
+
+Operand gen_call_instr_into(Bytecode *bytecode, Operand dest, Operand label) {
+    Instr call;
+    call.opcode = OPCODE_CALL;
+    call.dest = dest;
+    call.arg1 = label;
+    array_append(*bytecode, call);
+    return call.dest;
+}
+
+Operand gen_call_instr(Bytecode *bytecode, Operand label) {
+    gen_call_instr_into(bytecode, (Operand){.type = OPERAND_INVALID}, label);
 }
 
 Operand gen_loadi_instr(Bytecode *bytecode, int imm) {
@@ -87,6 +112,12 @@ Operand gen_int_lit_bytecode(Bytecode *bytecode, AST *int_lit) {
 Operand gen_expr_bytecode(Bytecode *bytecode, AST *expr) {
     if (expr->type == AST_INT_LIT) {
         return gen_int_lit_bytecode(bytecode, expr);
+    }
+    if (expr->type == AST_CALL) {
+        Operand dest;
+        dest.type = OPERAND_VREG;
+        dest.vreg = vreg_count++;
+        return gen_call_instr_into(bytecode, dest, create_label_from(expr->callee->ident));
     }
     if (expr->type == AST_SYMBOL) {
         SymbolData *var = get_symbol(expr->symbol_table,
@@ -140,6 +171,35 @@ void gen_ast_bytecode(Bytecode *bytecode, AST *ast) {
         switch (statement->type) {
             case AST_BLOCK: {
                 gen_ast_bytecode(bytecode, statement);
+                break;
+            }
+            case AST_PROCEDURE: {
+                Instr begin, end;
+                begin.opcode = OPCODE_PROC_BEGIN;
+                begin.dest = create_label_from(statement->name->ident);
+                begin.arg1.type = OPERAND_IMM;
+                begin.arg1.imm = 0;
+
+                stack_offset = 0;
+
+                end.opcode = OPCODE_PROC_END;
+                end.dest = begin.dest;
+                end.arg1.type = OPERAND_IMM;
+
+                array_append(*bytecode, begin);
+                int patch_index = bytecode->count - 1;
+
+                gen_ast_bytecode(bytecode, statement->body);
+
+                bytecode->items[patch_index].arg1.imm = stack_offset;
+                end.arg1.imm = stack_offset;
+
+                array_append(*bytecode, end);
+
+                break;
+            }
+            case AST_CALL: {
+                gen_call_instr(bytecode, create_label_from(statement->callee->ident));
                 break;
             }
             case AST_DECL: {
@@ -292,8 +352,18 @@ void pretty_print_bytecode(Bytecode bytecode) {
             case OPCODE_JMP_NEQ:
                 printf("\tj.ne r%d, .%s\n", instr.arg1.vreg, instr.dest.label_name);
                 break;
+            case OPCODE_CALL:
+                if (instr.dest.type == OPERAND_INVALID)
+                    printf("\tcall %s\n", instr.arg1.label_name);
+                else
+                    printf("\tr%d = call %s\n", instr.dest.vreg, instr.arg1.label_name);
+                break;
+            case OPCODE_PROC_BEGIN:
             case OPCODE_LABEL:
-                printf(".%s:\n", instr.dest.label_name);
+                printf("%s:\n", instr.dest.label_name);
+                break;
+            case OPCODE_PROC_END:
+                printf("\n");
                 break;
             default:
                 printf("error unrecognized instruction in bytecode\n");
