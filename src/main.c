@@ -36,10 +36,10 @@ int main(int argc, char **argv) {
     TokenArray tokens = tokenize(src, src_size);
     if (error) return 0;
 
-    for (int i = 0; i < tokens.count; i++) {
-        print_token(tokens.items[i]);
-    }
-    printf("\n");
+    // for (int i = 0; i < tokens.count; i++) {
+    //     print_token(tokens.items[i]);
+    // }
+    // printf("\n");
 
     Arena ast_arena;
     arena_create(&ast_arena, 1024 * 1024);
@@ -55,7 +55,6 @@ int main(int argc, char **argv) {
     print_ast(ast, 0);
     printf("\n");
 
-    return 0;
     if (error) return 0;
 
     print_symbol_table(parser.cur_symbol_table, 0);
