@@ -13,6 +13,40 @@ int stack_offset = 0;
 Operand gen_add_instr(Bytecode *bytecode, Operand left, Operand right) {
 }
 
+Operand gen_jmp(Bytecode *bytecode, Operand label) {
+    Instr jmp;
+    jmp.opcode = OPCODE_JMP;
+    jmp.dest = label;
+    array_append(*bytecode, jmp);
+    return label;
+}
+
+Operand gen_conditional_jump(Bytecode *bytecode, Opcode type, Operand label, Operand condition) {
+    Instr jmp;
+    jmp.opcode = type;
+    jmp.dest = label;
+    jmp.arg1 = condition;
+    array_append(*bytecode, jmp);
+    return label;
+}
+
+static int count = 0;
+
+Operand create_label() {
+    Operand lab;
+    lab.type = OPERAND_LABEL;
+    lab.label_name = calloc(8, sizeof(char));
+    snprintf(lab.label_name, 8, "LBL%d", count++);
+    return lab;
+}
+
+void gen_label(Bytecode *bytecode, Operand label) {
+    Instr lab;
+    lab.opcode = OPCODE_LABEL;
+    lab.dest = label;
+    array_append(*bytecode, lab);
+}
+
 Operand gen_loadi_instr(Bytecode *bytecode, int imm) {
     Instr loadi;
     loadi.opcode = OPCODE_LOADI;
@@ -82,12 +116,32 @@ Operand gen_expr_bytecode(Bytecode *bytecode, AST *expr) {
     return instr.dest;
 }
 
+void gen_if_chain(Bytecode *bytecode, AST *ast, Operand end_label) {
+    if (ast->type == AST_ELIF) {
+        Operand expr = gen_expr_bytecode(bytecode, ast->condition);
+        Operand label = gen_conditional_jump(bytecode, OPCODE_JMP_NEQ, create_label(), expr);
+        gen_ast_bytecode(bytecode, ast->then);
+        gen_jmp(bytecode, end_label);
+        gen_label(bytecode, label);
+        if (ast->otherwise) gen_if_chain(bytecode, ast->otherwise, end_label);
+        return;
+    } else if (ast->type == AST_ELSE) {
+        gen_ast_bytecode(bytecode, ast->then);
+        return;
+    }
+    assert(0 && "only elif and else should be chained in 'statement->otherwise' ");
+}
+
 void gen_ast_bytecode(Bytecode *bytecode, AST *ast) {
     // Assumes AST is an AST_PROGRAM which should be guaranteed by parsing and static analysis
     // Could probably change function name to indicate that fact though
     for (int i = 0; i < ast->count; i++) {
         AST *statement = ast->items[i];
         switch (statement->type) {
+            case AST_BLOCK: {
+                gen_ast_bytecode(bytecode, statement);
+                break;
+            }
             case AST_DECL: {
                 Operand expr = gen_expr_bytecode(bytecode, statement->expr);
                 SymbolData *var = get_symbol(statement->symbol->symbol_table,
@@ -114,8 +168,21 @@ void gen_ast_bytecode(Bytecode *bytecode, AST *ast) {
                 array_append(*bytecode, instr);
                 break;
             }
+            case AST_IF: {
+                Operand expr = gen_expr_bytecode(bytecode, statement->condition);
+                Operand end_label = create_label();
+                Operand next_cmp = gen_conditional_jump(bytecode, OPCODE_JMP_NEQ, create_label(), expr);
+
+                gen_ast_bytecode(bytecode, statement->then);
+                gen_jmp(bytecode, end_label);
+
+                gen_label(bytecode, next_cmp);
+                if (statement->otherwise) gen_if_chain(bytecode, statement->otherwise, end_label);
+                gen_label(bytecode, end_label);
+                break;
+            }
             case AST_BINARY_OP:
-                gen_expr_bytecode(bytecode, ast->items[i]);
+                gen_expr_bytecode(bytecode, statement);
                 break;
             default:
                 assert(0 && "unsupported statement type");
@@ -128,6 +195,8 @@ void print_bytecode_op(Operand op) {
         printf("%d", op.imm);
     } else if (op.type == OPERAND_VREG) {
         printf("r%d", op.vreg);
+    } else if (op.type == OPERAND_LABEL) {
+        printf(".%s", op.label_name);
     } else {
         printf("%s", registers[op.reg]);
     }
@@ -201,6 +270,15 @@ void pretty_print_bytecode(Bytecode bytecode) {
                 break;
             case OPCODE_RET:
                 printf("\tret r%d\n", instr.arg1.vreg);
+                break;
+            case OPCODE_JMP:
+                printf("\tjmp .%s\n", instr.dest.label_name);
+                break;
+            case OPCODE_JMP_NEQ:
+                printf("\tj.ne r%d, .%s\n", instr.arg1.vreg, instr.dest.label_name);
+                break;
+            case OPCODE_LABEL:
+                printf(".%s:\n", instr.dest.label_name);
                 break;
             default:
                 printf("error unrecognized instruction in bytecode\n");

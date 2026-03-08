@@ -1,5 +1,6 @@
 #include "bytecode.h"
 #include "codegen.h"
+#include <stdio.h>
 
 const char *cmp_x86_instruction_from_opcode[] = {
     [OPCODE_CMP_EQ] = "sete",
@@ -46,6 +47,9 @@ Bytecode adhere_bytecode_to_machine_spec(Bytecode bytecode, PhysRegs *pregs) {
             case OPCODE_CMP_GT:
             case OPCODE_CMP_LEQ:
             case OPCODE_CMP_GEQ:
+            case OPCODE_JMP:
+            case OPCODE_JMP_NEQ:
+            case OPCODE_LABEL:
                 array_append(machine_code, instr);
                 break;
             default:
@@ -120,6 +124,19 @@ void emit_assembly_from_bytecode(FILE *out, Bytecode bytecode, LocationArray loc
             case OPCODE_RET:
                 fprintf(out, "\tmov\t%s, %s\n", registers[0], registers[location.items[instr.arg1.vreg].register_index]);
                 fprintf(out, "\tret\n");
+                break;
+            case OPCODE_JMP_NEQ:
+                fprintf(out,
+                        "\tcmp\t%s,%d\n",
+                        registers[location.items[instr.arg1.vreg].register_index],
+                        1);
+                fprintf(out, "\tjne\t.%s\n", instr.dest.label_name);
+                break;
+            case OPCODE_JMP:
+                fprintf(out, "\tjmp\t.%s\n", instr.dest.label_name);
+                break;
+            case OPCODE_LABEL:
+                fprintf(out, ".%s:\n", instr.dest.label_name);
                 break;
             default:
                 assert(0);

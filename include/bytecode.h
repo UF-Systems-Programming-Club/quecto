@@ -19,6 +19,12 @@ typedef enum {
     OPCODE_COPY,
     OPCODE_LOADI,
     OPCODE_RET,
+
+    OPCODE_JMP,
+    OPCODE_JMP_EQ,
+    OPCODE_JMP_NEQ,
+
+    OPCODE_LABEL,
 } Opcode;
 
 typedef enum {
@@ -26,6 +32,7 @@ typedef enum {
     OPERAND_IMM,
     OPERAND_REG,
     OPERAND_STACK,
+    OPERAND_LABEL, // this may be kinda gross but for experimentation as it stands
 } OperandType;
 
 typedef struct {
@@ -35,6 +42,7 @@ typedef struct {
         int reg;
         int imm;
         int stack_offset;
+        char *label_name;
     };
 } Operand;
 

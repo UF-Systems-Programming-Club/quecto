@@ -223,6 +223,7 @@ AST *parse_statement(ParserState *parser) {
             statement->type = AST_ASSIGNMENT;
             statement->expr = parse_expression(parser, 0);
         } else {
+            parser->current--; // match_next_token consumes so current has to rewind to parse properly (idk if this is best fix)
             statement = parse_expression(parser, 0);
         }
     } else if (match_next_token(parser, &tok, TOKEN_RETURN)) {
