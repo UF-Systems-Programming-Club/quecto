@@ -6,11 +6,19 @@
 typedef enum {
     SYM_TYPE_VARIABLE,
     SYM_TYPE_PROCEDURE,
+    SYM_TYPE_COUNT,
 } SymbolType;
 
 typedef struct {
     SymbolType type;
-    int stack_offset;
+    union {
+        struct {
+            int param_count;
+            int return_count;
+            int local_var_size;
+        };
+        int stack_offset;
+    };
 } SymbolData;
 
 typedef struct SymbolTable {
@@ -18,8 +26,10 @@ typedef struct SymbolTable {
     HashTable table;
 } SymbolTable;
 
+extern const char *symbol_type_to_string_table[];
+
 void print_symbol_table(SymbolTable *symbol_table, int indent);
-void insert_symbol(Arena *arena, SymbolTable *symbol_table, const char *symbol, SymbolType type);
+SymbolData *insert_symbol(Arena *arena, SymbolTable *symbol_table, const char *symbol, SymbolType type);
 void *get_symbol(SymbolTable *symbol_table, const char *str);
 
 #endif

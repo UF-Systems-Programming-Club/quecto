@@ -1,5 +1,4 @@
 #include "common.h"
-#include <sys/_types/_null.h>
 
 // for printing
 const char *tabs = "\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t";

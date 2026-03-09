@@ -95,6 +95,14 @@ bool expect_next_token_multiple(ParserState *parser, Token *tok, int count, ...)
     return false;
 }
 
+AST *create_symbol(ParserState *parser, const char *identifier) {
+    AST *symbol = arena_alloc_type(parser->arena, AST);
+    symbol->type = AST_SYMBOL;
+    symbol->ident = identifier;
+    symbol->symbol_table = parser->cur_symbol_table;
+    return symbol;
+}
+
 AST *parse_expression(ParserState *parser, int min_prec) {
     Token tok;
     if (!expect_next_token_multiple(parser, &tok, 4, TOKEN_INT_LIT, TOKEN_FLOAT_LIT, TOKEN_IDENTIFIER, TOKEN_OPEN_PAREN))
@@ -119,12 +127,9 @@ AST *parse_expression(ParserState *parser, int min_prec) {
 
             Token gbg;
             if (match_next_token(parser, &gbg, TOKEN_OPEN_PAREN)) {
-                expect_next_token(parser, &gbg, TOKEN_CLOSE_PAREN);
                 left->type = AST_CALL;
-                left->callee = arena_alloc_type(parser->arena, AST);
-                left->callee->type = AST_SYMBOL;
-                left->callee->symbol_table = parser->cur_symbol_table;
-                left->callee->ident = tok.identifier;
+                left->callee = create_symbol(parser, tok.identifier);
+                left->arg_count = parse_args(parser, left->args);
                 break;
             }
 
@@ -217,18 +222,17 @@ AST *parse_statement(ParserState *parser) {
         return statement;
     } else if (match_next_token(parser, &tok, TOKEN_IDENTIFIER)) {
         Token ident = tok;
-        AST *symbol = arena_alloc_type(parser->arena, AST);
-        symbol->type = AST_SYMBOL;
-        symbol->ident = ident.identifier;
-        symbol->symbol_table = parser->cur_symbol_table;
-        statement->symbol = symbol;
+
+        statement->symbol = create_symbol(parser, tok.identifier);
 
         if (match_next_token(parser, &tok, TOKEN_COLON)) {
             if (match_next_token(parser, &tok, TOKEN_IDENTIFIER)) { printf("types not implemented yet\n"); assert(0); }
             if (!expect_next_token(parser, &tok, TOKEN_EQUALS)) return NULL;
 
             statement->type = AST_DECL;
-            insert_symbol(parser->arena, parser->cur_symbol_table, symbol->ident, SYM_TYPE_VARIABLE);
+
+            insert_symbol(parser->arena, parser->cur_symbol_table, statement->symbol->ident, SYM_TYPE_VARIABLE);
+
             statement->expr = parse_expression(parser, 0);
         } else if (match_next_token(parser, &tok, TOKEN_EQUALS)) {
             statement->type = AST_ASSIGNMENT;
@@ -263,38 +267,85 @@ AST *parse_statement(ParserState *parser) {
     return statement;
 }
 
+
+AST *parse_param_declaration(ParserState *parser) {
+    Token tok;
+
+    AST *decl = arena_alloc_type(parser->arena, AST);
+    decl->type = AST_DECL;
+
+    expect_next_token(parser, &tok, TOKEN_IDENTIFIER);
+
+    decl->symbol = create_symbol(parser, tok.identifier);
+    insert_symbol(parser->arena, parser->cur_symbol_table, tok.identifier, SYM_TYPE_VARIABLE);
+
+    expect_next_token(parser, &tok, TOKEN_COLON);
+    expect_next_token(parser, &tok, TOKEN_IDENTIFIER); // probably change to parse_type at some point for ease
+    // maybe add defaults in future
+    return decl;
+}
+
+size_t parse_args(ParserState *parser, AST *list[MAX_PARAMS]) {
+    Token tok;
+
+    size_t count = 0;
+    while (!match_next_token(parser, &tok, TOKEN_CLOSE_PAREN) && count < MAX_PARAMS) {
+        list[count++] = parse_expression(parser, 0);
+        if (peek_next_token_type(parser) != TOKEN_CLOSE_PAREN) expect_next_token(parser, &tok, TOKEN_COMMA);
+    }
+
+    assert(count < MAX_PARAMS && "arg list excedes limit");
+
+    return count;
+}
+
+size_t parse_parameters(ParserState *parser, AST *list[MAX_PARAMS]) {
+    Token tok;
+
+    expect_next_token(parser, &tok, TOKEN_OPEN_PAREN);
+    size_t count = 0;
+    while (!match_next_token(parser, &tok, TOKEN_CLOSE_PAREN) && count < MAX_PARAMS) {
+        list[count++] = parse_param_declaration(parser);
+        if (peek_next_token_type(parser) != TOKEN_CLOSE_PAREN) expect_next_token(parser, &tok, TOKEN_COMMA);
+    }
+
+    assert(count < MAX_PARAMS && "parameter list excedes limit");
+
+    return count;
+}
+
 AST *parse_procedure(ParserState *parser) {
     Token tok;
 
     AST *procedure = arena_alloc_type(parser->arena, AST);
     procedure->type = AST_PROCEDURE;
 
+    // procedure->params = (AST){0};
+    // procedure->returns = (AST){0};
+
     expect_next_token(parser, &tok, TOKEN_PROCEDURE);
     expect_next_token(parser, &tok, TOKEN_IDENTIFIER);
 
-    insert_symbol(parser->arena, parser->cur_symbol_table, tok.identifier, SYM_TYPE_PROCEDURE);
+    SymbolData *signature = insert_symbol(parser->arena, parser->cur_symbol_table, tok.identifier, SYM_TYPE_PROCEDURE);
 
     procedure->name = arena_alloc_type(parser->arena, AST);
     procedure->name->type = AST_SYMBOL;
     procedure->name->ident = tok.identifier;
 
-    expect_next_token(parser, &tok, TOKEN_OPEN_PAREN);
-    while (!match_next_token(parser, &tok, TOKEN_CLOSE_PAREN)) {
-        get_next_token(parser);
-    }
-    expect_next_token(parser, &tok, TOKEN_ARROW);
-
-    expect_next_token(parser, &tok, TOKEN_OPEN_PAREN);
-    while (!match_next_token(parser, &tok, TOKEN_CLOSE_PAREN)) {
-        get_next_token(parser);
-    }
-
-    procedure->body = arena_alloc_type(parser->arena, AST);
-    procedure->body->type = AST_BLOCK;
-
     SymbolTable *symbol_table = calloc(1, sizeof(SymbolTable));
     symbol_table->prev = parser->cur_symbol_table;
     parser->cur_symbol_table = symbol_table;
+
+    procedure->param_count = parse_parameters(parser, procedure->params);
+
+    expect_next_token(parser, &tok, TOKEN_ARROW);
+
+    procedure->return_count = parse_parameters(parser, procedure->returns);
+
+    assert(procedure->return_count <= 1 && "no support for multiple return values yet");
+
+    procedure->body = arena_alloc_type(parser->arena, AST);
+    procedure->body->type = AST_BLOCK;
 
     expect_next_token(parser, &tok, TOKEN_OPEN_CURLY);
 
@@ -303,6 +354,11 @@ AST *parse_procedure(ParserState *parser) {
         array_append(*procedure->body, s);
     }
 
+    signature->param_count = procedure->param_count;
+    signature->return_count = procedure->return_count;
+    signature->local_var_size = 0;
+
+    procedure->symbols = symbol_table;
     parser->cur_symbol_table = symbol_table->prev;
 
     return procedure;

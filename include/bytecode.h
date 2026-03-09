@@ -2,6 +2,7 @@
 #define BYTECODE_H
 
 #include "ast.h"
+#include "symbol_table.h"
 
 typedef enum {
     OPCODE_ADD,
@@ -24,6 +25,7 @@ typedef enum {
     OPCODE_JMP_EQ,
     OPCODE_JMP_NEQ,
     OPCODE_CALL,
+    OPCODE_PARAM,
 
     OPCODE_LABEL,      // TODO: might not be the best to conflict metadata on bytecode with operands. this is just for time being
     OPCODE_PROC_BEGIN, // dest is proc name, arg1 is max stack offset
@@ -63,6 +65,10 @@ typedef struct {
     size_t capacity;
 } Bytecode;
 
+
+
+
+
 typedef enum {
     LOC_REGISTER,
     LOC_STACK,
@@ -95,13 +101,29 @@ typedef struct {
 } IntervalArray;
 
 typedef struct {
+    const char *name;
+    int param_count;
+    int return_count;
+    int local_var_size;
+    int vreg_count;
+
+    Bytecode bytecode;
+    LocationArray locations;
+    IntervalArray intervals;
+} Procedure;
+
+typedef struct {
+    Procedure *items;
+    size_t count;
+    size_t capacity;
+} Program;
+
+typedef struct {
     IntervalArray regs[4]; // TODO: change this to be dependent on the backend (but still static)
 } PhysRegs; // Structure to record the info of hardware and ABI constraints on registers for allocator
 
-extern int vreg_count;
 extern const char *registers[];
 extern const char *registers_8bit_low[];
-extern bool active_registers[];
 
 Operand gen_add_instr(Bytecode *bytecode, Operand left, Operand right);
 Operand gen_sub_instr(Bytecode *bytecode, Operand left, Operand right);
@@ -119,10 +141,13 @@ Operand gen_loadi_instr(Bytecode *bytecode, int imm);
 // void gen_ret_instr(Bytecode *bytecode, );
 
 void gen_ast_bytecode(Bytecode *bytecode, AST *ast);
+void gen_program(Program *program, AST *ast);
+void analyze_program(Program *program, PhysRegs *pregs);
 void pretty_print_bytecode(Bytecode bytecode);
+void pretty_print_program(Program program);
 
-IntervalArray create_live_intervals_from_bytecode(Bytecode bytecode);
+IntervalArray create_live_intervals_from_bytecode(Bytecode bytecode, int vreg_count);
 void print_live_intervals(IntervalArray intervals);
-LocationArray linear_scan_register_allocation(IntervalArray *intervals, PhysRegs *pregs);
+LocationArray linear_scan_register_allocation(IntervalArray *intervals, int vreg_count, PhysRegs *pregs);
 
 #endif

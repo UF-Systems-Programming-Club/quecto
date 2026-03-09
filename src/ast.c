@@ -14,12 +14,30 @@ void print_ast(AST* ast, int indent) {
         case AST_PROCEDURE:
             print_indent(0, "proc ");
             print_ast(ast->name, 0);
-            printf("() => ()\n");
+
+            printf("(");
+            for (int i = 0; i < ast->param_count; i++) {
+                print_ast(ast->params[i]->symbol, 0);
+                printf(": wip");
+                if (i < ast->param_count - 1) printf(", ");
+            }
+            printf(") => (");
+            for (int i = 0; i < ast->return_count; i++) {
+                print_ast(ast->returns[i]->symbol, 0);
+                printf(": wip");
+                if (i < ast->return_count - 1) printf(", ");
+            }
+            printf(")\n");
             print_ast(ast->body, 0);
             break;
         case AST_CALL:
             print_ast(ast->callee, indent);
-            printf("()");
+            printf("(");
+            for (int i = 0; i < ast->arg_count; i++) {
+                print_ast(ast->args[i], 0);
+                if (i < ast->arg_count - 1) printf(", ");
+            }
+            printf(")");
             break;
         case AST_SYMBOL:
             print_indent(0, "%s", ast->ident);
