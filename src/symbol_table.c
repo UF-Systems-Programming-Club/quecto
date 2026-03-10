@@ -1,5 +1,4 @@
 #include <stdio.h>
-#include <sys/_types/_null.h>
 
 #include "symbol_table.h"
 #include "common.h"

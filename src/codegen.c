@@ -147,7 +147,7 @@ void emit_assembly_from_bytecode(FILE *out, Bytecode bytecode, LocationArray loc
                     Interval span = interval.items[j];
                     if (span.start < i && i < span.end) {
                         offset += 4;
-                        fprintf(out, "\tmov\t[rbp - %d], %s\n", offset + 8, registers[location.items[span.vreg].register_index]);
+                        fprintf(out, "\tmov\t[rbp - %ld], %s\n", offset + 8, registers[location.items[span.vreg].register_index]);
                     }
                 }
 
@@ -160,7 +160,7 @@ void emit_assembly_from_bytecode(FILE *out, Bytecode bytecode, LocationArray loc
                 for (int j = 0; j < interval.count; j++) {
                     Interval span = interval.items[j];
                     if (span.start < i && i < span.end) {
-                        fprintf(out, "\tmov\t%s, [rbp - %d]\n", registers[location.items[span.vreg].register_index], offset + 8);
+                        fprintf(out, "\tmov\t%s, [rbp - %ld]\n", registers[location.items[span.vreg].register_index], offset + 8);
                         offset -= 4;
                     }
                 }
