@@ -1,26 +1,23 @@
 
-proc five () => () {
-    return 5;
+proc factorial (n: i32) => (r: i32) {
+    if n == 0 {
+        return 1;
+    }
+    return n * factorial(n - 1);
 }
 
-proc six () => () {
-    return 6;
-}
-
-proc seven () => () {
-    return 7;
+proc sum_to (n: i32) => (r: i32) {
+    a := 0;
+    i := 0;
+    while i < n {
+        a = a + i;
+        i = i + 1;
+    }
+    return a;
 }
 
 proc main () => () {
-    a := five() + six() + seven();
-    b := 1;
-
-    five();
-
-    while a < 5 {
-        b = b * 2;
-        a = a + 1;
-    }
-
-    return a;
+    a := factorial(5);
+    b := sum_to(8);
+    return a + b;
 }

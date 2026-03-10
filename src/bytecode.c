@@ -3,13 +3,13 @@
 #include "ast.h"
 #include "common.h"
 #include "bytecode.h"
+#include "symbol_table.h"
 
 int vreg_count = 0;
 int stack_offset = 0;
 
-int get_stack_offset() {
-    return stack_offset;
-}
+// NOTE: in the future these instructions will hold more information like
+// size of type, signed or unsigned, etc;
 
 Operand gen_add_instr(Bytecode *bytecode, Operand left, Operand right) {
 }
@@ -54,7 +54,6 @@ void gen_label(Bytecode *bytecode, Operand label) {
     lab.dest = label;
     array_append(*bytecode, lab);
 }
-
 
 Operand gen_call_instr_into(Bytecode *bytecode, Operand dest, Operand label) {
     Instr call;
@@ -114,6 +113,15 @@ Operand gen_expr_bytecode(Bytecode *bytecode, AST *expr) {
         Operand dest;
         dest.type = OPERAND_VREG;
         dest.vreg = vreg_count++;
+
+        for (int i = 0; i < expr->arg_count; i++) {
+            Operand dest = gen_expr_bytecode(bytecode, expr->args[i]);
+            Instr param;
+            param.opcode = OPCODE_PARAM;
+            param.arg1 = dest;
+            array_append(*bytecode, param);
+        }
+
         return gen_call_instr_into(bytecode, dest, create_label_from(expr->callee->ident));
     }
     if (expr->type == AST_SYMBOL) {
@@ -160,42 +168,72 @@ void gen_if_chain(Bytecode *bytecode, AST *ast, Operand end_label) {
     assert(0 && "only elif and else should be chained in 'statement->otherwise' ");
 }
 
+
+void gen_procedure_bytecode(Procedure *procedure, AST *ast) {
+    assert(ast->type == AST_PROCEDURE);
+
+    procedure->name = ast->name->ident;
+    procedure->param_count = ast->param_count;
+    procedure->return_count = ast->return_count;
+    stack_offset = 0;
+    vreg_count = 0;
+
+    for (int i = 0; i < ast->param_count; i++) {
+        SymbolData *data = get_symbol(ast->symbols, ast->params[i]->symbol->ident);
+
+        stack_offset += 4;
+        data->stack_offset = stack_offset;
+    }
+
+    gen_ast_bytecode(&procedure->bytecode, ast->body);
+    procedure->local_var_size = stack_offset;
+    procedure->vreg_count = vreg_count;
+}
+
+void gen_program(Program *program, AST *ast) {
+    for (int i = 0; i < ast->count; i++) {
+        Procedure procedure = {0};
+        gen_procedure_bytecode(&procedure, ast->items[i]);
+        array_append(*program, procedure);
+    }
+}
+
+void print_procedure(Procedure procedure) {
+    printf("%s:\n", procedure.name);
+    pretty_print_bytecode(procedure.bytecode);
+}
+
+void pretty_print_program(Program program) {
+    for (int i = 0; i < program.count; i++) {
+        print_procedure(program.items[i]);
+        printf("\n");
+    }
+}
+
 void gen_ast_bytecode(Bytecode *bytecode, AST *ast) {
-    // Assumes AST is an AST_PROGRAM which should be guaranteed by parsing and static analysis
+    // Assumes AST is an AST_BLOCK which should be guaranteed by parsing and static analysis
     // Could probably change function name to indicate that fact though
     for (int i = 0; i < ast->count; i++) {
         AST *statement = ast->items[i];
         switch (statement->type) {
+            case AST_PROCEDURE: {
+                assert(0 && "Procedures shouldnt be inside other procedures");
+            }
             case AST_BLOCK: {
                 gen_ast_bytecode(bytecode, statement);
                 break;
             }
-            case AST_PROCEDURE: {
-                Instr begin, end;
-                begin.opcode = OPCODE_PROC_BEGIN;
-                begin.dest = create_label_from(statement->name->ident);
-                begin.arg1.type = OPERAND_IMM;
-                begin.arg1.imm = 0;
-
-                stack_offset = 0;
-
-                end.opcode = OPCODE_PROC_END;
-                end.dest = begin.dest;
-                end.arg1.type = OPERAND_IMM;
-
-                array_append(*bytecode, begin);
-                int patch_index = bytecode->count - 1;
-
-                gen_ast_bytecode(bytecode, statement->body);
-
-                bytecode->items[patch_index].arg1.imm = stack_offset;
-                end.arg1.imm = stack_offset;
-
-                array_append(*bytecode, end);
-
-                break;
-            }
             case AST_CALL: {
+                for (int i = 0; i < statement->arg_count; i++) {
+                    Operand dest = gen_expr_bytecode(bytecode, statement->args[i]);
+                    SymbolData *var = get_symbol(statement->symbol->symbol_table,
+                                                 statement->symbol->ident);
+
+                    Instr param;
+                    param.opcode = OPCODE_PARAM;
+                    param.arg1 = dest;
+                    array_append(*bytecode, param);
+                }
                 gen_call_instr(bytecode, create_label_from(statement->callee->ident));
                 break;
             }
@@ -346,10 +384,13 @@ void pretty_print_bytecode(Bytecode bytecode) {
                 printf("\tret r%d\n", instr.arg1.vreg);
                 break;
             case OPCODE_JMP:
-                printf("\tjmp .%s\n", instr.dest.label_name);
+                printf("\tjmp %s\n", instr.dest.label_name);
                 break;
             case OPCODE_JMP_NEQ:
-                printf("\tj.ne r%d, .%s\n", instr.arg1.vreg, instr.dest.label_name);
+                printf("\tj.ne r%d, %s\n", instr.arg1.vreg, instr.dest.label_name);
+                break;
+            case OPCODE_PARAM:
+                printf("\tparam r%d\n", instr.arg1.vreg);
                 break;
             case OPCODE_CALL:
                 if (instr.dest.type == OPERAND_INVALID)
@@ -370,7 +411,7 @@ void pretty_print_bytecode(Bytecode bytecode) {
     }
 }
 
-IntervalArray create_live_intervals_from_bytecode(Bytecode bytecode) {
+IntervalArray create_live_intervals_from_bytecode(Bytecode bytecode, int vreg_count) {
     IntervalArray intervals;
     array_init(intervals, vreg_count);
 
@@ -417,11 +458,11 @@ const char *registers_8bit_low[] = { // NOTE: this is meant to be a temporary so
     "al", "cl", "dl", "dil",
 };
 
-bool active_registers[] = { 1, 1, 1, 1, };
 
 // NOTE: assumes intervals is already sorted
-LocationArray linear_scan_register_allocation(IntervalArray *intervals, PhysRegs *pregs) {
+LocationArray linear_scan_register_allocation(IntervalArray *intervals, int vreg_count, PhysRegs *pregs) {
     LocationArray locations = {0};
+    bool active_registers[] = { 1, 1, 1, 1, };
     array_init(locations, vreg_count);
     locations.count = vreg_count;
     IntervalArray active = {0};

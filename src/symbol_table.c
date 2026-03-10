@@ -3,13 +3,22 @@
 #include "symbol_table.h"
 #include "common.h"
 
-void insert_symbol(Arena *arena, SymbolTable *symbol_table, const char *symbol, SymbolType type) {
+const char *symbol_type_to_string_table[] = {
+    [SYM_TYPE_VARIABLE] = "variable",
+    [SYM_TYPE_PROCEDURE] = "procedure"
+};
+
+static_assert(sizeof(symbol_type_to_string_table) / sizeof(char *) == SYM_TYPE_COUNT,
+        "Every symbol type should have entry in string table.");
+
+SymbolData *insert_symbol(Arena *arena, SymbolTable *symbol_table, const char *symbol, SymbolType type) {
     HashTable *table = &symbol_table->table;
 
     SymbolData *data = arena_alloc_type(arena, SymbolData);
     data->type = type;
 
     ht_insert(table, symbol, data);
+    return data;
 }
 
 void *get_symbol(SymbolTable *symbol_table, const char *str) {
@@ -28,6 +37,9 @@ void print_symbol_table(SymbolTable *symbol_table, int indent) {
 
         SymbolData *data = (SymbolData*) symbol_table->table.items[i];
 
-        print_indent(1, "\"%s\": { type: %d },\n", symbol_table->table.keys[i], data->type);
+        print_indent(1, "\"%s\":\t{ type:\t%s,\tstack offset:\t%d },\n",
+            symbol_table->table.keys[i],
+            symbol_type_to_string_table[data->type],
+            data->stack_offset);
     }
 }

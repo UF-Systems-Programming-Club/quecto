@@ -16,5 +16,6 @@ typedef struct {
 AST *parse_program(ParserState *parser);
 AST *parse_expression(ParserState *parser, int min_prec);
 AST *parse_statement(ParserState *parser);
+size_t parse_args(ParserState *parser, AST *list[MAX_PARAMS]);
 
 #endif

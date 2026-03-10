@@ -5,6 +5,8 @@
 #include "tokenizer.h"
 #include "symbol_table.h"
 
+#define MAX_PARAMS 4
+
 typedef enum {
     AST_PROGRAM,
     AST_BINARY_OP,
@@ -48,7 +50,13 @@ typedef struct AST {
         // Procedure
         struct {
             struct AST *name;
+            struct AST *params[MAX_PARAMS]; // probably better to go with hardcode MAX_PARAMS could do variable length but I dont think its important
+            struct AST *returns[MAX_PARAMS];
+            size_t param_count;
+            size_t return_count;
             struct AST *body;
+
+            SymbolTable *symbols;
         };
 
         // Binary op for expressions
@@ -61,9 +69,8 @@ typedef struct AST {
         // Calls
         struct {
             struct AST *callee;
-            struct AST **params;
-            size_t pcount;
-            size_t pcapacity;
+            struct AST *args[MAX_PARAMS];
+            size_t arg_count;
         };
 
         // Declaration and Assignment

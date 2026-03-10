@@ -1,8 +1,9 @@
-#include <stdio.h>
-
+#include "ast.h"
 #include "bytecode.h"
 #include "codegen.h"
-#include "backends/linux_x64.c"
+#include "common.h"
+#include "symbol_table.h"
+#include <stdio.h>
 
 const char *cmp_x86_instruction_from_opcode[] = {
     [OPCODE_CMP_EQ] = "sete",
@@ -11,6 +12,43 @@ const char *cmp_x86_instruction_from_opcode[] = {
     [OPCODE_CMP_LEQ] = "setle",
     [OPCODE_CMP_GEQ] = "setge"
 };
+
+void adhere_program(Program *program, PhysRegs *pregs) { // pregs arent used yet
+    for (int i = 0; i < program->count; i++) {
+        program->items[i].bytecode = adhere_bytecode_to_machine_spec(program->items[i].bytecode, pregs);
+    }
+}
+
+void analyze_program(Program *program, PhysRegs *pregs) {
+    for (int i = 0; i < program->count; i++) {
+        Procedure *procedure = &program->items[i];
+        procedure->intervals = create_live_intervals_from_bytecode(procedure->bytecode, procedure->vreg_count);
+
+        for (int i = 0; i < procedure->intervals.count - 1; i++) {
+            bool swapped = false;
+            for (int j = 0; j < procedure->intervals.count - i - 1; j++) {
+                if (procedure->intervals.items[j].start > procedure->intervals.items[j+1].start) {
+                    Interval temp = procedure->intervals.items[j];
+                    procedure->intervals.items[j] = procedure->intervals.items[j+1];
+                    procedure->intervals.items[j+1] = temp;
+                    swapped = true;
+                }
+            }
+            if (!swapped)
+                break;
+        }
+
+        //print_live_intervals(procedure->intervals);
+
+        procedure->locations = linear_scan_register_allocation(&procedure->intervals, procedure->vreg_count, pregs);
+    }
+}
+
+void compile_program(FILE *out, Program *program) {
+    for (int i = 0; i < program->count; i++) {
+        emit_procedure_assembly(out, program->items[i]);
+    }
+}
 
 Bytecode adhere_bytecode_to_machine_spec(Bytecode bytecode, PhysRegs *pregs) {
     Bytecode machine_code = {0};
@@ -55,6 +93,7 @@ Bytecode adhere_bytecode_to_machine_spec(Bytecode bytecode, PhysRegs *pregs) {
             case OPCODE_PROC_END:
             case OPCODE_CALL:
             case OPCODE_LABEL:
+            case OPCODE_PARAM:
                 array_append(machine_code, instr);
                 break;
             default:
@@ -65,8 +104,27 @@ Bytecode adhere_bytecode_to_machine_spec(Bytecode bytecode, PhysRegs *pregs) {
     return machine_code;
 }
 
+const char *arg_registers[] = { "edi", "esi", "edx", "ecx" };
 
-void emit_assembly_from_bytecode(FILE *out, Bytecode bytecode, LocationArray location, IntervalArray interval) {
+void emit_procedure_assembly(FILE *out, Procedure procedure) {
+    Operand args[MAX_PARAMS]; // for param opcode
+    size_t args_count = 0;
+
+    Bytecode bytecode = procedure.bytecode;
+    LocationArray location = procedure.locations;
+    IntervalArray interval = procedure.intervals;
+
+    fprintf(out, "%s:\n", procedure.name);
+    fprintf(out, "\tpush\trbp\n");
+    fprintf(out, "\tmov\trbp, rsp\n");
+
+    if (procedure.local_var_size > 0) fprintf(out, "\tsub\trsp, %d\n", (procedure.local_var_size / 16 + 1) * 16 );
+    int offset = 0;
+    for (int j = 0; j < procedure.param_count; j++) {
+        offset += 4;
+        fprintf(out, "\tmov\t[rbp - %d], %s\n", offset, arg_registers[j]);
+    }
+
     for (int i = 0; i < bytecode.count; i++) {
         Instr instr = bytecode.items[i];
         switch (instr.opcode) {
@@ -130,6 +188,7 @@ void emit_assembly_from_bytecode(FILE *out, Bytecode bytecode, LocationArray loc
             case OPCODE_RET:
                 fprintf(out, "\tmov\t%s, %s\n", registers[0], registers[location.items[instr.arg1.vreg].register_index]);
                 // fprintf(out, "\tret\n");
+                fprintf(out, "\tjmp .%s.end\n", procedure.name);
                 break;
             case OPCODE_JMP_NEQ:
                 fprintf(out,
@@ -141,18 +200,27 @@ void emit_assembly_from_bytecode(FILE *out, Bytecode bytecode, LocationArray loc
             case OPCODE_JMP:
                 fprintf(out, "\tjmp\t%s\n", instr.dest.label_name);
                 break;
+            case OPCODE_PARAM: {
+                args[args_count++] = instr.arg1;
+                break;
+            }
             case OPCODE_CALL: {
 
                 // preliminary spilling live registers to slots after local variables
 
-                size_t offset = 0;
+                int spill_offset = 0;
                 for (int j = 0; j < interval.count; j++) {
                     Interval span = interval.items[j];
                     if (span.start < i && i < span.end) {
-                        offset += 4;
-                        fprintf(out, "\tmov\t[rbp - %ld], %s\n", offset + 8, registers[location.items[span.vreg].register_index]);
+                        spill_offset += 4;
+                        fprintf(out, "\tmov\t[rbp - %d], %s\n", spill_offset + offset, registers[location.items[span.vreg].register_index]);
                     }
                 }
+
+                for (int j = 0; j < args_count; j++) {
+                    fprintf(out, "\tmov\t%s, %s\n", arg_registers[j], registers[location.items[args[j].vreg].register_index]);
+                }
+                args_count = 0;
 
                 fprintf(out, "\tcall\t%s\n", instr.arg1.label_name);
                 if (instr.dest.type == OPERAND_VREG)
@@ -163,24 +231,33 @@ void emit_assembly_from_bytecode(FILE *out, Bytecode bytecode, LocationArray loc
                 for (int j = 0; j < interval.count; j++) {
                     Interval span = interval.items[j];
                     if (span.start < i && i < span.end) {
-                        fprintf(out, "\tmov\t%s, [rbp - %ld]\n", registers[location.items[span.vreg].register_index], offset + 8);
-                        offset -= 4;
+                        fprintf(out, "\tmov\t%s, [rbp - %d]\n", registers[location.items[span.vreg].register_index], offset + spill_offset);
+                        spill_offset -= 4;
                     }
                 }
 
                 break;
             }
-            case OPCODE_PROC_BEGIN:
+            case OPCODE_PROC_BEGIN: {
                 fprintf(out, "%s:\n", instr.dest.label_name);
                 fprintf(out, "\tpush\trbp\n");
                 fprintf(out, "\tmov\trbp, rsp\n");
-                if (instr.arg1.imm > 0 ) fprintf(out, "\tsub\trsp, %d\n", 16); // hardcoded for now
+
+                if (procedure.local_var_size > 0) fprintf(out, "\tsub\trsp, %d\n", (procedure.local_var_size / 16 + 1) * 16 );
+                int offset = 0;
+                for (int j = 0; j < procedure.param_count; j++) {
+                    offset += 4;
+                    fprintf(out, "\tmov\t[rbp - %d], %s\n", offset, arg_registers[j]);
+                }
                 break;
-            case OPCODE_PROC_END:
-                if (instr.arg1.imm > 0 ) fprintf(out, "\tadd\trsp, %d\n", 16);
+            }
+            case OPCODE_PROC_END: {
+                fprintf(out, ".%s.end:\n", instr.dest.label_name);
+                if (procedure.local_var_size > 0) fprintf(out, "\tadd\trsp, %d\n", (procedure.local_var_size / 16 + 1) * 16 );
                 fprintf(out, "\tpop\trbp\n");
                 fprintf(out, "\tret\n");
                 break;
+            }
             case OPCODE_LABEL:
                 fprintf(out, "%s:\n", instr.dest.label_name);
                 break;
@@ -188,4 +265,9 @@ void emit_assembly_from_bytecode(FILE *out, Bytecode bytecode, LocationArray loc
                 assert(0);
         }
     }
+
+    fprintf(out, ".%s.end:\n", procedure.name);
+    if (procedure.local_var_size > 0) fprintf(out, "\tadd\trsp, %d\n", (procedure.local_var_size / 16 + 1) * 16 );
+    fprintf(out, "\tpop\trbp\n");
+    fprintf(out, "\tret\n");
 }

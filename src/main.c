@@ -52,51 +52,20 @@ int main(int argc, char **argv) {
 
     AST *ast = parse_program(&parser);
 
-    print_ast(ast, 0);
-    printf("\n");
+    //print_ast(ast, 0);
+    //printf("\n");
 
     if (error) return 0;
 
-    print_symbol_table(parser.cur_symbol_table, 0);
-    printf("\n");
-
-
-    Bytecode bytecode = {0};
-    gen_ast_bytecode(&bytecode, ast);
-    // pretty_print_bytecode(bytecode);
-    // printf("\n");
+    Program program = {0};
+    gen_program(&program, ast);
+    pretty_print_program(program);
 
     PhysRegs pregs = {0};
-    bytecode = adhere_bytecode_to_machine_spec(bytecode, &pregs);
-    // pretty_print_bytecode(bytecode);
-    // printf("\n");
+    adhere_program(&program, &pregs);
+    analyze_program(&program, &pregs);
 
-    /*for (int i = 0; i < 4; i++)
-      print_live_intervals(pregs.regs[i]);*/
 
-    IntervalArray intervals = create_live_intervals_from_bytecode(bytecode);
-    // Bubble sort
-    for (int i = 0; i < intervals.count - 1; i++) {
-        bool swapped = false;
-        for (int j = 0; j < intervals.count - i - 1; j++) {
-            if (intervals.items[j].start > intervals.items[j+1].start) {
-                Interval temp = intervals.items[j];
-                intervals.items[j] = intervals.items[j+1];
-                intervals.items[j+1] = temp;
-                swapped = true;
-            }
-        }
-        if (!swapped)
-            break;
-    }
-
-    // print_live_intervals(intervals);
-    // printf("\n");
-
-    LocationArray locations = linear_scan_register_allocation(&intervals, &pregs);
-    for (int i = 0; i < locations.count; i++) {
-        // printf("r%d @ %s\n", i, registers[locations.items[i].register_index]);
-    }
 
     FILE *out = fopen("out.S", "w");
 
@@ -108,8 +77,7 @@ int main(int argc, char **argv) {
     fprintf(out, "\tmov\teax, " EXIT_STATUS "\n");
     fprintf(out, "\tsyscall\n\n");
 
-
-    emit_assembly_from_bytecode(out, bytecode, locations, intervals);
+    compile_program(out, &program);
 
     fclose(out);
     arena_free(&ast_arena);

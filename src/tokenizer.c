@@ -17,6 +17,7 @@ const char *token_to_string_table[] = {
     [TOKEN_CLOSE_PAREN] = ")",
     [TOKEN_SEMICOLON] = ";",
     [TOKEN_COLON] = ":",
+    [TOKEN_COMMA] = ",",
     [TOKEN_EQUALS] = "=",
     [TOKEN_EQUALS_EQUALS] = "==",
     [TOKEN_ARROW] = "=>",
@@ -101,6 +102,7 @@ void print_token(Token tok) {
         case TOKEN_CLOSE_CURLY:     printf("}"); break;
         case TOKEN_IDENTIFIER:      printf("%s", tok.identifier); break;
         case TOKEN_COLON:           printf(":"); break;
+        case TOKEN_COMMA:           printf(","); break;
         case TOKEN_EQUALS:          printf("="); break;
         case TOKEN_EQUALS_EQUALS:   printf("=="); break;
         case TOKEN_LESS_EQUALS:     printf("<="); break;
@@ -184,6 +186,10 @@ TokenArray tokenize(const char *buf, size_t buf_size) {
                 break;
             case ':':
                 tok.type = TOKEN_COLON;
+                array_append(tokens, tok);
+                break;
+            case ',':
+                tok.type = TOKEN_COMMA;
                 array_append(tokens, tok);
                 break;
             case '<':
