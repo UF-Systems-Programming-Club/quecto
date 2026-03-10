@@ -7,9 +7,6 @@
 int vreg_count = 0;
 int stack_offset = 0;
 
-// NOTE: in the future these instructions will hold more information like
-// size of type, signed or unsigned, etc;
-
 int get_stack_offset() {
     return stack_offset;
 }

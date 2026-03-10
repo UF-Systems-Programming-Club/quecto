@@ -1,8 +1,8 @@
 .PHONY: tests
 .SILENT:
 
-main: src/*.c include/*.h
-	gcc -I include src/*.c -o main
+main: src/*.c include/*.h src/backends/*.c include/backends/*.h
+	gcc -I include -I src src/*.c -o main
 
 debug: src/*.c
 	gcc -fsanitize=address -g -I include src/*.c -o main

@@ -1,6 +1,8 @@
+#include <stdio.h>
+
 #include "bytecode.h"
 #include "codegen.h"
-#include <stdio.h>
+#include "backends/linux_x64.c"
 
 const char *cmp_x86_instruction_from_opcode[] = {
     [OPCODE_CMP_EQ] = "sete",
@@ -62,6 +64,7 @@ Bytecode adhere_bytecode_to_machine_spec(Bytecode bytecode, PhysRegs *pregs) {
     free(bytecode.items);
     return machine_code;
 }
+
 
 void emit_assembly_from_bytecode(FILE *out, Bytecode bytecode, LocationArray location, IntervalArray interval) {
     for (int i = 0; i < bytecode.count; i++) {
