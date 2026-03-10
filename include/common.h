@@ -9,6 +9,12 @@
 #include <string.h>
 #include <assert.h>
 
+#define UNREACHABLE\
+    do {\
+        fprintf(stderr, "UNREACHABLE reached at %s:%d in %s()\n", __FILE__, __LINE__, __func__);\
+        abort();\
+    } while (0)
+
 /* Struct definition needed to use array macros.
  * typedef struct {
  *     T items;

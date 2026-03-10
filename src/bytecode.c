@@ -307,6 +307,8 @@ void print_bytecode_op(Operand op) {
         printf("r%d", op.vreg);
     } else if (op.type == OPERAND_LABEL) {
         printf(".%s", op.label_name);
+    } else if (op.type == OPERAND_STACK) {
+        printf("[rbp - %d]", op.stack_offset);
     } else {
         printf("%s", registers[op.reg]);
     }
