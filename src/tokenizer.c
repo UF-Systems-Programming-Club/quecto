@@ -33,7 +33,7 @@ const char *token_to_string_table[] = {
     [TOKEN_ELIF] = "elif",
     [TOKEN_ELSE] = "else",
     [TOKEN_WHILE] = "while",
-    [TOKEN_PROCEDURE] = "proc",
+    [TOKEN_PROC] = "proc",
     [TOKEN_EOF] = "end of file"
 };
 
@@ -52,7 +52,7 @@ int int_from_str(const char *a, size_t len) {
 
 float float_from_str(const char *a, size_t len) {
     float accum = 0;
-    int decimal = len, exponent = -1;
+    int decimal = len/*, exponent = -1*/;
     float tens = 1;
 
     for (int i = 0; i < len; i++) {
@@ -60,7 +60,7 @@ float float_from_str(const char *a, size_t len) {
             decimal = i;
         }
         if (a[i] == 'e' || a[i] == 'E') {
-            exponent = i; // TODO : ADD EXPONENT support
+            // exponent = i; // TODO : ADD EXPONENT support
         }
     }
 
@@ -114,10 +114,9 @@ void print_token(Token tok) {
         case TOKEN_ELIF:            printf("elif"); break;
         case TOKEN_ELSE:            printf("else"); break;
         case TOKEN_WHILE:           printf("while"); break;
-        case TOKEN_PROCEDURE:       printf("proc"); break;
+        case TOKEN_PROC:       printf("proc"); break;
         case TOKEN_ARROW:           printf("=>"); break;
-
-        default:                assert(0 && "Every token needs to be able to be printed, so add entry");
+        default:                    UNREACHABLE("TokenType");
     }
     printf("\n");
 }
@@ -125,94 +124,65 @@ void print_token(Token tok) {
 TokenArray tokenize(const char *buf, size_t buf_size) {
     TokenArray tokens = {0};
 
+    // TODO: should have an array or hashmap of keywords to make
+    // keyword recognization faster and smaller
+
     size_t start = 0;
     size_t next = 0;
-    size_t row = 1;
+    size_t line = 1;
     size_t column = 1;
 
     while (start < buf_size) {
         char c = buf[next++];
-        size_t column_width = 1;
 
         Token tok = {
             .col = column,
-            .row = row,
+            .line = line,
         };
 
         switch (c) {
             case '\n':
-                column = 0;
-                row++;
-                break;
+                column = 1;
+                line++;
+                start = next;
+                continue;
             case ' ':
             case '\t':
+                column++;
+                start = next;
+                continue;
             case '\r':
+                UNREACHABLE("idk what to do here yet");
                 break;
-            case '+':
-                tok.type = TOKEN_PLUS;
-                array_append(tokens, tok);
-                break;
-            case '-':
-                tok.type = TOKEN_MINUS;
-                array_append(tokens, tok);
-                break;
-            case '*':
-                tok.type = TOKEN_MULTIPLY;
-                array_append(tokens, tok);
-                break;
-            case '/':
-                tok.type = TOKEN_DIVIDE;
-                array_append(tokens, tok);
-                break;
-            case '{':
-                tok.type = TOKEN_OPEN_CURLY;
-                array_append(tokens, tok);
-                break;
-            case '}':
-                tok.type = TOKEN_CLOSE_CURLY;
-                array_append(tokens, tok);
-                break;
-            case '(':
-                tok.type = TOKEN_OPEN_PAREN;
-                array_append(tokens, tok);
-                break;
-            case ')':
-                tok.type = TOKEN_CLOSE_PAREN;
-                array_append(tokens, tok);
-                break;
-            case ';':
-                tok.type = TOKEN_SEMICOLON;
-                array_append(tokens, tok);
-                break;
-            case ':':
-                tok.type = TOKEN_COLON;
-                array_append(tokens, tok);
-                break;
-            case ',':
-                tok.type = TOKEN_COMMA;
-                array_append(tokens, tok);
-                break;
+            case '+': tok.type = TOKEN_PLUS;        break;
+            case '-': tok.type = TOKEN_MINUS;       break;
+            case '*': tok.type = TOKEN_MULTIPLY;    break;
+            case '/': tok.type = TOKEN_DIVIDE;      break;
+            case '{': tok.type = TOKEN_OPEN_CURLY;  break;
+            case '}': tok.type = TOKEN_CLOSE_CURLY; break;
+            case '(': tok.type = TOKEN_OPEN_PAREN;  break;
+            case ')': tok.type = TOKEN_CLOSE_PAREN; break;
+            case ';': tok.type = TOKEN_SEMICOLON;   break;
+            case ':': tok.type = TOKEN_COLON;       break;
+            case ',': tok.type = TOKEN_COMMA;       break;
             case '<':
                 switch (buf[next]) {
                     case '=':   tok.type = TOKEN_LESS_EQUALS; next++; break;
-                    default:    tok.type = TOKEN_LESS_THAN;    break;
+                    default:    tok.type = TOKEN_LESS_THAN;           break;
                 }
-                array_append(tokens, tok);
                 break;
             case '>':
                 switch (buf[next]) {
                     case '=':   tok.type = TOKEN_GREATER_EQUALS; next++; break;
-                    default:    tok.type = TOKEN_GREATER_THAN;    break;
+                    default:    tok.type = TOKEN_GREATER_THAN;           break;
                 }
-                array_append(tokens, tok);
                 break;
             case '=':
                 switch (buf[next]) {
                     case '=':   tok.type = TOKEN_EQUALS_EQUALS; next++; break;
-                    case '>':   tok.type = TOKEN_ARROW; next++; break;
-                    default:    tok.type = TOKEN_EQUALS;    break;
+                    case '>':   tok.type = TOKEN_ARROW;         next++; break;
+                    default:    tok.type = TOKEN_EQUALS;                break;
                 }
-                array_append(tokens, tok);
                 break;
             default:
                 if (is_alpha(c)) {
@@ -230,7 +200,7 @@ TokenArray tokenize(const char *buf, size_t buf_size) {
                     } else if (strncmp(&buf[start], "else", sizeof("else") - 1) == 0) {
                         tok.type = TOKEN_ELSE;
                     } else if (strncmp(&buf[start], "proc", sizeof("proc") - 1) == 0) {
-                        tok.type = TOKEN_PROCEDURE;
+                        tok.type = TOKEN_PROC;
                     } else if (strncmp(&buf[start], "while", sizeof("while") - 1) == 0) {
                         tok.type = TOKEN_WHILE;
                     } else {
@@ -238,8 +208,7 @@ TokenArray tokenize(const char *buf, size_t buf_size) {
                         strncpy(tok.identifier, &buf[start], next - start);
                         tok.identifier[next - start] = '\0';
                     }
-
-                    array_append(tokens, tok);
+                    
                 }
                 else if (is_number(c)) {
                     tok.type = TOKEN_INT_LIT;
@@ -253,7 +222,7 @@ TokenArray tokenize(const char *buf, size_t buf_size) {
                     }
 
                     if (num_decimal_points > 1)
-                        report_error(tok.row, tok.col, "too many decimal points in float literal");
+                        report_error(tok.line, tok.col, "too many decimal points in float literal");
 
                     switch (tok.type) {
                         case TOKEN_FLOAT_LIT:
@@ -262,17 +231,17 @@ TokenArray tokenize(const char *buf, size_t buf_size) {
                         case TOKEN_INT_LIT:
                             tok.int_lit = int_from_str(&buf[start], next - start);
                             break;
+                        default:
+                            UNREACHABLE("TokenType");
                     }
-
-                    array_append(tokens, tok);
                 } else {
-                    report_error(tok.row, tok.col, "unrecognized character \'%c\'", c);
+                    report_error(tok.line, tok.col, "unrecognized character \'%c\'", c);
                 }
-                column_width = next - start;
                 break;
         }
 
-        column += column_width;
+        array_append(tokens, tok);
+        column += next - start;
         start = next;
     }
 

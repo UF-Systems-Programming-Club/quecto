@@ -30,7 +30,7 @@ typedef enum {
     TOKEN_ELIF,
     TOKEN_ELSE,
     TOKEN_WHILE,
-    TOKEN_PROCEDURE,
+    TOKEN_PROC,
     TOKEN_ARROW,
 
     TOKEN_COUNT // Make sure this token is the last one
@@ -44,7 +44,7 @@ typedef struct {
         float float_lit;
         char *identifier;
     };
-    unsigned int row, col;
+    unsigned int line, col;
 } Token;
 
 typedef struct {

@@ -64,7 +64,7 @@ bool expect_next_token(ParserState *parser, Token *tok, TokenType type) {
     if (match_next_token(parser, tok, type)) {
         return true;
     } else {
-        report_error(tok->row, tok->col, "expected \"%s\" but got \"%s\" instead",
+        report_error(tok->line, tok->col, "expected \"%s\" but got \"%s\" instead",
                      token_to_string_table[type],
                      token_to_string_table[peek_next_token_type(parser)]);
         return false;
@@ -84,7 +84,7 @@ bool expect_next_token_multiple(ParserState *parser, Token *tok, int count, ...)
     va_end(args);
     va_start(args, count);
 
-    report_error(tok->row, tok->col, "");
+    report_error(tok->line, tok->col, "");
     for (int i = 0; i < count - 1; i++) {
         printf("\"%s\", ", token_to_string_table[va_arg(args, TokenType)]);
     }
@@ -121,7 +121,7 @@ AST *parse_expression(ParserState *parser, int min_prec) {
             break;
         case TOKEN_IDENTIFIER:
             if (get_symbol(parser->cur_symbol_table, tok.identifier) == NULL) {
-                report_error(tok.row, tok.col, "undeclared identifier");
+                report_error(tok.line, tok.col, "undeclared identifier");
                 return NULL;
             }
 
@@ -143,6 +143,8 @@ AST *parse_expression(ParserState *parser, int min_prec) {
 
             if (!expect_next_token(parser, &tok, TOKEN_CLOSE_PAREN)) return NULL;
             break;
+        default:
+            UNREACHABLE("TokenType");
     }
 
     // NOTE: utilizes the fact that get precedence returns -1 when the next token is
@@ -162,6 +164,7 @@ AST *parse_expression(ParserState *parser, int min_prec) {
             case TOKEN_MINUS:           op->op = OP_MINUS;    break;
             case TOKEN_MULTIPLY:        op->op = OP_MULTIPLY; break;
             case TOKEN_DIVIDE:          op->op = OP_DIVIDE;   break;
+            default:                    UNREACHABLE("TokenType");
         }
 
         op->right = parse_expression(parser, get_token_type_precedence(tok.type));
@@ -221,7 +224,7 @@ AST *parse_statement(ParserState *parser) {
         //if (!expect_next_token(parser, &tok, TOKEN_CLOSE_CURLY)) return NULL;
         return statement;
     } else if (match_next_token(parser, &tok, TOKEN_IDENTIFIER)) {
-        Token ident = tok;
+        // Token ident = tok;
 
         statement->symbol = create_symbol(parser, tok.identifier);
 
@@ -323,7 +326,7 @@ AST *parse_procedure(ParserState *parser) {
     // procedure->params = (AST){0};
     // procedure->returns = (AST){0};
 
-    expect_next_token(parser, &tok, TOKEN_PROCEDURE);
+    expect_next_token(parser, &tok, TOKEN_PROC);
     expect_next_token(parser, &tok, TOKEN_IDENTIFIER);
 
     SymbolData *signature = insert_symbol(parser->arena, parser->cur_symbol_table, tok.identifier, SYM_TYPE_PROCEDURE);

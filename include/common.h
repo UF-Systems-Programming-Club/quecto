@@ -9,9 +9,9 @@
 #include <string.h>
 #include <assert.h>
 
-#define UNREACHABLE\
+#define UNREACHABLE(err)\
     do {\
-        fprintf(stderr, "UNREACHABLE reached at %s:%d in %s()\n", __FILE__, __LINE__, __func__);\
+        fprintf(stderr, "UNREACHABLE reached at %s:%d in %s(): %s\n", __FILE__, __LINE__, __func__, (err));\
         abort();\
     } while (0)
 
@@ -54,16 +54,7 @@
 #define FNV_PRIME 0x100000001b3
 #define FNV_BASIS 0xcbf29ce484222325
 
-static uint64_t fnv1a_hash(const char *str) {
-    uint64_t hash = FNV_BASIS;
-
-    for (int i = 0; str[i] != '\0'; i++) {
-        hash ^= (uint8_t)str[i];
-        hash *= FNV_PRIME;
-    }
-
-    return hash;
-}
+uint64_t fnv1a_hash(const char *str);
 
 typedef struct {
     char **keys;

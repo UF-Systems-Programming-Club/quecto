@@ -11,9 +11,6 @@ int stack_offset = 0;
 // NOTE: in the future these instructions will hold more information like
 // size of type, signed or unsigned, etc;
 
-Operand gen_add_instr(Bytecode *bytecode, Operand left, Operand right) {
-}
-
 Operand gen_jmp(Bytecode *bytecode, Operand label) {
     Instr jmp;
     jmp.opcode = OPCODE_JMP;
@@ -65,7 +62,7 @@ Operand gen_call_instr_into(Bytecode *bytecode, Operand dest, Operand label) {
 }
 
 Operand gen_call_instr(Bytecode *bytecode, Operand label) {
-    gen_call_instr_into(bytecode, (Operand){.type = OPERAND_INVALID}, label);
+    return gen_call_instr_into(bytecode, (Operand){.type = OPERAND_INVALID}, label);
 }
 
 Operand gen_loadi_instr(Bytecode *bytecode, int imm) {
@@ -229,8 +226,8 @@ void emit_decl_bytecode(Bytecode *bytecode, AST *decl) {
 void emit_call_bytecode(Bytecode *bytecode, AST *call) {
     for (int i = 0; i < call->arg_count; i++) {
         Operand dest = gen_expr_bytecode(bytecode, call->args[i]);
-        SymbolData *var = get_symbol(call->symbol->symbol_table,
-                                     call->symbol->ident);
+        /*SymbolData *var = get_symbol(call->symbol->symbol_table,
+                                     call->symbol->ident);*/
 
         Instr param;
         param.opcode = OPCODE_PARAM;
@@ -267,7 +264,7 @@ void emit_statement_bytecode(Bytecode *bytecode, AST *statement) {
             gen_expr_bytecode(bytecode, statement);
             break;
         default:
-            UNREACHABLE;
+            UNREACHABLE("ASTType");
     }
 }
 

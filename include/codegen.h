@@ -6,7 +6,6 @@
 
 // functions that every backend will need to implement
 MachCode instruction_selection(Bytecode bytecode, PhysRegs *pregs);
-
 // This function essentially performs any and all transformations to
 // the bytecode that are necessary before register allocation occurs
 // (e.g. 3AC to 2AC conversion for x64, respecting calling conventions, etc;)

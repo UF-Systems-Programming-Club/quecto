@@ -63,10 +63,6 @@ typedef struct {
     size_t capacity;
 } Bytecode;
 
-
-
-
-
 typedef enum {
     LOC_REGISTER,
     LOC_STACK,

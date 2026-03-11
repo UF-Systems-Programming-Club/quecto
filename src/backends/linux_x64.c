@@ -57,7 +57,7 @@ MachCode instruction_selection(Bytecode bytecode, PhysRegs *pregs) {
                 emit_x64_div(&mach_code, instr);
                 break;
             default:
-                UNREACHABLE;
+                UNREACHABLE("Opcode");
         }
     }
     return mach_code;

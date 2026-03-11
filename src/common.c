@@ -3,6 +3,17 @@
 // for printing
 const char *tabs = "\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t";
 
+uint64_t fnv1a_hash(const char *str) {
+    uint64_t hash = FNV_BASIS;
+
+    for (int i = 0; str[i] != '\0'; i++) {
+        hash ^= (uint8_t)str[i];
+        hash *= FNV_PRIME;
+    }
+
+    return hash;
+}
+
 void ht_resize(HashTable *ht) {
     size_t new_capacity = ht->capacity * 2;
     if (ht->capacity == 0) new_capacity = 256;
