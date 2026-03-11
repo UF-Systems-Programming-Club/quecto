@@ -156,20 +156,45 @@ void gen_if_chain(Bytecode *bytecode, AST *ast, Operand end_label) {
     if (ast->type == AST_ELIF) {
         Operand expr = gen_expr_bytecode(bytecode, ast->condition);
         Operand label = gen_conditional_jump(bytecode, OPCODE_JMP_NEQ, create_label(), expr);
-        gen_ast_bytecode(bytecode, ast->then);
+
+        emit_statement_bytecode(bytecode, ast->then);
+
         gen_jmp(bytecode, end_label);
         gen_label(bytecode, label);
         if (ast->otherwise) gen_if_chain(bytecode, ast->otherwise, end_label);
         return;
     } else if (ast->type == AST_ELSE) {
-        gen_ast_bytecode(bytecode, ast->then);
+        emit_block_bytecode(bytecode, ast->then);
         return;
     }
     assert(0 && "only elif and else should be chained in 'statement->otherwise' ");
 }
 
 
-void gen_procedure_bytecode(Procedure *procedure, AST *ast) {
+
+
+
+void print_procedure(Procedure procedure) {
+    printf("%s:\n", procedure.name);
+    pretty_print_bytecode(procedure.bytecode);
+}
+
+void pretty_print_program(Program program) {
+    for (int i = 0; i < program.count; i++) {
+        print_procedure(program.items[i]);
+        printf("\n");
+    }
+}
+
+void emit_program_bytecode(Program *program, AST *ast) {
+    for (int i = 0; i < ast->count; i++) {
+        Procedure procedure = {0};
+        emit_procedure_bytecode(&procedure, ast->items[i]);
+        array_append(*program, procedure);
+    }
+}
+
+void emit_procedure_bytecode(Procedure *procedure, AST *ast) {
     assert(ast->type == AST_PROCEDURE);
 
     procedure->name = ast->name->ident;
@@ -185,118 +210,113 @@ void gen_procedure_bytecode(Procedure *procedure, AST *ast) {
         data->stack_offset = stack_offset;
     }
 
-    gen_ast_bytecode(&procedure->bytecode, ast->body);
+    emit_block_bytecode(&procedure->bytecode, ast->body);
+
     procedure->local_var_size = stack_offset;
     procedure->vreg_count = vreg_count;
 }
 
-void gen_program(Program *program, AST *ast) {
-    for (int i = 0; i < ast->count; i++) {
-        Procedure procedure = {0};
-        gen_procedure_bytecode(&procedure, ast->items[i]);
-        array_append(*program, procedure);
+void emit_decl_bytecode(Bytecode *bytecode, AST *decl) {
+    Operand expr = gen_expr_bytecode(bytecode, decl->expr);
+    SymbolData *var = get_symbol(decl->symbol->symbol_table,
+                                 decl->symbol->ident);
+    stack_offset += 4;
+    var->stack_offset = stack_offset;
+
+    gen_store_instr(bytecode, var->stack_offset, expr.vreg);
+}
+
+void emit_call_bytecode(Bytecode *bytecode, AST *call) {
+    for (int i = 0; i < call->arg_count; i++) {
+        Operand dest = gen_expr_bytecode(bytecode, call->args[i]);
+        SymbolData *var = get_symbol(call->symbol->symbol_table,
+                                     call->symbol->ident);
+
+        Instr param;
+        param.opcode = OPCODE_PARAM;
+        param.arg1 = dest;
+        array_append(*bytecode, param);
+    }
+    gen_call_instr(bytecode, create_label_from(call->callee->ident));
+}
+
+void emit_statement_bytecode(Bytecode *bytecode, AST *statement) {
+    switch (statement->type) {
+        case AST_CALL:
+            emit_call_bytecode(bytecode, statement);
+            break;
+        case AST_BLOCK:
+            emit_block_bytecode(bytecode, statement);
+            break;
+        case AST_DECL:
+            emit_decl_bytecode(bytecode, statement);
+            break;
+        case AST_ASSIGNMENT:
+            emit_assign_bytecode(bytecode, statement);
+            break;
+        case AST_RETURN:
+            emit_return_bytecode(bytecode, statement);
+            break;
+        case AST_IF:
+            emit_if_bytecode(bytecode, statement);
+            break;
+        case AST_WHILE:
+            emit_while_bytecode(bytecode, statement);
+            break;
+        case AST_BINARY_OP:
+            gen_expr_bytecode(bytecode, statement);
+            break;
+        default:
+            UNREACHABLE;
     }
 }
 
-void print_procedure(Procedure procedure) {
-    printf("%s:\n", procedure.name);
-    pretty_print_bytecode(procedure.bytecode);
+void emit_assign_bytecode(Bytecode *bytecode, AST *assignment) {
+    Operand expr = gen_expr_bytecode(bytecode, assignment->expr);
+    SymbolData *var = get_symbol(assignment->symbol->symbol_table,
+                                 assignment->symbol->ident);
+    gen_store_instr(bytecode, var->stack_offset, expr.vreg);
 }
 
-void pretty_print_program(Program program) {
-    for (int i = 0; i < program.count; i++) {
-        print_procedure(program.items[i]);
-        printf("\n");
-    }
+void emit_return_bytecode(Bytecode *bytecode, AST *ret) {
+    // TODO: in the future should probably have a return stack similar to function param stack
+    // to support multiple return values
+    Instr instr;
+    instr.opcode = OPCODE_RET;
+    instr.arg1 = gen_expr_bytecode(bytecode, ret->expr);
+    array_append(*bytecode, instr);
 }
 
-void gen_ast_bytecode(Bytecode *bytecode, AST *ast) {
-    // Assumes AST is an AST_BLOCK which should be guaranteed by parsing and static analysis
-    // Could probably change function name to indicate that fact though
+void emit_if_bytecode(Bytecode *bytecode, AST *ifs) {
+    Operand expr = gen_expr_bytecode(bytecode, ifs->condition);
+    Operand end_label = create_label();
+    Operand next_cmp = gen_conditional_jump(bytecode, OPCODE_JMP_NEQ, create_label(), expr);
+
+    emit_statement_bytecode(bytecode, ifs->then);
+    gen_jmp(bytecode, end_label);
+
+    gen_label(bytecode, next_cmp);
+    if (ifs->otherwise) gen_if_chain(bytecode, ifs->otherwise, end_label);
+    gen_label(bytecode, end_label);
+}
+
+void emit_while_bytecode(Bytecode *bytecode, AST *whiles) {
+    Operand begin_label = create_label();
+    Operand end_label = create_label();
+
+    gen_label(bytecode, begin_label);
+
+    Operand expr = gen_expr_bytecode(bytecode, whiles->condition);
+    gen_conditional_jump(bytecode, OPCODE_JMP_NEQ, end_label, expr);
+
+    emit_statement_bytecode(bytecode, whiles->then);
+    gen_jmp(bytecode, begin_label);
+    gen_label(bytecode, end_label);
+}
+
+void emit_block_bytecode(Bytecode *bytecode, AST *ast) {
     for (int i = 0; i < ast->count; i++) {
-        AST *statement = ast->items[i];
-        switch (statement->type) {
-            case AST_PROCEDURE: {
-                assert(0 && "Procedures shouldnt be inside other procedures");
-            }
-            case AST_BLOCK: {
-                gen_ast_bytecode(bytecode, statement);
-                break;
-            }
-            case AST_CALL: {
-                for (int i = 0; i < statement->arg_count; i++) {
-                    Operand dest = gen_expr_bytecode(bytecode, statement->args[i]);
-                    SymbolData *var = get_symbol(statement->symbol->symbol_table,
-                                                 statement->symbol->ident);
-
-                    Instr param;
-                    param.opcode = OPCODE_PARAM;
-                    param.arg1 = dest;
-                    array_append(*bytecode, param);
-                }
-                gen_call_instr(bytecode, create_label_from(statement->callee->ident));
-                break;
-            }
-            case AST_DECL: {
-                Operand expr = gen_expr_bytecode(bytecode, statement->expr);
-                SymbolData *var = get_symbol(statement->symbol->symbol_table,
-                                             statement->symbol->ident);
-                stack_offset += 4;
-                var->stack_offset = stack_offset;
-
-                gen_store_instr(bytecode, var->stack_offset, expr.vreg);
-                break;
-            }
-            case AST_ASSIGNMENT: {
-                Operand expr = gen_expr_bytecode(bytecode, statement->expr);
-                SymbolData *var = get_symbol(statement->symbol->symbol_table,
-                                             statement->symbol->ident);
-                gen_store_instr(bytecode, var->stack_offset, expr.vreg);
-                break;
-            }
-            case AST_RETURN: {
-                // TODO: in the future should probably have a return stack similar to function param stack
-                // to support multiple return values
-                Instr instr;
-                instr.opcode = OPCODE_RET;
-                instr.arg1 = gen_expr_bytecode(bytecode, statement->expr);
-                array_append(*bytecode, instr);
-                break;
-            }
-            case AST_IF: {
-                Operand expr = gen_expr_bytecode(bytecode, statement->condition);
-                Operand end_label = create_label();
-                Operand next_cmp = gen_conditional_jump(bytecode, OPCODE_JMP_NEQ, create_label(), expr);
-
-                gen_ast_bytecode(bytecode, statement->then);
-                gen_jmp(bytecode, end_label);
-
-                gen_label(bytecode, next_cmp);
-                if (statement->otherwise) gen_if_chain(bytecode, statement->otherwise, end_label);
-                gen_label(bytecode, end_label);
-                break;
-            }
-            case AST_WHILE: {
-                Operand begin_label = create_label();
-                Operand end_label = create_label();
-
-                gen_label(bytecode, begin_label);
-
-                Operand expr = gen_expr_bytecode(bytecode, statement->condition);
-                gen_conditional_jump(bytecode, OPCODE_JMP_NEQ, end_label, expr);
-
-                gen_ast_bytecode(bytecode, statement->then);
-                gen_jmp(bytecode, begin_label);
-                gen_label(bytecode, end_label);
-
-                break;
-            }
-            case AST_BINARY_OP:
-                gen_expr_bytecode(bytecode, statement);
-                break;
-            default:
-                assert(0 && "unsupported statement type");
-        }
+        emit_statement_bytecode(bytecode, ast->items[i]);
     }
 }
 
@@ -398,12 +418,8 @@ void pretty_print_bytecode(Bytecode bytecode) {
                 else
                     printf("\tr%d = call %s\n", instr.dest.vreg, instr.arg1.label_name);
                 break;
-            case OPCODE_PROC_BEGIN:
             case OPCODE_LABEL:
                 printf("%s:\n", instr.dest.label_name);
-                break;
-            case OPCODE_PROC_END:
-                printf("\n");
                 break;
             default:
                 printf("error unrecognized instruction in bytecode\n");

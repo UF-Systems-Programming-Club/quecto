@@ -2,6 +2,7 @@
 #define CODEGEN_H
 
 #include "bytecode.h"
+#include "backends/linux_x64.h"
 
 // functions that every backend will need to implement
 MachCode instruction_selection(Bytecode bytecode, PhysRegs *pregs);

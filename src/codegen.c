@@ -89,8 +89,6 @@ Bytecode adhere_bytecode_to_machine_spec(Bytecode bytecode, PhysRegs *pregs) {
             case OPCODE_CMP_GEQ:
             case OPCODE_JMP:
             case OPCODE_JMP_NEQ:
-            case OPCODE_PROC_BEGIN:
-            case OPCODE_PROC_END:
             case OPCODE_CALL:
             case OPCODE_LABEL:
             case OPCODE_PARAM:
@@ -227,35 +225,14 @@ void emit_procedure_assembly(FILE *out, Procedure procedure) {
                     fprintf(out, "\tmov\t%s, %s\n",
                                     registers[location.items[instr.dest.vreg].register_index],
                                     "eax");
-
+                spill_offset = 0;
                 for (int j = 0; j < interval.count; j++) {
                     Interval span = interval.items[j];
                     if (span.start < i && i < span.end) {
+                        spill_offset += 4;
                         fprintf(out, "\tmov\t%s, [rbp - %d]\n", registers[location.items[span.vreg].register_index], offset + spill_offset);
-                        spill_offset -= 4;
                     }
                 }
-
-                break;
-            }
-            case OPCODE_PROC_BEGIN: {
-                fprintf(out, "%s:\n", instr.dest.label_name);
-                fprintf(out, "\tpush\trbp\n");
-                fprintf(out, "\tmov\trbp, rsp\n");
-
-                if (procedure.local_var_size > 0) fprintf(out, "\tsub\trsp, %d\n", (procedure.local_var_size / 16 + 1) * 16 );
-                int offset = 0;
-                for (int j = 0; j < procedure.param_count; j++) {
-                    offset += 4;
-                    fprintf(out, "\tmov\t[rbp - %d], %s\n", offset, arg_registers[j]);
-                }
-                break;
-            }
-            case OPCODE_PROC_END: {
-                fprintf(out, ".%s.end:\n", instr.dest.label_name);
-                if (procedure.local_var_size > 0) fprintf(out, "\tadd\trsp, %d\n", (procedure.local_var_size / 16 + 1) * 16 );
-                fprintf(out, "\tpop\trbp\n");
-                fprintf(out, "\tret\n");
                 break;
             }
             case OPCODE_LABEL:

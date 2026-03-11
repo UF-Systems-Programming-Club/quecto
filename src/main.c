@@ -58,7 +58,7 @@ int main(int argc, char **argv) {
     if (error) return 0;
 
     Program program = {0};
-    gen_program(&program, ast);
+    emit_program_bytecode(&program, ast);
     pretty_print_program(program);
 
     PhysRegs pregs = {0};

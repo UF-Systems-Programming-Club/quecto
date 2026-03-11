@@ -28,8 +28,6 @@ typedef enum {
     OPCODE_PARAM,
 
     OPCODE_LABEL,      // TODO: might not be the best to conflict metadata on bytecode with operands. this is just for time being
-    OPCODE_PROC_BEGIN, // dest is proc name, arg1 is max stack offset
-    OPCODE_PROC_END,   // dest is proc name, arg1 is max stack offset
 } Opcode;
 
 typedef enum {
@@ -140,8 +138,16 @@ Operand gen_store_instr(Bytecode *bytecode, int stack_offset, int vreg);
 Operand gen_loadi_instr(Bytecode *bytecode, int imm);
 // void gen_ret_instr(Bytecode *bytecode, );
 
-void gen_ast_bytecode(Bytecode *bytecode, AST *ast);
-void gen_program(Program *program, AST *ast);
+void emit_if_bytecode(Bytecode *bytecode, AST *ifs);
+void emit_while_bytecode(Bytecode *bytecode, AST *whiles);
+void emit_decl_bytecode(Bytecode *bytecode, AST *decl);
+void emit_assign_bytecode(Bytecode *bytecode, AST *assign);
+void emit_block_bytecode(Bytecode *bytecode, AST *block);
+void emit_return_bytecode(Bytecode *bytecode, AST *ret);
+void emit_statement_bytecode(Bytecode *bytecode, AST *statement);
+void emit_procedure_bytecode(Procedure *procedure, AST *ast);
+void emit_program_bytecode(Program *program, AST *ast);
+
 void analyze_program(Program *program, PhysRegs *pregs);
 void pretty_print_bytecode(Bytecode bytecode);
 void pretty_print_program(Program program);
