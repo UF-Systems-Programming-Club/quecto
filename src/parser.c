@@ -52,6 +52,12 @@ TokenType peek_next_token_type(ParserState *parser) {
     return parser->tokens.items[parser->current].type;
 }
 
+TokenType peek_next_next_token_type(ParserState *parser) {
+    if (parser->current + 1 >= parser->tokens.count) return parser->tokens.items[parser->tokens.count - 1].type;
+
+    return parser->tokens.items[parser->current + 1].type;
+}
+
 bool match_next_token(ParserState *parser, Token *tok, TokenType type) {
     if (peek_next_token_type(parser) == type) {
         *tok = *get_next_token(parser);
@@ -64,7 +70,7 @@ bool expect_next_token(ParserState *parser, Token *tok, TokenType type) {
     if (match_next_token(parser, tok, type)) {
         return true;
     } else {
-        report_error(tok->line, tok->col, "expected \"%s\" but got \"%s\" instead",
+        report_error(tok->line, tok->col, "expected %s but got %s instead",
                      token_to_string_table[type],
                      token_to_string_table[peek_next_token_type(parser)]);
         return false;
@@ -86,10 +92,10 @@ bool expect_next_token_multiple(ParserState *parser, Token *tok, int count, ...)
 
     report_error(tok->line, tok->col, "");
     for (int i = 0; i < count - 1; i++) {
-        printf("\"%s\", ", token_to_string_table[va_arg(args, TokenType)]);
+        printf("%s, ", token_to_string_table[va_arg(args, TokenType)]);
     }
-    printf("or \"%s\", ", token_to_string_table[va_arg(args, TokenType)]);
-    printf("but got \"%s\" instead\n", token_to_string_table[peek_next_token_type(parser)]);
+    printf("or %s, ", token_to_string_table[va_arg(args, TokenType)]);
+    printf("but got %s instead\n", token_to_string_table[peek_next_token_type(parser)]);
 
     va_end(args);
     return false;
@@ -103,77 +109,20 @@ AST *create_symbol(ParserState *parser, const char *identifier) {
     return symbol;
 }
 
-AST *parse_expression(ParserState *parser, int min_prec) {
-    Token tok;
-    if (!expect_next_token_multiple(parser, &tok, 4, TOKEN_INT_LIT, TOKEN_FLOAT_LIT, TOKEN_IDENTIFIER, TOKEN_OPEN_PAREN))
-        return NULL;
+AST *parse_program(ParserState *parser) {
+    AST *program = arena_alloc_type(parser->arena, AST);
+    program->type = AST_PROGRAM;
 
-    AST *left = arena_alloc_type(parser->arena, AST);
-
-    switch (tok.type) {
-        case TOKEN_INT_LIT:
-            left->type = AST_INT_LIT;
-            left->int_lit = tok.int_lit;
-            break;
-        case TOKEN_FLOAT_LIT:
-            left->type = AST_FLOAT_LIT;
-            left->float_lit = tok.float_lit;
-            break;
-        case TOKEN_IDENTIFIER:
-            if (get_symbol(parser->cur_symbol_table, tok.identifier) == NULL) {
-                report_error(tok.line, tok.col, "undeclared identifier");
-                return NULL;
-            }
-
-            Token gbg;
-            if (match_next_token(parser, &gbg, TOKEN_OPEN_PAREN)) {
-                left->type = AST_CALL;
-                left->callee = create_symbol(parser, tok.identifier);
-                left->arg_count = parse_args(parser, left->args);
-                break;
-            }
-
-            left->type = AST_SYMBOL;
-            left->symbol_table = parser->cur_symbol_table;
-            left->ident = tok.identifier;
-            break;
-        case TOKEN_OPEN_PAREN:
-            left = parse_expression(parser, 0);
-            if (left == NULL) return NULL;
-
-            if (!expect_next_token(parser, &tok, TOKEN_CLOSE_PAREN)) return NULL;
-            break;
-        default:
-            UNREACHABLE("TokenType");
+    // TODO: implement error synchronization
+    while (peek_next_token_type(parser) != TOKEN_EOF) {
+        AST *statement = parse_procedure(parser);
+        if (statement == NULL) { return program; }
+        array_append(*program, statement);
     }
+    // NOTE: probably doesn't need to be done but consumes EOF for sake of completion
+    get_next_token(parser);
 
-    // NOTE: utilizes the fact that get precedence returns -1 when the next token is
-    // not an operator
-    while (get_token_type_precedence(peek_next_token_type(parser)) > min_prec) {
-        AST *op = arena_alloc_type(parser->arena, AST);
-        op->type = AST_BINARY_OP;
-        op->left = left;
-        tok = *get_next_token(parser);
-        switch (tok.type) {
-            case TOKEN_EQUALS_EQUALS:   op->op = OP_EQUALS; break;
-            case TOKEN_LESS_THAN:       op->op = OP_LESS_THAN; break;
-            case TOKEN_GREATER_THAN:    op->op = OP_GREATER_THAN; break;
-            case TOKEN_LESS_EQUALS:     op->op = OP_LESS_EQUALS; break;
-            case TOKEN_GREATER_EQUALS:  op->op = OP_GREATER_EQUALS; break;
-            case TOKEN_PLUS:            op->op = OP_PLUS;     break;
-            case TOKEN_MINUS:           op->op = OP_MINUS;    break;
-            case TOKEN_MULTIPLY:        op->op = OP_MULTIPLY; break;
-            case TOKEN_DIVIDE:          op->op = OP_DIVIDE;   break;
-            default:                    UNREACHABLE("TokenType");
-        }
-
-        op->right = parse_expression(parser, get_token_type_precedence(tok.type));
-        if (op->right == NULL) return NULL;
-
-        left = op;
-    }
-
-    return left;
+    return program;
 }
 
 AST *parse_if_chain(ParserState *parser) {
@@ -270,6 +219,78 @@ AST *parse_statement(ParserState *parser) {
     return statement;
 }
 
+AST *parse_expression(ParserState *parser, int min_prec) {
+    Token tok;
+    if (!expect_next_token_multiple(parser, &tok, 4, TOKEN_INT_LIT, TOKEN_FLOAT_LIT, TOKEN_IDENTIFIER, TOKEN_OPEN_PAREN))
+        return NULL;
+
+    AST *left = arena_alloc_type(parser->arena, AST);
+
+    switch (tok.type) {
+        case TOKEN_INT_LIT:
+            left->type = AST_INT_LIT;
+            left->int_lit = tok.int_lit;
+            break;
+        case TOKEN_FLOAT_LIT:
+            left->type = AST_FLOAT_LIT;
+            left->float_lit = tok.float_lit;
+            break;
+        case TOKEN_IDENTIFIER:
+            if (get_symbol(parser->cur_symbol_table, tok.identifier) == NULL) {
+                report_error(tok.line, tok.col, "undeclared identifier");
+                return NULL;
+            }
+
+            Token gbg;
+            if (match_next_token(parser, &gbg, TOKEN_OPEN_PAREN)) {
+                left->type = AST_CALL;
+                left->callee = create_symbol(parser, tok.identifier);
+                left->arg_count = parse_args(parser, left->args);
+                break;
+            }
+
+            left->type = AST_SYMBOL;
+            left->symbol_table = parser->cur_symbol_table;
+            left->ident = tok.identifier;
+            break;
+        case TOKEN_OPEN_PAREN:
+            left = parse_expression(parser, 0);
+            if (left == NULL) return NULL;
+
+            if (!expect_next_token(parser, &tok, TOKEN_CLOSE_PAREN)) return NULL;
+            break;
+        default:
+            UNREACHABLE("TokenType");
+    }
+
+    // NOTE: utilizes the fact that get precedence returns -1 when the next token is
+    // not an operator
+    while (get_token_type_precedence(peek_next_token_type(parser)) > min_prec) {
+        AST *op = arena_alloc_type(parser->arena, AST);
+        op->type = AST_BINARY_OP;
+        op->left = left;
+        tok = *get_next_token(parser);
+        switch (tok.type) {
+            case TOKEN_EQUALS_EQUALS:   op->op = OP_EQUALS; break;
+            case TOKEN_LESS_THAN:       op->op = OP_LESS_THAN; break;
+            case TOKEN_GREATER_THAN:    op->op = OP_GREATER_THAN; break;
+            case TOKEN_LESS_EQUALS:     op->op = OP_LESS_EQUALS; break;
+            case TOKEN_GREATER_EQUALS:  op->op = OP_GREATER_EQUALS; break;
+            case TOKEN_PLUS:            op->op = OP_PLUS;     break;
+            case TOKEN_MINUS:           op->op = OP_MINUS;    break;
+            case TOKEN_MULTIPLY:        op->op = OP_MULTIPLY; break;
+            case TOKEN_DIVIDE:          op->op = OP_DIVIDE;   break;
+            default:                    UNREACHABLE("TokenType");
+        }
+
+        op->right = parse_expression(parser, get_token_type_precedence(tok.type));
+        if (op->right == NULL) return NULL;
+
+        left = op;
+    }
+
+    return left;
+}
 
 AST *parse_param_declaration(ParserState *parser) {
     Token tok;
@@ -365,20 +386,4 @@ AST *parse_procedure(ParserState *parser) {
     parser->cur_symbol_table = symbol_table->prev;
 
     return procedure;
-}
-
-AST *parse_program(ParserState *parser) {
-    AST *program = arena_alloc_type(parser->arena, AST);
-    program->type = AST_PROGRAM;
-
-    // TODO: implement error synchronization
-    while (peek_next_token_type(parser) != TOKEN_EOF) {
-        AST *statement = parse_procedure(parser);
-        if (statement == NULL) { return program; }
-        array_append(*program, statement);
-    }
-    // NOTE: probably doesn't need to be done but consumes EOF for sake of completion
-    get_next_token(parser);
-
-    return program;
 }
