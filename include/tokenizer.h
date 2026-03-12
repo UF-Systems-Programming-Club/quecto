@@ -3,6 +3,8 @@
 
 #include "common.h"
 
+#define MAX_KEYWORD_LEN 128
+
 typedef enum {
     TOKEN_PLUS,
     TOKEN_MINUS,
@@ -53,6 +55,11 @@ typedef struct {
     size_t capacity;
 } TokenArray;
 
+typedef struct keyword {
+     const char *name;
+     int token;
+} KeywordEntry;
+
 extern const char *token_to_string_table[];
 int int_from_str(const char* a, size_t len);
 float float_from_str(const char* a, size_t len);
@@ -60,5 +67,6 @@ bool is_number(char c);
 bool is_alpha(char c);
 void print_token(Token tok);
 TokenArray tokenize(const char* buf, size_t buf_size);
+KeywordEntry *lookup_keyword(const char *str, unsigned int len);
 
 #endif

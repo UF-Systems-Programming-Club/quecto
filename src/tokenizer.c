@@ -191,18 +191,13 @@ TokenArray tokenize(const char *buf, size_t buf_size) {
                         next++;
                     }
 
-                    if (strncmp(&buf[start], "return", sizeof("return") - 1) == 0) {
-                        tok.type = TOKEN_RETURN;
-                    } else if (strncmp(&buf[start], "if", sizeof("if") - 1) == 0) {
-                        tok.type = TOKEN_IF;
-                    } else if (strncmp(&buf[start], "elif", sizeof("elif") - 1) == 0) {
-                        tok.type = TOKEN_ELIF;
-                    } else if (strncmp(&buf[start], "else", sizeof("else") - 1) == 0) {
-                        tok.type = TOKEN_ELSE;
-                    } else if (strncmp(&buf[start], "proc", sizeof("proc") - 1) == 0) {
-                        tok.type = TOKEN_PROC;
-                    } else if (strncmp(&buf[start], "while", sizeof("while") - 1) == 0) {
-                        tok.type = TOKEN_WHILE;
+                    char keyword[MAX_KEYWORD_LEN];
+                    memcpy(keyword,  &buf[start], next - start);
+                    keyword[next - start] = '\0';
+                    
+                    struct keyword *result = lookup_keyword(keyword, next - start);
+                    if (result != NULL) {
+                        tok.type = result->token;
                     } else {
                         tok.identifier = (char *)malloc(next - start + 1);
                         strncpy(tok.identifier, &buf[start], next - start);

@@ -1,0 +1,15 @@
+%language=ANSI-C
+%includes
+%define lookup-function-name lookup_keyword
+%struct-type
+%{
+#include "tokenizer.h"
+%}
+struct keyword;
+%%
+if,		TOKEN_IF
+elif,	TOKEN_ELIF
+else,	TOKEN_ELSE
+return,	TOKEN_RETURN
+proc,	TOKEN_PROC
+while,	TOKEN_WHILE

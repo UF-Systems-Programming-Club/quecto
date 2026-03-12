@@ -1,7 +1,7 @@
 .PHONY: tests
 .SILENT:
 
-main: src/*.c include/*.h src/backends/*.c include/backends/*.h
+main: src/*.c src/keywords.c include/*.h src/backends/*.c include/backends/*.h
 	gcc -I include -I src src/*.c -o main
 
 debug: src/*.c
@@ -14,3 +14,6 @@ out: out.S
 	nasm -felf64 -o out.o out.S
 	ld -o out out.o
 	rm out.o
+
+src/keywords.c: src/keywords.gperf
+	gperf src/keywords.gperf --output-file=src/keywords.c
