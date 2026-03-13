@@ -43,3 +43,16 @@ void print_symbol_table(SymbolTable *symbol_table, int indent) {
             data->stack_offset);
     }
 }
+
+void print_type(QuectoType *qtype) {
+    switch(qtype->type) {
+        case QUECTO_I32:    printf("i32"); break;
+        case QUECTO_U32:    printf("u32"); break;
+        case QUECTO_I8:     printf("i8"); break;
+        case QUECTO_U8:     printf("u8"); break;
+        case QUECTO_ARRAY:
+            print_type(qtype->inner);
+            printf("[%lu]", qtype->array_size);
+            break;
+    }
+}

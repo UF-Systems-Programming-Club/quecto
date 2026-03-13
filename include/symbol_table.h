@@ -4,6 +4,25 @@
 #include "common.h"
 
 typedef enum {
+    QUECTO_U8,
+    QUECTO_I8,
+    QUECTO_U32,
+    QUECTO_I32,
+    QUECTO_ARRAY
+} QuectoPrimitiveType;
+
+
+typedef struct QuectoType {
+    QuectoPrimitiveType type;
+    union {
+        struct {
+            struct QuectoType *inner;
+            size_t array_size;
+        };   
+    };
+} QuectoType;
+
+typedef enum {
     SYM_TYPE_VARIABLE,
     SYM_TYPE_PROCEDURE,
     SYM_TYPE_COUNT,
@@ -17,7 +36,10 @@ typedef struct {
             int return_count;
             int local_var_size;
         };
-        int stack_offset;
+        struct {
+            QuectoType *qtype;
+            int stack_offset;
+        };
     };
 } SymbolData;
 
@@ -31,5 +53,6 @@ extern const char *symbol_type_to_string_table[];
 void print_symbol_table(SymbolTable *symbol_table, int indent);
 SymbolData *insert_symbol(Arena *arena, SymbolTable *symbol_table, const char *symbol, SymbolType type);
 void *get_symbol(SymbolTable *symbol_table, const char *str);
-
+void print_type(QuectoType *type);
+ 
 #endif

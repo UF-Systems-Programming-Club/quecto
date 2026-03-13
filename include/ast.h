@@ -76,6 +76,7 @@ typedef struct AST {
         // Declaration and Assignment
         struct {
             struct AST *symbol;
+            struct QuectoType *qtype;
             struct AST *expr;
         };
 
@@ -100,6 +101,6 @@ typedef struct AST {
     };
 } AST;
 
-void print_ast(AST* ast, int indent);
+void print_ast(AST *ast, int indent);
 
 #endif

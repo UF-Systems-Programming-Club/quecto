@@ -36,6 +36,18 @@ bool token_is_operator(TokenType type) {
     }
 }
 
+bool token_is_primitive(TokenType type) {
+    switch (type) {
+        case TOKEN_I32:
+        case TOKEN_U32:
+        case TOKEN_I8:
+        case TOKEN_U8:
+            return true;
+        default:
+            return false;
+    }
+}
+
 int get_token_type_precedence(TokenType type) {
     if (token_is_operator(type)) return get_token_precedence_table[type];
     return -1;
@@ -101,6 +113,39 @@ AST *create_symbol(ParserState *parser, const char *identifier) {
     symbol->ident = identifier;
     symbol->symbol_table = parser->cur_symbol_table;
     return symbol;
+}
+
+QuectoType *parse_type(ParserState *parser) {
+    QuectoType *qtype = arena_alloc_type(parser->arena, QuectoType);
+
+    Token *tok = get_next_token(parser);
+    switch(tok->type) {
+        case TOKEN_I32:     qtype->type = QUECTO_I32; break;
+        case TOKEN_U32:     qtype->type = QUECTO_U32; break;
+        case TOKEN_I8:      qtype->type = QUECTO_I8; break;
+        case TOKEN_U8:      qtype->type = QUECTO_U8; break;                    
+        default: {
+            report_error(tok->line, tok->col, "not a recognized type");
+            parser->current--;
+            return NULL;
+        }
+    }
+
+    if (peek_next_token_type(parser) == TOKEN_OPEN_SQUARE) {
+        expect_next_token(parser, tok, TOKEN_OPEN_SQUARE);
+        expect_next_token(parser, tok, TOKEN_INT_LIT);
+        
+        QuectoType *qtype_outer = arena_alloc_type(parser->arena, QuectoType);
+        qtype_outer->type = QUECTO_ARRAY;
+        qtype_outer->inner = qtype;
+        qtype_outer->array_size = tok->int_lit;
+        
+        expect_next_token(parser, tok, TOKEN_CLOSE_SQUARE);
+
+        return qtype_outer;
+    }
+    
+    return qtype;
 }
 
 AST *parse_expression(ParserState *parser, int min_prec) {
@@ -229,10 +274,12 @@ AST *parse_statement(ParserState *parser) {
         statement->symbol = create_symbol(parser, tok.identifier);
 
         if (match_next_token(parser, &tok, TOKEN_COLON)) {
-            if (match_next_token(parser, &tok, TOKEN_IDENTIFIER)) { printf("types not implemented yet\n"); assert(0); }
+            QuectoType *qtype = parse_type(parser);
+
             if (!expect_next_token(parser, &tok, TOKEN_EQUALS)) return NULL;
 
             statement->type = AST_DECL;
+            statement->qtype = qtype;
 
             insert_symbol(parser->arena, parser->cur_symbol_table, statement->symbol->ident, SYM_TYPE_VARIABLE);
 
@@ -283,7 +330,7 @@ AST *parse_param_declaration(ParserState *parser) {
     insert_symbol(parser->arena, parser->cur_symbol_table, tok.identifier, SYM_TYPE_VARIABLE);
 
     expect_next_token(parser, &tok, TOKEN_COLON);
-    expect_next_token(parser, &tok, TOKEN_IDENTIFIER); // probably change to parse_type at some point for ease
+    decl->qtype = parse_type(parser);
     // maybe add defaults in future
     return decl;
 }

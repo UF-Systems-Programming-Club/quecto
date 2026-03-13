@@ -13,9 +13,14 @@ typedef struct {
     Arena *arena;
 } ParserState;
 
+QuectoType *parse_type(ParserState *parser);
+AST *parse_if_chain(ParserState *parser);
+AST *parse_param_declaration(ParserState *parser);
 AST *parse_program(ParserState *parser);
 AST *parse_expression(ParserState *parser, int min_prec);
 AST *parse_statement(ParserState *parser);
+AST *parse_procedure(ParserState *parser);
+
 size_t parse_args(ParserState *parser, AST *list[MAX_PARAMS]);
 
 #endif

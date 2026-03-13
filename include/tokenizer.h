@@ -18,6 +18,8 @@ typedef enum {
     TOKEN_CLOSE_CURLY,
     TOKEN_OPEN_PAREN,
     TOKEN_CLOSE_PAREN,
+    TOKEN_OPEN_SQUARE,
+    TOKEN_CLOSE_SQUARE,
     TOKEN_IDENTIFIER,
     TOKEN_COLON,
     TOKEN_COMMA,
@@ -34,6 +36,11 @@ typedef enum {
     TOKEN_WHILE,
     TOKEN_PROC,
     TOKEN_ARROW,
+
+    TOKEN_U8,
+    TOKEN_I8,
+    TOKEN_I32,
+    TOKEN_U32,
 
     TOKEN_COUNT // Make sure this token is the last one
                 // listed in the enum, as this is assumed by compile time assertions

@@ -15,6 +15,8 @@ const char *token_to_string_table[] = {
     [TOKEN_CLOSE_CURLY] = "}",
     [TOKEN_OPEN_PAREN] = "(",
     [TOKEN_CLOSE_PAREN] = ")",
+    [TOKEN_OPEN_SQUARE] = "[",
+    [TOKEN_CLOSE_SQUARE] = "]",
     [TOKEN_SEMICOLON] = ";",
     [TOKEN_COLON] = ":",
     [TOKEN_COMMA] = ",",
@@ -34,6 +36,10 @@ const char *token_to_string_table[] = {
     [TOKEN_ELSE] = "else",
     [TOKEN_WHILE] = "while",
     [TOKEN_PROC] = "proc",
+    [TOKEN_U32] = "u32",
+    [TOKEN_I32] = "i32",
+    [TOKEN_I8] = "i8",
+    [TOKEN_U8] = "u8",
     [TOKEN_EOF] = "end of file"
 };
 
@@ -100,6 +106,8 @@ void print_token(Token tok) {
         case TOKEN_CLOSE_PAREN:     printf(")"); break;
         case TOKEN_OPEN_CURLY:      printf("{"); break;
         case TOKEN_CLOSE_CURLY:     printf("}"); break;
+        case TOKEN_OPEN_SQUARE:     printf("["); break;
+        case TOKEN_CLOSE_SQUARE:    printf("]"); break;
         case TOKEN_IDENTIFIER:      printf("%s", tok.identifier); break;
         case TOKEN_COLON:           printf(":"); break;
         case TOKEN_COMMA:           printf(","); break;
@@ -116,6 +124,10 @@ void print_token(Token tok) {
         case TOKEN_WHILE:           printf("while"); break;
         case TOKEN_PROC:       printf("proc"); break;
         case TOKEN_ARROW:           printf("=>"); break;
+        case TOKEN_I32:             printf("i32"); break;
+        case TOKEN_U32:             printf("u32"); break;
+        case TOKEN_I8:              printf("i8"); break;
+        case TOKEN_U8:              printf("u8"); break;
         default:                    UNREACHABLE("TokenType");
     }
     printf("\n");
@@ -162,6 +174,8 @@ TokenArray tokenize(const char *buf, size_t buf_size) {
             case '}': tok.type = TOKEN_CLOSE_CURLY; break;
             case '(': tok.type = TOKEN_OPEN_PAREN;  break;
             case ')': tok.type = TOKEN_CLOSE_PAREN; break;
+            case '[': tok.type = TOKEN_OPEN_SQUARE; break;
+            case ']': tok.type = TOKEN_CLOSE_SQUARE;break;
             case ';': tok.type = TOKEN_SEMICOLON;   break;
             case ':': tok.type = TOKEN_COLON;       break;
             case ',': tok.type = TOKEN_COMMA;       break;
