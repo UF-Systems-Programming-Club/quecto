@@ -121,7 +121,6 @@ AST *create_symbol(ParserState *parser, const char *identifier) {
     return symbol;
 }
 
-<<<<<<< HEAD
 QuectoType *parse_type(ParserState *parser) {
     QuectoType *qtype = arena_alloc_type(parser->arena, QuectoType);
 
@@ -132,7 +131,8 @@ QuectoType *parse_type(ParserState *parser) {
         case TOKEN_I8:      qtype->type = QUECTO_I8; break;
         case TOKEN_U8:      qtype->type = QUECTO_U8; break;                    
         default: {
-            report_error(tok->line, tok->col, "not a recognized type");
+            // report_error(tok->line, tok->col, "not a recognized type");
+            printf("inferred decl\n");
             parser->current--;
             return NULL;
         }
@@ -155,15 +155,9 @@ QuectoType *parse_type(ParserState *parser) {
     return qtype;
 }
 
-AST *parse_expression(ParserState *parser, int min_prec) {
-    Token tok;
-    if (!expect_next_token_multiple(parser, &tok, 4, TOKEN_INT_LIT, TOKEN_FLOAT_LIT, TOKEN_IDENTIFIER, TOKEN_OPEN_PAREN))
-        return NULL;
-=======
 AST *parse_program(ParserState *parser) {
     AST *program = arena_alloc_type(parser->arena, AST);
     program->type = AST_PROGRAM;
->>>>>>> 4fd9a80fb40a6331139d1edfe4ecafa99e5e7458
 
     // TODO: implement error synchronization
     while (peek_next_token_type(parser) != TOKEN_EOF) {

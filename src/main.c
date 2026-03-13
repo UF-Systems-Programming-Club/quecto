@@ -52,8 +52,8 @@ int main(int argc, char **argv) {
 
     AST *ast = parse_program(&parser);
 
-    //print_ast(ast, 0);
-    //printf("\n");
+    print_ast(ast, 0);
+    printf("\n");
 
     if (error) return 0;
 
