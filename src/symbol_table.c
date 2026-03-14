@@ -8,6 +8,8 @@ const char *symbol_type_to_string_table[] = {
     [SYM_TYPE_PROCEDURE] = "procedure"
 };
 
+QuectoType default_integer_type = (QuectoType) { .type = QUECTO_I32 };
+
 static_assert(sizeof(symbol_type_to_string_table) / sizeof(char *) == SYM_TYPE_COUNT,
         "Every symbol type should have entry in string table.");
 
@@ -44,12 +46,23 @@ void print_symbol_table(SymbolTable *symbol_table, int indent) {
     }
 }
 
+bool quecto_types_equal(QuectoType *a, QuectoType *b) {
+    if (a->type == b->type) {
+        if (a->inner != NULL && b->inner != NULL) {
+            return quecto_types_equal(a->inner, b->inner);
+        }
+        return true;
+    }
+    return false;
+}
+
 void print_type(QuectoType *qtype) {
     switch(qtype->type) {
-        case QUECTO_I32:    printf("i32"); break;
-        case QUECTO_U32:    printf("u32"); break;
-        case QUECTO_I8:     printf("i8"); break;
-        case QUECTO_U8:     printf("u8"); break;
+        case QUECTO_UNKNOWN: printf("unknown"); break;
+        case QUECTO_I32:     printf("i32"); break;
+        case QUECTO_U32:     printf("u32"); break;
+        case QUECTO_I8:      printf("i8"); break;
+        case QUECTO_U8:      printf("u8"); break;
         case QUECTO_ARRAY:
             print_type(qtype->inner);
             printf("[%lu]", qtype->array_size);

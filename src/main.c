@@ -4,6 +4,7 @@
 #include "tokenizer.h"
 #include "parser.h"
 #include "ast.h"
+#include "analysis.h"
 #include "bytecode.h"
 #include "codegen.h"
 #include "error.h"
@@ -51,6 +52,11 @@ int main(int argc, char **argv) {
     parser.cur_symbol_table = arena_alloc_type(&ast_arena, SymbolTable);
 
     AST *ast = parse_program(&parser);
+
+    print_ast(ast, 0);
+    printf("\n");
+
+    analyze_ast(ast);
 
     print_ast(ast, 0);
     printf("\n");

@@ -5,8 +5,6 @@
 #include "tokenizer.h"
 #include "symbol_table.h"
 
-#define MAX_PARAMS 4
-
 typedef enum {
     AST_PROGRAM,
     AST_BINARY_OP,
@@ -39,6 +37,7 @@ typedef enum {
 
 typedef struct AST {
     ASTType type;
+    size_t line, col; // for starting point of expr and for debugging
     union {
         // Program and block
         struct {
@@ -64,6 +63,8 @@ typedef struct AST {
             BinaryOp op;
             struct AST *left;
             struct AST *right;
+
+            QuectoType *evaled_type; // evaled at analysis
         };
 
         // Calls
@@ -76,7 +77,7 @@ typedef struct AST {
         // Declaration and Assignment
         struct {
             struct AST *symbol;
-            struct QuectoType *qtype;
+            QuectoType *qtype;
             struct AST *expr;
         };
 

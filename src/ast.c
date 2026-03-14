@@ -2,6 +2,7 @@
 
 #include "ast.h"
 #include "common.h"
+#include "error.h"
 #include "symbol_table.h"
 
 void print_ast(AST* ast, int indent) {
@@ -120,3 +121,4 @@ void print_ast(AST* ast, int indent) {
             break;
     }
 }
+

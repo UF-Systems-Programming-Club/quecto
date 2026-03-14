@@ -134,7 +134,7 @@ QuectoType *parse_type(ParserState *parser) {
             // report_error(tok->line, tok->col, "not a recognized type");
             printf("inferred decl\n");
             parser->current--;
-            return NULL;
+            qtype->type = QUECTO_UNKNOWN;
         }
     }
 
@@ -220,6 +220,7 @@ AST *parse_statement(ParserState *parser) {
         return statement;
     } else if (match_next_token(parser, &tok, TOKEN_IDENTIFIER)) {
         // Token ident = tok;
+        statement->line = tok.line; statement->col = tok.col;
 
         statement->symbol = create_symbol(parser, tok.identifier);
 
@@ -231,7 +232,8 @@ AST *parse_statement(ParserState *parser) {
             statement->type = AST_DECL;
             statement->qtype = qtype;
 
-            insert_symbol(parser->arena, parser->cur_symbol_table, statement->symbol->ident, SYM_TYPE_VARIABLE);
+            SymbolData *sym = insert_symbol(parser->arena, parser->cur_symbol_table, statement->symbol->ident, SYM_TYPE_VARIABLE);
+            sym->qtype = qtype;
 
             statement->expr = parse_expression(parser, 0);
         } else if (match_next_token(parser, &tok, TOKEN_EQUALS)) {
@@ -349,10 +351,11 @@ AST *parse_param_declaration(ParserState *parser) {
     expect_next_token(parser, &tok, TOKEN_IDENTIFIER);
 
     decl->symbol = create_symbol(parser, tok.identifier);
-    insert_symbol(parser->arena, parser->cur_symbol_table, tok.identifier, SYM_TYPE_VARIABLE);
+    SymbolData *sym = insert_symbol(parser->arena, parser->cur_symbol_table, tok.identifier, SYM_TYPE_VARIABLE);
 
     expect_next_token(parser, &tok, TOKEN_COLON);
     decl->qtype = parse_type(parser);
+    sym->qtype = decl->qtype;
     // maybe add defaults in future
     return decl;
 }
@@ -396,6 +399,9 @@ AST *parse_procedure(ParserState *parser) {
     // procedure->returns = (AST){0};
 
     expect_next_token(parser, &tok, TOKEN_PROC);
+    
+    procedure->line = tok.line; procedure->col = tok.col;
+    
     expect_next_token(parser, &tok, TOKEN_IDENTIFIER);
 
     SymbolData *signature = insert_symbol(parser->arena, parser->cur_symbol_table, tok.identifier, SYM_TYPE_PROCEDURE);
@@ -429,6 +435,9 @@ AST *parse_procedure(ParserState *parser) {
     signature->param_count = procedure->param_count;
     signature->return_count = procedure->return_count;
     signature->local_var_size = 0;
+    for (int i = 0; i < (int)procedure->return_count; i++) {
+        signature->return_types[i] = procedure->returns[i]->qtype;
+    }
 
     procedure->symbols = symbol_table;
     parser->cur_symbol_table = symbol_table->prev;

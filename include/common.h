@@ -9,6 +9,8 @@
 #include <string.h>
 #include <assert.h>
 
+#define MAX_PARAMS 4
+
 #define UNREACHABLE(err)\
     do {\
         fprintf(stderr, "UNREACHABLE reached at %s:%d in %s(): %s\n", __FILE__, __LINE__, __func__, (err));\
