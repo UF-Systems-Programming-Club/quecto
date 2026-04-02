@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "symbol_table.h"
 #include "tokenizer.h"
 #include "parser.h"
 #include "ast.h"
@@ -45,13 +46,20 @@ int main(int argc, char **argv) {
     Arena ast_arena;
     arena_create(&ast_arena, 1024 * 1024);
 
+    HashTable type_intern_table;
+    
     ParserState parser = {0};
     parser.tokens = tokens;
     parser.arena = &ast_arena;
     // global symbol table initialization
     parser.cur_symbol_table = arena_alloc_type(&ast_arena, SymbolTable);
+    parser.type_intern_table = &type_intern_table;
 
     AST *ast = parse_program(&parser);
+
+    for (int i = 0; i < type_intern_table.capacity; i++) {
+        if (type_intern_table.keys[i].data != NULL) {print_type(type_intern_table.items[i]); printf("\n"); }
+    }
 
     print_ast(ast, 0);
     printf("\n");

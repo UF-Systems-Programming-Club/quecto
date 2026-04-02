@@ -122,37 +122,39 @@ AST *create_symbol(ParserState *parser, const char *identifier) {
 }
 
 QuectoType *parse_type(ParserState *parser) {
-    QuectoType *qtype = arena_alloc_type(parser->arena, QuectoType);
+    QuectoType qtype = { 0 };
 
     Token *tok = get_next_token(parser);
     switch(tok->type) {
-        case TOKEN_I32:     qtype->type = QUECTO_I32; break;
-        case TOKEN_U32:     qtype->type = QUECTO_U32; break;
-        case TOKEN_I8:      qtype->type = QUECTO_I8; break;
-        case TOKEN_U8:      qtype->type = QUECTO_U8; break;                    
+        case TOKEN_I32:     qtype.type = QUECTO_I32; break;
+        case TOKEN_U32:     qtype.type = QUECTO_U32; break;
+        case TOKEN_I8:      qtype.type = QUECTO_I8; break;
+        case TOKEN_U8:      qtype.type = QUECTO_U8; break;                    
         default: {
             // report_error(tok->line, tok->col, "not a recognized type");
             printf("inferred decl\n");
             parser->current--;
-            qtype->type = QUECTO_UNKNOWN;
+            qtype.type = QUECTO_UNKNOWN;
         }
     }
+
+    QuectoType *Q = arena_intern(parser->arena, parser->type_intern_table, &qtype, sizeof(QuectoType));
 
     if (peek_next_token_type(parser) == TOKEN_OPEN_SQUARE) {
         expect_next_token(parser, tok, TOKEN_OPEN_SQUARE);
         expect_next_token(parser, tok, TOKEN_INT_LIT);
         
-        QuectoType *qtype_outer = arena_alloc_type(parser->arena, QuectoType);
-        qtype_outer->type = QUECTO_ARRAY;
-        qtype_outer->inner = qtype;
-        qtype_outer->array_size = tok->int_lit;
+        QuectoType qtype_outer;
+        qtype_outer.type = QUECTO_ARRAY;
+        qtype_outer.inner = Q;
+        qtype_outer.array_size = tok->int_lit;
         
         expect_next_token(parser, tok, TOKEN_CLOSE_SQUARE);
 
-        return qtype_outer;
+        return arena_intern(parser->arena, parser->type_intern_table, &qtype_outer, sizeof(QuectoType));
     }
     
-    return qtype;
+    return Q;
 }
 
 AST *parse_program(ParserState *parser) {
@@ -434,8 +436,8 @@ AST *parse_procedure(ParserState *parser) {
 
     signature->param_count = procedure->param_count;
     signature->return_count = procedure->return_count;
-    signature->local_var_size = 0;
-    for (int i = 0; i < (int)procedure->return_count; i++) {
+    signature->local_var_size = 0 ;
+    for (int i = 0; i < procedure->return_count; i++) {
         signature->return_types[i] = procedure->returns[i]->qtype;
     }
 

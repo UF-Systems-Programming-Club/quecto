@@ -10,6 +10,7 @@ typedef struct {
     TokenArray tokens;
     int current;
     SymbolTable *cur_symbol_table;
+    HashTable *type_intern_table;
     Arena *arena;
 } ParserState;
 

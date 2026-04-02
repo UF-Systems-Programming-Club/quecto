@@ -35,19 +35,22 @@ void *get_symbol(SymbolTable *symbol_table, const char *str) {
 
 void print_symbol_table(SymbolTable *symbol_table, int indent) {
     for (int i = 0; i < symbol_table->table.capacity; i++) {
-        if (symbol_table->table.keys[i] == NULL) continue;
+        if (symbol_table->table.keys[i].data == NULL) continue;
 
         SymbolData *data = (SymbolData*) symbol_table->table.items[i];
 
-        print_indent(1, "\"%s\":\t{ type:\t%s,\tstack offset:\t%d },\n",
-            symbol_table->table.keys[i],
+        print_indent(1, "\"%.*s\":\t{ type:\t%s,\tstack offset:\t%d },\n",
+            symbol_table->table.keys[i].size,
+            (char*)symbol_table->table.keys[i].data,
             symbol_type_to_string_table[data->type],
             data->stack_offset);
     }
 }
 
 bool quecto_types_equal(QuectoType *a, QuectoType *b) {
-    if (a->type == b->type) {
+    if (a == b) return true; // for interned values
+    
+    if (a && b && a->type == b->type) {
         if (a->inner != NULL && b->inner != NULL) {
             return quecto_types_equal(a->inner, b->inner);
         }
