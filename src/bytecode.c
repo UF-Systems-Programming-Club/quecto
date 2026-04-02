@@ -8,6 +8,18 @@
 int vreg_count = 0;
 int stack_offset = 0;
 
+const char *registers[] = {
+    "eax", "ecx", "edx", "edi",
+};
+
+const char *registers_8bit_low[] = { // NOTE: this is meant to be a temporary solution for accessing lower 8 bits for setCC instructions
+    "al", "cl", "dl", "dil",
+};
+
+const char *registers_64bit[] = {
+    "rax", "rcx", "rdx", "rdi"
+};
+
 // NOTE: in the future these instructions will hold more information like
 // size of type, signed or unsigned, etc;
 
@@ -87,6 +99,19 @@ Operand gen_load_instr(Bytecode *bytecode, int stack_offset) {
     return load.dest;
 }
 
+Operand gen_load_at_instr(Bytecode *bytecode, int stack_offset, int vreg) {
+    Instr load;
+    load.opcode = OPCODE_LOAD_INDEX;
+    load.dest.type = OPERAND_VREG;
+    load.dest.vreg = vreg_count++;
+    load.arg1.type = OPERAND_STACK;
+    load.arg1.stack_offset = stack_offset;
+    load.arg2.type = OPERAND_VREG;
+    load.arg2.vreg = vreg;
+    array_append(*bytecode, load);
+    return load.dest;
+}
+
 Operand gen_store_instr(Bytecode *bytecode, int stack_offset, int vreg) {
     Instr store;
     store.opcode = OPCODE_STORE;
@@ -102,9 +127,26 @@ Operand gen_int_lit_bytecode(Bytecode *bytecode, AST *int_lit) {
     return gen_loadi_instr(bytecode, int_lit->int_lit);
 }
 
+Operand gen_list_bytecode(Bytecode *bytecode, AST *list) {
+    Operand begin = gen_expr_bytecode(bytecode, list->items[0]);
+    for (int i = 0; i < list->count; i++) {
+        gen_expr_bytecode(bytecode, list->items[i]);
+    }
+    return begin;
+}
+
 Operand gen_expr_bytecode(Bytecode *bytecode, AST *expr) {
     if (expr->type == AST_INT_LIT) {
         return gen_int_lit_bytecode(bytecode, expr);
+    }
+    if (expr->type == AST_LIST) {
+        return (Operand){0};
+    }
+    if (expr->type == AST_INDEX) {
+        SymbolData *arr = get_symbol(expr->access->symbol_table, expr->access->ident);
+        Operand at = gen_expr_bytecode(bytecode, expr->index);
+    
+        return gen_load_at_instr(bytecode, arr->stack_offset, at.vreg);
     }
     if (expr->type == AST_CALL) {
         Operand dest;
@@ -214,13 +256,22 @@ void emit_procedure_bytecode(Procedure *procedure, AST *ast) {
 }
 
 void emit_decl_bytecode(Bytecode *bytecode, AST *decl) {
-    Operand expr = gen_expr_bytecode(bytecode, decl->expr);
     SymbolData *var = get_symbol(decl->symbol->symbol_table,
                                  decl->symbol->ident);
-    stack_offset += 4;
-    var->stack_offset = stack_offset;
+    if (decl->qtype->type == QUECTO_ARRAY) {
+        var->stack_offset = stack_offset + 4;
+        for (int i = 0; i < decl->qtype->array_size; i++) {
+            stack_offset += 4;
+            Operand expr = gen_expr_bytecode(bytecode, decl->expr->items[i]);
+            gen_store_instr(bytecode, stack_offset, expr.vreg);   
+        }
+    } else {
+        stack_offset += 4;
+        var->stack_offset = stack_offset;
 
-    gen_store_instr(bytecode, var->stack_offset, expr.vreg);
+        Operand expr = gen_expr_bytecode(bytecode, decl->expr);
+        gen_store_instr(bytecode, stack_offset, expr.vreg);
+    }
 }
 
 void emit_call_bytecode(Bytecode *bytecode, AST *call) {
@@ -377,6 +428,9 @@ void pretty_print_bytecode(Bytecode bytecode) {
             case OPCODE_CMP_GEQ:
                 print_bytecode_operation("c.ge", instr.dest, instr.arg1, instr.arg2);
                 break;
+            case OPCODE_LOAD_INDEX:
+                printf("\tr%d = [bp - %d + r%d]\n", instr.dest.vreg, instr.arg1.stack_offset, instr.arg2.vreg);
+                break;
             case OPCODE_LOAD:
                 printf("\tr%d = [bp - %d]\n", instr.dest.vreg, instr.arg1.stack_offset);
                 break;
@@ -463,13 +517,6 @@ void print_live_intervals(IntervalArray intervals) {
     }
 }
 
-const char *registers[] = {
-    "eax", "ecx", "edx", "edi",
-};
-
-const char *registers_8bit_low[] = { // NOTE: this is meant to be a temporary solution for accessing lower 8 bits for setCC instructions
-    "al", "cl", "dl", "dil",
-};
 
 
 // NOTE: assumes intervals is already sorted

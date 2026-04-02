@@ -79,6 +79,7 @@ Bytecode adhere_bytecode_to_machine_spec(Bytecode bytecode, PhysRegs *pregs) {
                 break;
             }
             case OPCODE_LOAD:
+            case OPCODE_LOAD_INDEX:
             case OPCODE_STORE:
             case OPCODE_COPY:
             case OPCODE_LOADI:
@@ -170,8 +171,18 @@ void emit_procedure_assembly(FILE *out, Procedure procedure) {
             case OPCODE_STORE:
                 fprintf(out, "\tmov\t[rbp - %d], %s\n", instr.dest.stack_offset, registers[location.items[instr.arg1.vreg].register_index]);
                 break;
+            case OPCODE_LOAD_INDEX:
+                fprintf(out, "\tneg\t%s\n", registers_64bit[location.items[instr.arg2.vreg].register_index]);
+                fprintf(out, "\tshl\t%s, 2\n", registers_64bit[location.items[instr.arg2.vreg].register_index]);
+                fprintf(out, "\tmov\t%s, [rbp - %d + %s]\n",
+                        registers[location.items[instr.dest.vreg].register_index],
+                        instr.arg1.stack_offset,
+                        registers_64bit[location.items[instr.arg2.vreg].register_index]);
+                break;
             case OPCODE_LOAD:
-                fprintf(out, "\tmov\t%s, [rbp - %d]\n", registers[location.items[instr.dest.vreg].register_index], instr.arg1.stack_offset);
+                fprintf(out, "\tmov\t%s, [rbp - %d]\n",
+                        registers[location.items[instr.dest.vreg].register_index],
+                        instr.arg1.stack_offset);
                 break;
             case OPCODE_COPY:
                 if (location.items[instr.dest.vreg].register_index != location.items[instr.arg1.vreg].register_index) {

@@ -16,6 +16,8 @@ typedef enum {
     OPCODE_CMP_GEQ,
     OPCODE_LOAD, // TODO: currently load and store operate on the stack.
                // will need to seperate stack loads from regular loads
+    OPCODE_LOAD_INDEX,
+
     OPCODE_STORE,
     OPCODE_COPY,
     OPCODE_LOADI,
@@ -118,6 +120,7 @@ typedef struct {
 
 extern const char *registers[];
 extern const char *registers_8bit_low[];
+extern const char *registers_64bit[];
 
 Operand gen_add_instr(Bytecode *bytecode, Operand left, Operand right);
 Operand gen_sub_instr(Bytecode *bytecode, Operand left, Operand right);
@@ -133,6 +136,7 @@ Operand gen_store_instr(Bytecode *bytecode, int stack_offset, int vreg);
 // void gen_copy_instr(Bytecode *bytecode, );
 Operand gen_loadi_instr(Bytecode *bytecode, int imm);
 // void gen_ret_instr(Bytecode *bytecode, );
+Operand gen_expr_bytecode(Bytecode *bytecode, AST *expr);
 
 void emit_if_bytecode(Bytecode *bytecode, AST *ifs);
 void emit_while_bytecode(Bytecode *bytecode, AST *whiles);

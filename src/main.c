@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "common.h"
 #include "symbol_table.h"
 #include "tokenizer.h"
 #include "parser.h"
@@ -47,7 +48,9 @@ int main(int argc, char **argv) {
     arena_create(&ast_arena, 1024 * 1024);
 
     HashTable type_intern_table;
-    
+
+    //arena_intern(&ast_arena, &type_intern_table, &(QuectoType){.type = QUECTO_U32}, sizeof(QuectoType));
+  
     ParserState parser = {0};
     parser.tokens = tokens;
     parser.arena = &ast_arena;
@@ -64,12 +67,18 @@ int main(int argc, char **argv) {
     print_ast(ast, 0);
     printf("\n");
 
-    analyze_ast(ast);
+    AnalysisContext analysis_ctx = {0};
+    analysis_ctx.type_intern_table = &type_intern_table;
+    analysis_ctx.arena = &ast_arena;
+    
+    analyze_ast(&analysis_ctx, ast);
 
     print_ast(ast, 0);
     printf("\n");
 
     if (error) return 0;
+
+    printf("byte code started\n");
 
     Program program = {0};
     emit_program_bytecode(&program, ast);

@@ -4,9 +4,14 @@
 #include "ast.h"
 #include "symbol_table.h"
 
-void analyze_ast(AST *ast);
-void analyze_block(AST *block, SymbolTable *scope);
-void analyze_procedure(AST *procedure);
-void analyze_statement(AST *statement, SymbolTable *scope);
+typedef struct {
+  Arena *arena;
+  HashTable *type_intern_table;
+} AnalysisContext;
+
+void analyze_ast(AnalysisContext *context, AST *ast);
+void analyze_block(AnalysisContext *context, AST *block, SymbolTable *scope);
+void analyze_procedure(AnalysisContext *context, AST *procedure);
+void analyze_statement(AnalysisContext *context, AST *statement, SymbolTable *scope);
 
 #endif

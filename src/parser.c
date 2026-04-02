@@ -273,7 +273,7 @@ AST *parse_statement(ParserState *parser) {
 
 AST *parse_expression(ParserState *parser, int min_prec) {
     Token tok;
-    if (!expect_next_token_multiple(parser, &tok, 4, TOKEN_INT_LIT, TOKEN_FLOAT_LIT, TOKEN_IDENTIFIER, TOKEN_OPEN_PAREN))
+    if (!expect_next_token_multiple(parser, &tok, 5, TOKEN_INT_LIT, TOKEN_FLOAT_LIT, TOKEN_IDENTIFIER, TOKEN_OPEN_PAREN, TOKEN_OPEN_CURLY))
         return NULL;
 
     AST *left = arena_alloc_type(parser->arena, AST);
@@ -293,17 +293,24 @@ AST *parse_expression(ParserState *parser, int min_prec) {
                 return NULL;
             }
 
+            left->type = AST_SYMBOL; // if we set this as symbol first and none of the postfixes exist this should return fine
+            left->symbol_table = parser->cur_symbol_table;
+            left->ident = tok.identifier;
+
             Token gbg;
-            if (match_next_token(parser, &gbg, TOKEN_OPEN_PAREN)) {
+            if (match_next_token(parser, &gbg, TOKEN_OPEN_PAREN)) { // TODO : change logic such that we can index on expressions ? (maybe be very loose here but enforce in analysis stage)
                 left->type = AST_CALL;
                 left->callee = create_symbol(parser, tok.identifier);
                 left->arg_count = parse_args(parser, left->args);
                 break;
             }
+            else if (match_next_token(parser, &gbg, TOKEN_OPEN_SQUARE)) {
+                left->type = AST_INDEX;
+                left->access = create_symbol(parser, tok.identifier);
+                left->index = parse_expression(parser, 0);
+                expect_next_token(parser, &gbg, TOKEN_CLOSE_SQUARE);
+            }
 
-            left->type = AST_SYMBOL;
-            left->symbol_table = parser->cur_symbol_table;
-            left->ident = tok.identifier;
             break;
         case TOKEN_OPEN_PAREN:
             left = parse_expression(parser, 0);
@@ -311,7 +318,15 @@ AST *parse_expression(ParserState *parser, int min_prec) {
 
             if (!expect_next_token(parser, &tok, TOKEN_CLOSE_PAREN)) return NULL;
             break;
-        default:
+        case TOKEN_OPEN_CURLY:
+            left->type = AST_LIST;
+            while (!match_next_token(parser, &tok, TOKEN_CLOSE_CURLY)) {
+                AST *s = parse_expression(parser, 0);
+                if (peek_next_token_type(parser) != TOKEN_CLOSE_CURLY) expect_next_token(parser, &tok, TOKEN_COMMA);
+                array_append(*left, s);
+            }
+            
+            break;
             UNREACHABLE("TokenType");
     }
 

@@ -40,6 +40,20 @@ void print_ast(AST* ast, int indent) {
             }
             printf(")");
             break;
+        case AST_INDEX:
+            print_ast(ast->access, indent);
+            printf("[");
+            print_ast(ast->index, 0);
+            printf("]\n");
+            break;
+        case AST_LIST:
+            printf("{");
+            for (int i = 0; i < ast->count; i++) {
+                print_ast(ast->items[i], 0);
+                if (i < ast->count - 1) printf(", ");
+            }
+            printf("}");
+            break;
         case AST_SYMBOL:
             print_indent(0, "%s", ast->ident);
             break;

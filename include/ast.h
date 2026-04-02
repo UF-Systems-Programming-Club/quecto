@@ -10,6 +10,8 @@ typedef enum {
     AST_BINARY_OP,
     AST_PROCEDURE,
     AST_CALL,
+    AST_INDEX,
+    AST_LIST,
     AST_BLOCK,
     AST_DECL,
     AST_ASSIGNMENT,
@@ -39,7 +41,7 @@ typedef struct AST {
     ASTType type;
     size_t line, col; // for starting point of expr and for debugging
     union {
-        // Program and block
+        // Program and block and list
         struct {
             struct AST **items;
             size_t count;
@@ -72,6 +74,12 @@ typedef struct AST {
             struct AST *callee;
             struct AST *args[MAX_PARAMS];
             size_t arg_count;
+        };
+
+        // Indexing
+        struct {
+            struct AST *access; // symbol
+            struct AST *index; // expr
         };
 
         // Declaration and Assignment
