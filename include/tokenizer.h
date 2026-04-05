@@ -36,6 +36,7 @@ typedef enum {
     TOKEN_WHILE,
     TOKEN_PROC,
     TOKEN_ARROW,
+    TOKEN_EXTERN,
 
     TOKEN_U8,
     TOKEN_I8,

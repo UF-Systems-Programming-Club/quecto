@@ -12,6 +12,10 @@ void print_ast(AST* ast, int indent) {
                 print_ast(ast->items[i], 0);
             }
             break;
+        case AST_EXTERN:
+            print_indent(0, "extern ");
+            print_ast(ast->externed, 0);
+            break;
         case AST_PROCEDURE:
             print_indent(0, "proc ");
             print_ast(ast->name, 0);
@@ -29,7 +33,8 @@ void print_ast(AST* ast, int indent) {
                 if (i < ast->return_count - 1) printf(", ");
             }
             printf(")\n");
-            print_ast(ast->body, 0);
+            if (ast->body != NULL)
+                print_ast(ast->body, 0);
             break;
         case AST_CALL:
             print_ast(ast->callee, indent);

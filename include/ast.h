@@ -9,6 +9,7 @@ typedef enum {
     AST_PROGRAM,
     AST_BINARY_OP,
     AST_PROCEDURE,
+    AST_EXTERN,
     AST_CALL,
     AST_INDEX,
     AST_LIST,
@@ -46,6 +47,11 @@ typedef struct AST {
             struct AST **items;
             size_t count;
             size_t capacity;
+        };
+
+        // Extern
+        struct {
+            struct AST *externed;
         };
 
         // Procedure
@@ -98,7 +104,6 @@ typedef struct AST {
 
         // Symbol
         struct {
-            SymbolTable *symbol_table;
             const char *ident; // NOTE: this is a pointer to the tokenized identifier
                                // so every symbol has a unique string but not the
                                // authority to do anything to it (which makes sense)

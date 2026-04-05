@@ -127,15 +127,7 @@ Operand gen_int_lit_bytecode(Bytecode *bytecode, AST *int_lit) {
     return gen_loadi_instr(bytecode, int_lit->int_lit);
 }
 
-Operand gen_list_bytecode(Bytecode *bytecode, AST *list) {
-    Operand begin = gen_expr_bytecode(bytecode, list->items[0]);
-    for (int i = 0; i < list->count; i++) {
-        gen_expr_bytecode(bytecode, list->items[i]);
-    }
-    return begin;
-}
-
-Operand gen_expr_bytecode(Bytecode *bytecode, AST *expr) {
+Operand emit_expr_bytecode(EmitContext *context, Bytecode *bytecode, AST *expr) {
     if (expr->type == AST_INT_LIT) {
         return gen_int_lit_bytecode(bytecode, expr);
     }
@@ -143,8 +135,8 @@ Operand gen_expr_bytecode(Bytecode *bytecode, AST *expr) {
         return (Operand){0};
     }
     if (expr->type == AST_INDEX) {
-        SymbolData *arr = get_symbol(expr->access->symbol_table, expr->access->ident);
-        Operand at = gen_expr_bytecode(bytecode, expr->index);
+        SymbolData *arr = get_symbol(context->scope, expr->access->ident);
+        Operand at = emit_expr_bytecode(context, bytecode, expr->index);
     
         return gen_load_at_instr(bytecode, arr->stack_offset, at.vreg);
     }
@@ -154,7 +146,7 @@ Operand gen_expr_bytecode(Bytecode *bytecode, AST *expr) {
         dest.vreg = vreg_count++;
 
         for (int i = 0; i < expr->arg_count; i++) {
-            Operand dest = gen_expr_bytecode(bytecode, expr->args[i]);
+            Operand dest = emit_expr_bytecode(context, bytecode, expr->args[i]);
             Instr param;
             param.opcode = OPCODE_PARAM;
             param.arg1 = dest;
@@ -164,16 +156,15 @@ Operand gen_expr_bytecode(Bytecode *bytecode, AST *expr) {
         return gen_call_instr_into(bytecode, dest, create_label_from(expr->callee->ident));
     }
     if (expr->type == AST_SYMBOL) {
-        SymbolData *var = get_symbol(expr->symbol_table,
-                                     expr->ident);
+        SymbolData *var = get_symbol(context->scope, expr->ident);
         return gen_load_instr(bytecode, var->stack_offset);
     }
 
     Instr instr;
     instr.dest.type = OPERAND_VREG;
     instr.dest.vreg = vreg_count++;
-    instr.arg1 = gen_expr_bytecode(bytecode, expr->left);
-    instr.arg2 = gen_expr_bytecode(bytecode, expr->right);
+    instr.arg1 = emit_expr_bytecode(context, bytecode, expr->left);
+    instr.arg2 = emit_expr_bytecode(context, bytecode, expr->right);
 
     switch (expr->op) {
         case OP_PLUS:           instr.opcode = OPCODE_ADD; break;
@@ -191,49 +182,45 @@ Operand gen_expr_bytecode(Bytecode *bytecode, AST *expr) {
     return instr.dest;
 }
 
-void gen_if_chain(Bytecode *bytecode, AST *ast, Operand end_label) {
+
+void emit_if_chain(EmitContext *context, Bytecode *bytecode, AST *ast, Operand end_label) {
     if (ast->type == AST_ELIF) {
-        Operand expr = gen_expr_bytecode(bytecode, ast->condition);
+        Operand expr = emit_expr_bytecode(context, bytecode, ast->condition);
         Operand label = gen_conditional_jump(bytecode, OPCODE_JMP_NEQ, create_label(), expr);
 
-        emit_statement_bytecode(bytecode, ast->then);
+        emit_statement_bytecode(context, bytecode, ast->then);
 
         gen_jmp(bytecode, end_label);
         gen_label(bytecode, label);
-        if (ast->otherwise) gen_if_chain(bytecode, ast->otherwise, end_label);
+        if (ast->otherwise) emit_if_chain(context, bytecode, ast->otherwise, end_label);
         return;
     } else if (ast->type == AST_ELSE) {
-        emit_block_bytecode(bytecode, ast->then);
+        emit_block_bytecode(context, bytecode, ast->then);
         return;
     }
     assert(0 && "only elif and else should be chained in 'statement->otherwise' ");
 }
 
 
-
-
-
-void print_procedure(Procedure procedure) {
-    printf("%s:\n", procedure.name);
-    pretty_print_bytecode(procedure.bytecode);
-}
-
-void pretty_print_program(Program program) {
-    for (int i = 0; i < program.count; i++) {
-        print_procedure(program.items[i]);
-        printf("\n");
-    }
-}
-
-void emit_program_bytecode(Program *program, AST *ast) {
+void emit_program_bytecode(EmitContext *context, Program *program, AST *ast) {
     for (int i = 0; i < ast->count; i++) {
         Procedure procedure = {0};
-        emit_procedure_bytecode(&procedure, ast->items[i]);
-        array_append(*program, procedure);
+        switch (ast->items[i]->type) {
+            case AST_PROCEDURE:
+                emit_procedure_bytecode(context, &procedure, ast->items[i]);
+                array_append(*program, procedure);
+                break;
+            case AST_EXTERN:
+                break;
+            default:
+                UNREACHABLE("not top-level decl");
+                break;
+        }
     }
 }
 
-void emit_procedure_bytecode(Procedure *procedure, AST *ast) {
+
+void emit_procedure_bytecode(EmitContext *context, Procedure *procedure, AST *ast) {
     assert(ast->type == AST_PROCEDURE);
 
     procedure->name = ast->name->ident;
@@ -242,45 +229,46 @@ void emit_procedure_bytecode(Procedure *procedure, AST *ast) {
     stack_offset = 0;
     vreg_count = 0;
 
+    context->scope = ast->symbols;
     for (int i = 0; i < ast->param_count; i++) {
-        SymbolData *data = get_symbol(ast->symbols, ast->params[i]->symbol->ident);
+        SymbolData *data = get_symbol(context->scope, ast->params[i]->symbol->ident);
 
         stack_offset += 4;
         data->stack_offset = stack_offset;
     }
-
-    emit_block_bytecode(&procedure->bytecode, ast->body);
+    emit_block_bytecode(context, &procedure->bytecode, ast->body);
+    context->scope = ast->symbols->prev;
 
     procedure->local_var_size = stack_offset;
     procedure->vreg_count = vreg_count;
 }
 
-void emit_decl_bytecode(Bytecode *bytecode, AST *decl) {
-    SymbolData *var = get_symbol(decl->symbol->symbol_table,
-                                 decl->symbol->ident);
+
+void emit_decl_bytecode(EmitContext *context, Bytecode *bytecode, AST *decl) {
+    SymbolData *var = get_symbol(context->scope, decl->symbol->ident);
+
     if (decl->qtype->type == QUECTO_ARRAY) {
         var->stack_offset = stack_offset + 4;
         for (int i = 0; i < decl->qtype->array_size; i++) {
             stack_offset += 4;
-            Operand expr = gen_expr_bytecode(bytecode, decl->expr->items[i]);
+            Operand expr = emit_expr_bytecode(context, bytecode, decl->expr->items[i]);
             gen_store_instr(bytecode, stack_offset, expr.vreg);   
         }
     } else {
         stack_offset += 4;
         var->stack_offset = stack_offset;
 
-        Operand expr = gen_expr_bytecode(bytecode, decl->expr);
+        Operand expr = emit_expr_bytecode(context, bytecode, decl->expr);
         gen_store_instr(bytecode, stack_offset, expr.vreg);
     }
 }
 
-void emit_call_bytecode(Bytecode *bytecode, AST *call) {
-    for (int i = 0; i < call->arg_count; i++) {
-        Operand dest = gen_expr_bytecode(bytecode, call->args[i]);
-        /*SymbolData *var = get_symbol(call->symbol->symbol_table,
-                                     call->symbol->ident);*/
 
+void emit_call_bytecode(EmitContext *context, Bytecode *bytecode, AST *call) {
+    for (int i = 0; i < call->arg_count; i++) {
+        Operand dest = emit_expr_bytecode(context, bytecode, call->args[i]);
         Instr param;
+
         param.opcode = OPCODE_PARAM;
         param.arg1 = dest;
         array_append(*bytecode, param);
@@ -288,85 +276,203 @@ void emit_call_bytecode(Bytecode *bytecode, AST *call) {
     gen_call_instr(bytecode, create_label_from(call->callee->ident));
 }
 
-void emit_statement_bytecode(Bytecode *bytecode, AST *statement) {
+
+void emit_statement_bytecode(EmitContext *context, Bytecode *bytecode, AST *statement) {
     switch (statement->type) {
         case AST_CALL:
-            emit_call_bytecode(bytecode, statement);
+            emit_call_bytecode(context, bytecode, statement);
             break;
         case AST_BLOCK:
-            emit_block_bytecode(bytecode, statement);
+            emit_block_bytecode(context, bytecode, statement);
             break;
         case AST_DECL:
-            emit_decl_bytecode(bytecode, statement);
+            emit_decl_bytecode(context, bytecode, statement);
             break;
         case AST_ASSIGNMENT:
-            emit_assign_bytecode(bytecode, statement);
+            emit_assign_bytecode(context, bytecode, statement);
             break;
         case AST_RETURN:
-            emit_return_bytecode(bytecode, statement);
+            emit_return_bytecode(context, bytecode, statement);
             break;
         case AST_IF:
-            emit_if_bytecode(bytecode, statement);
+            emit_if_bytecode(context, bytecode, statement);
             break;
         case AST_WHILE:
-            emit_while_bytecode(bytecode, statement);
+            emit_while_bytecode(context, bytecode, statement);
             break;
         case AST_BINARY_OP:
-            gen_expr_bytecode(bytecode, statement);
+            emit_expr_bytecode(context, bytecode, statement);
             break;
         default:
             UNREACHABLE("ASTType");
     }
 }
 
-void emit_assign_bytecode(Bytecode *bytecode, AST *assignment) {
-    Operand expr = gen_expr_bytecode(bytecode, assignment->expr);
-    SymbolData *var = get_symbol(assignment->symbol->symbol_table,
-                                 assignment->symbol->ident);
+void emit_assign_bytecode(EmitContext *context, Bytecode *bytecode, AST *assignment) {
+    Operand expr = emit_expr_bytecode(context, bytecode, assignment->expr);
+    SymbolData *var = get_symbol(context->scope, assignment->symbol->ident);
+
     gen_store_instr(bytecode, var->stack_offset, expr.vreg);
 }
 
-void emit_return_bytecode(Bytecode *bytecode, AST *ret) {
+void emit_return_bytecode(EmitContext *context, Bytecode *bytecode, AST *ret) {
     // TODO: in the future should probably have a return stack similar to function param stack
     // to support multiple return values
     Instr instr;
     instr.opcode = OPCODE_RET;
-    instr.arg1 = gen_expr_bytecode(bytecode, ret->expr);
+    instr.arg1 = emit_expr_bytecode(context, bytecode, ret->expr);
     array_append(*bytecode, instr);
 }
 
-void emit_if_bytecode(Bytecode *bytecode, AST *ifs) {
-    Operand expr = gen_expr_bytecode(bytecode, ifs->condition);
+void emit_if_bytecode(EmitContext *context, Bytecode *bytecode, AST *ifs) {
+    Operand expr = emit_expr_bytecode(context, bytecode, ifs->condition);
     Operand end_label = create_label();
     Operand next_cmp = gen_conditional_jump(bytecode, OPCODE_JMP_NEQ, create_label(), expr);
 
-    emit_statement_bytecode(bytecode, ifs->then);
+    emit_statement_bytecode(context, bytecode, ifs->then);
     gen_jmp(bytecode, end_label);
 
     gen_label(bytecode, next_cmp);
-    if (ifs->otherwise) gen_if_chain(bytecode, ifs->otherwise, end_label);
+    if (ifs->otherwise) emit_if_chain(context, bytecode, ifs->otherwise, end_label);
     gen_label(bytecode, end_label);
 }
 
-void emit_while_bytecode(Bytecode *bytecode, AST *whiles) {
+void emit_while_bytecode(EmitContext *context, Bytecode *bytecode, AST *whiles) {
     Operand begin_label = create_label();
     Operand end_label = create_label();
 
     gen_label(bytecode, begin_label);
 
-    Operand expr = gen_expr_bytecode(bytecode, whiles->condition);
+    Operand expr = emit_expr_bytecode(context, bytecode, whiles->condition);
     gen_conditional_jump(bytecode, OPCODE_JMP_NEQ, end_label, expr);
 
-    emit_statement_bytecode(bytecode, whiles->then);
+    emit_statement_bytecode(context, bytecode, whiles->then);
     gen_jmp(bytecode, begin_label);
     gen_label(bytecode, end_label);
 }
 
-void emit_block_bytecode(Bytecode *bytecode, AST *ast) {
+
+void emit_block_bytecode(EmitContext *context, Bytecode *bytecode, AST *ast) {
     for (int i = 0; i < ast->count; i++) {
-        emit_statement_bytecode(bytecode, ast->items[i]);
+        emit_statement_bytecode(context, bytecode, ast->items[i]);
     }
 }
+
+
+IntervalArray create_live_intervals_from_bytecode(Bytecode bytecode, int vreg_count) {
+    IntervalArray intervals;
+    array_init(intervals, vreg_count);
+
+    for (int vreg = 0; vreg < vreg_count; vreg++) {
+        Interval interval = {0};
+        interval.vreg = vreg;
+        // find start
+        for (int i = 0; i < bytecode.count; i++) {
+            if (bytecode.items[i].dest.type == OPERAND_VREG && bytecode.items[i].dest.vreg == vreg) {
+                interval.start = i;
+                break;
+            }
+        }
+
+        // find end
+        for (int i = bytecode.count - 1; i >= 0; i--) {
+            if (bytecode.items[i].arg1.type == OPERAND_VREG && bytecode.items[i].arg1.vreg == vreg) {
+                interval.end = i;
+                break;
+            }
+            if (bytecode.items[i].arg2.type == OPERAND_VREG && bytecode.items[i].arg2.vreg == vreg) {
+                interval.end = i;
+                break;
+            }
+        }
+
+        array_append(intervals, interval);
+    }
+
+    return intervals;
+}
+
+// NOTE: assumes intervals is already sorted
+LocationArray linear_scan_register_allocation(IntervalArray *intervals, int vreg_count, PhysRegs *pregs) {
+    LocationArray locations = {0};
+    bool active_registers[] = { 1, 1, 1, 1, };
+    array_init(locations, vreg_count);
+    locations.count = vreg_count;
+    IntervalArray active = {0};
+
+    for (int i = 0; i < intervals->count; i++) {
+        Interval *interval = &intervals->items[i];
+        Location location = {0};
+        location.type = LOC_REGISTER;
+        int vreg = intervals->items[i].vreg;
+
+        // Expire old intervals
+        for (int j = 0; j < active.count; j++) {
+            if (active.items[j].end > intervals->items[i].start) break;
+
+            // free register
+            active_registers[locations.items[active.items[j].vreg].register_index] = true;
+
+            // remove interval from active
+            int k = j;
+            while (k < active.count - 1) {
+                active.items[k] = active.items[k + 1];
+                k++;
+            }
+            active.count--;
+
+        }
+
+        // 4 is the amount of registers currently, will need to be changed for each platform
+        if (active.count == 4) {
+            // Spill interval i
+            assert(0);
+        } else {
+            // Allocate register
+            for (int k = 0; k < 4; k++) {
+                if (active_registers[k]) {
+                    active_registers[k] = false;
+                    location.type = LOC_REGISTER;
+                    location.register_index = k;
+                    break;
+                }
+            }
+
+            array_append(active, *interval);
+            int insert_slot = active.count - 1;
+            while (insert_slot > 0 && active.items[insert_slot - 1].end > interval->end) {
+                active.items[insert_slot] = active.items[insert_slot - 1];
+                insert_slot--;
+            }
+            active.items[insert_slot] = *interval;
+        }
+
+        locations.items[vreg] = location;
+    }
+    return locations;
+}
+
+
+void print_procedure(Procedure procedure) {
+    printf("%s:\n", procedure.name);
+    pretty_print_bytecode(procedure.bytecode);
+}
+
+
+void pretty_print_program(Program program) {
+    for (int i = 0; i < program.count; i++) {
+        print_procedure(program.items[i]);
+        printf("\n");
+    }
+}
+
+
+void print_live_intervals(IntervalArray intervals) {
+    for (int i = 0; i < intervals.count; i++) {
+        printf("r%d:\t[%d, %d)\n", intervals.items[i].vreg, intervals.items[i].start, intervals.items[i].end);
+    }
+}
+
 
 void print_bytecode_op(Operand op) {
     if (op.type == OPERAND_IMM) {
@@ -382,6 +488,7 @@ void print_bytecode_op(Operand op) {
     }
 }
 
+
 void print_bytecode_operation(const char *name, Operand dst, Operand arg1, Operand arg2) {
     printf("\t");
     print_bytecode_op(dst);
@@ -391,6 +498,7 @@ void print_bytecode_operation(const char *name, Operand dst, Operand arg1, Opera
     print_bytecode_op(arg2);
     printf("\n");
 }
+
 
 void pretty_print_bytecode(Bytecode bytecode) {
     // TODO: this function needs to be reworked to support
@@ -476,105 +584,4 @@ void pretty_print_bytecode(Bytecode bytecode) {
                 printf("error unrecognized instruction in bytecode\n");
         }
     }
-}
-
-IntervalArray create_live_intervals_from_bytecode(Bytecode bytecode, int vreg_count) {
-    IntervalArray intervals;
-    array_init(intervals, vreg_count);
-
-    for (int vreg = 0; vreg < vreg_count; vreg++) {
-        Interval interval = {0};
-        interval.vreg = vreg;
-        // find start
-        for (int i = 0; i < bytecode.count; i++) {
-            if (bytecode.items[i].dest.type == OPERAND_VREG && bytecode.items[i].dest.vreg == vreg) {
-                interval.start = i;
-                break;
-            }
-        }
-
-        // find end
-        for (int i = bytecode.count - 1; i >= 0; i--) {
-            if (bytecode.items[i].arg1.type == OPERAND_VREG && bytecode.items[i].arg1.vreg == vreg) {
-                interval.end = i;
-                break;
-            }
-            if (bytecode.items[i].arg2.type == OPERAND_VREG && bytecode.items[i].arg2.vreg == vreg) {
-                interval.end = i;
-                break;
-            }
-        }
-
-        array_append(intervals, interval);
-    }
-
-    return intervals;
-}
-
-void print_live_intervals(IntervalArray intervals) {
-    for (int i = 0; i < intervals.count; i++) {
-        printf("r%d:\t[%d, %d)\n", intervals.items[i].vreg, intervals.items[i].start, intervals.items[i].end);
-    }
-}
-
-
-
-// NOTE: assumes intervals is already sorted
-LocationArray linear_scan_register_allocation(IntervalArray *intervals, int vreg_count, PhysRegs *pregs) {
-    LocationArray locations = {0};
-    bool active_registers[] = { 1, 1, 1, 1, };
-    array_init(locations, vreg_count);
-    locations.count = vreg_count;
-    IntervalArray active = {0};
-
-    for (int i = 0; i < intervals->count; i++) {
-        Interval *interval = &intervals->items[i];
-        Location location = {0};
-        location.type = LOC_REGISTER;
-        int vreg = intervals->items[i].vreg;
-
-        // Expire old intervals
-        for (int j = 0; j < active.count; j++) {
-            if (active.items[j].end > intervals->items[i].start) break;
-
-            // free register
-            active_registers[locations.items[active.items[j].vreg].register_index] = true;
-
-            // remove interval from active
-            int k = j;
-            while (k < active.count - 1) {
-                active.items[k] = active.items[k + 1];
-                k++;
-            }
-            active.count--;
-
-        }
-
-        // 4 is the amount of registers currently, will need to be changed for each platform
-        if (active.count == 4) {
-            // Spill interval i
-            assert(0);
-        } else {
-            // Allocate register
-            for (int k = 0; k < 4; k++) {
-                if (active_registers[k]) {
-                    active_registers[k] = false;
-                    location.type = LOC_REGISTER;
-                    location.register_index = k;
-                    break;
-                }
-            }
-
-            array_append(active, *interval);
-            int insert_slot = active.count - 1;
-            while (insert_slot > 0 && active.items[insert_slot - 1].end > interval->end) {
-                active.items[insert_slot] = active.items[insert_slot - 1];
-                insert_slot--;
-            }
-            active.items[insert_slot] = *interval;
-        }
-
-        locations.items[vreg] = location;
-    }
-    return locations;
 }

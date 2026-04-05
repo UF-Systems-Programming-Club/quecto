@@ -37,6 +37,7 @@ typedef struct {
         struct {
             int param_count;
             int return_count;
+            QuectoType *param_types[MAX_PARAMS];
             QuectoType *return_types[MAX_PARAMS];
             int local_var_size;
         };

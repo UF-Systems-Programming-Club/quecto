@@ -7,11 +7,12 @@
 typedef struct {
   Arena *arena;
   HashTable *type_intern_table;
+  SymbolTable *symbol_table;
 } AnalysisContext;
 
 void analyze_ast(AnalysisContext *context, AST *ast);
-void analyze_block(AnalysisContext *context, AST *block, SymbolTable *scope);
+void analyze_block(AnalysisContext *context, AST *block);
 void analyze_procedure(AnalysisContext *context, AST *procedure);
-void analyze_statement(AnalysisContext *context, AST *statement, SymbolTable *scope);
+void analyze_statement(AnalysisContext *context, AST *statement);
 
 #endif

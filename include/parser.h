@@ -9,7 +9,6 @@
 typedef struct {
     TokenArray tokens;
     int current;
-    SymbolTable *cur_symbol_table;
     HashTable *type_intern_table;
     Arena *arena;
 } ParserState;
@@ -30,6 +29,7 @@ AST *parse_assignment(ParserState *parser);
 AST *parse_if(ParserState *parser);
 AST *parse_block(ParserState *parser);
 AST *parse_return(ParserState *parser);
+AST *parse_extern(ParserState *parser);
 
 // TODO: change this out to separate param and return list
 size_t parse_args(ParserState *parser, AST *list[MAX_PARAMS]);

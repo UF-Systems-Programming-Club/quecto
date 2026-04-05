@@ -50,7 +50,7 @@ void print_symbol_table(SymbolTable *symbol_table, int indent) {
         SymbolData *data = (SymbolData*) symbol_table->table.items[i];
 
         print_indent(1, "\"%.*s\":\t{ type:\t%s,\tstack offset:\t%d },\n",
-            symbol_table->table.keys[i].size,
+            (int)symbol_table->table.keys[i].size,
             (char*)symbol_table->table.keys[i].data,
             symbol_type_to_string_table[data->type],
             data->stack_offset);

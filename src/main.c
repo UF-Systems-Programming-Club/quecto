@@ -19,12 +19,42 @@
 #define ENTRY_SYMBOL "_start"
 #endif
 
-int main(int argc, char **argv) {
-    FILE *f = fopen("examples/proc.q", "r");
+void help_prompt();
+int compile(const char *filename);
 
+int main(int argc, char **argv) { // quecto <command> <input> {flags}
+    if (argc == 1) {
+        help_prompt();
+    } else if (argc >= 2) {
+        int current_arg = 1;
+        if (strncmp(argv[current_arg++], "build", sizeof("build")) == 0) {
+            if (current_arg >= argc) {
+                printf("no file supplied.");
+                return -1;
+            }
+            char *filename = argv[current_arg];
+            if (compile(filename) == 0) {
+                printf("compiled successfully.\n");
+            } else {
+                printf("error\n");
+            }
+        } else if (strncmp(argv[1], "help", sizeof("help")) == 0) {
+            help_prompt();
+        }
+    }   
+}
+
+void help_prompt() {
+    printf("info: Usage: quecto [command] [options]\n");
+    printf("List of Commands:\n");
+    printf("\tbuild {file}\t\tBuilds the file.\n");
+    printf("\thelp\t\tShows this prompt.\n");
+}
+
+int compile(const char *filename) {
+    FILE *f = fopen(filename, "r");
     fseek(f, 0, SEEK_END);
     long fsize = ftell(f);
-
     fseek(f, 0, SEEK_SET);
 
     src = malloc(fsize + 1);
@@ -33,62 +63,49 @@ int main(int argc, char **argv) {
 
     src[fsize] = '\0';
     src_size = fsize;
-
-    // printf("%s\n", src);
-
+    
     TokenArray tokens = tokenize(src, src_size);
-    if (error) return 0;
+    if (error) return -1;
 
-    // for (int i = 0; i < tokens.count; i++) {
-    //     print_token(tokens.items[i]);
-    // }
-    // printf("\n");
+    Arena backing = {0};
+    HashTable types = {0}; // intern table
 
-    Arena ast_arena;
-    arena_create(&ast_arena, 1024 * 1024);
+    arena_create(&backing, 1024 * 1024);
 
-    HashTable type_intern_table;
-
-    //arena_intern(&ast_arena, &type_intern_table, &(QuectoType){.type = QUECTO_U32}, sizeof(QuectoType));
-  
-    ParserState parser = {0};
-    parser.tokens = tokens;
-    parser.arena = &ast_arena;
-    // global symbol table initialization
-    parser.cur_symbol_table = arena_alloc_type(&ast_arena, SymbolTable);
-    parser.type_intern_table = &type_intern_table;
+    ParserState parser = {
+        .tokens = tokens,
+        .arena = &backing,
+        .type_intern_table = &types,
+    };
 
     AST *ast = parse_program(&parser);
 
-    for (int i = 0; i < type_intern_table.capacity; i++) {
-        if (type_intern_table.keys[i].data != NULL) {print_type(type_intern_table.items[i]); printf("\n"); }
-    }
+    if (error) return -1;
 
-    print_ast(ast, 0);
-    printf("\n");
+    SymbolTable symbols = { 0 };
 
-    AnalysisContext analysis_ctx = {0};
-    analysis_ctx.type_intern_table = &type_intern_table;
-    analysis_ctx.arena = &ast_arena;
-    
+    AnalysisContext analysis_ctx = (AnalysisContext) {
+        .arena = &backing,
+        .type_intern_table = &types,
+        .symbol_table = &symbols,
+    };
+
     analyze_ast(&analysis_ctx, ast);
 
     print_ast(ast, 0);
-    printf("\n");
 
-    if (error) return 0;
-
-    printf("byte code started\n");
+    EmitContext emit_ctx = (EmitContext) {
+        .scope = &symbols,
+    };
 
     Program program = {0};
-    emit_program_bytecode(&program, ast);
-    pretty_print_program(program);
+    emit_program_bytecode(&emit_ctx, &program, ast);
 
+    pretty_print_program(program);
+    
     PhysRegs pregs = {0};
     adhere_program(&program, &pregs);
     analyze_program(&program, &pregs);
-
-
 
     FILE *out = fopen("out.S", "w");
 
@@ -103,5 +120,8 @@ int main(int argc, char **argv) {
     compile_program(out, &program);
 
     fclose(out);
-    arena_free(&ast_arena);
+    
+    arena_free(&backing);
+    if (error) return -1;
+    return 0;
 }
