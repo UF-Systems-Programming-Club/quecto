@@ -46,7 +46,7 @@ Currently the Quecto Compiler has 5 stages:
   - IR Generation
   - Code Generation
 
-## Lexing
+### Lexing
 
 Nothing out of the ordinary, it is a handwritten tokenizer/lexer. It uses GPERF to generate a hashmap to detect keywords and
 other reserved words. One goal is to write our own GPERF, though it is not a priority.
@@ -56,7 +56,7 @@ Related Files:
   - `src/tokenizer.c`
   - `src/keywords.gperf`
   
-## Parsing
+### Parsing
 
 Generation of an AST is done via Recursive Descent Parsing.
 
@@ -66,7 +66,7 @@ Related Files:
   - `include/ast.h`
   - `include/ast.c`
 
-## Analysis
+### Analysis
 
 Parsing merely structurally creates the AST but assigns no meaning to symbols but this can be derived through analyzing the structure
 to see if it is valid.
@@ -75,7 +75,7 @@ Related Files:
   - `include/analysis.h`
   - `src/analysis.c`
 
-## IR Generation
+### IR Generation
 
 Quecto uses its own Intermediate Representation that currently has roughly 22 different OPCODEs but these are subject to change. This
 stage is dependent on Analysis such that the IR code generated is valid and it is also depedent on the Symbol Table derived in Analysis.
@@ -84,7 +84,7 @@ Related Files:
   - `include/bytecode.h`
   - `src/bytecode.c`
 
-## Code Generation
+### Code Generation
 
 Currently, Quecto is hardcoded to output to NASM assembly to be compiled to x86_64. There are future plans for a slew of backends. Most
 of these backends essentially translate the IR to the desired assembly convention though there are some adherence rules based on that
