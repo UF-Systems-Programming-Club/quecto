@@ -9,6 +9,7 @@ typedef enum {
     OPCODE_SUB,
     OPCODE_MUL,
     OPCODE_DIV,
+    OPCODE_CMP,
     OPCODE_CMP_EQ,
     OPCODE_CMP_LT,
     OPCODE_CMP_GT,
@@ -30,6 +31,7 @@ typedef enum {
     OPCODE_PARAM,
 
     OPCODE_LABEL,      // TODO: might not be the best to conflict metadata on bytecode with operands. this is just for time being
+    OPCODE_COUNT,
 } Opcode;
 
 typedef enum {
@@ -122,9 +124,9 @@ typedef struct {
     IntervalArray regs[4]; // TODO: change this to be dependent on the backend (but still static)
 } PhysRegs; // Structure to record the info of hardware and ABI constraints on registers for allocator
 
-extern const char *registers[];
-extern const char *registers_8bit_low[];
-extern const char *registers_64bit[];
+// extern const char *registers[];
+// extern const char *registers_8bit_low[];
+// extern const char *registers_64bit[];
 
 Operand gen_add_instr(Bytecode *bytecode, Operand left, Operand right);
 Operand gen_sub_instr(Bytecode *bytecode, Operand left, Operand right);

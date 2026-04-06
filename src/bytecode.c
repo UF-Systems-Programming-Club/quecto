@@ -8,17 +8,17 @@
 int vreg_count = 0;
 int stack_offset = 0;
 
-const char *registers[] = {
-    "eax", "ecx", "edx", "edi",
-};
+//const char *registers[] = {
+//     "eax", "ecx", "edx", "edi",
+// };
 
-const char *registers_8bit_low[] = { // NOTE: this is meant to be a temporary solution for accessing lower 8 bits for setCC instructions
-    "al", "cl", "dl", "dil",
-};
+// const char *registers_8bit_low[] = { // NOTE: this is meant to be a temporary solution for accessing lower 8 bits for setCC instructions
+//     "al", "cl", "dl", "dil",
+// };
 
-const char *registers_64bit[] = {
-    "rax", "rcx", "rdx", "rdi"
-};
+// const char *registers_64bit[] = {
+//     "rax", "rcx", "rdx", "rdi"
+// };
 
 // NOTE: in the future these instructions will hold more information like
 // size of type, signed or unsigned, etc;
@@ -475,16 +475,14 @@ void print_live_intervals(IntervalArray intervals) {
 
 
 void print_bytecode_op(Operand op) {
-    if (op.type == OPERAND_IMM) {
-        printf("%d", op.imm);
-    } else if (op.type == OPERAND_VREG) {
-        printf("r%d", op.vreg);
-    } else if (op.type == OPERAND_LABEL) {
-        printf(".%s", op.label_name);
-    } else if (op.type == OPERAND_STACK) {
-        printf("[rbp - %d]", op.stack_offset);
-    } else {
-        printf("%s", registers[op.reg]);
+    switch(op.type) {
+        case OPERAND_IMM:      printf("%d", op.imm); break;
+        case OPERAND_VREG:     printf("r%d", op.vreg); break;
+        case OPERAND_LABEL:    printf(".%s", op.label_name); break;
+        case OPERAND_STACK:    printf("[rbp - %d]", op.stack_offset); break;
+        default:
+            UNREACHABLE("operand not valid");
+            break;
     }
 }
 

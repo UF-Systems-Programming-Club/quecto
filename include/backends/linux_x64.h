@@ -1,3 +1,5 @@
+#include "../codegen.h"
+
 #ifndef LINUX_X64_H
 #define LINUX_X64_H
 
@@ -9,37 +11,31 @@ typedef enum {
     X64_CMP,
     X64_MOV,
     X64_RET,
+    X64_JMP,
+    X64_JNE,
     X64_CALL,
-} MachOpcode;
+
+    X64_LABEL, // aimed to be removed
+} X64_Opcode;
 
 typedef enum {
-    MACH_VREG,
-    MACH_REG,
-    MACH_STACK,
-    MACH_IMM,
-} MachOperandType;
+    x64_EAX,
+    x64_ECX,
+    x64_EDX,
+    x64_EDI,
+    x64_ESI,
 
-typedef struct {
-    MachOperandType type;
-    union {
-        int vreg;
-        int reg;
-        int imm;
-        int stack_offset;
-    };
-} MachOperand;
+    x64_AL,
+    x64_CL,
+    x64_DL,
+    x64_DIL,
 
-typedef struct {
-    MachOpcode opcode;
-    MachOperand dest;
-    MachOperand arg1;
-    MachOperand arg2;
-} MachOp;
+    x64_RAX,
+    x64_RCX,
+    x64_RDX,
+    x64_RDI
+} x64_Register;
 
-typedef struct {
-    MachOp *items;
-    size_t count;
-    size_t capacity;
-} MachCode;
+extern CodegenBackend LINUX_X86_64_BACKEND;
 
 #endif

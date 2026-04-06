@@ -10,6 +10,7 @@
 #include "bytecode.h"
 #include "codegen.h"
 #include "error.h"
+#include "backends/linux_x64.h"
 
 #ifdef __MACH__
 #define EXIT_STATUS "0x2000001"
@@ -106,6 +107,8 @@ int compile(const char *filename) {
     PhysRegs pregs = {0};
     adhere_program(&program, &pregs);
     analyze_program(&program, &pregs);
+
+    compile_program_with(&LINUX_X86_64_BACKEND, &program);
 
     FILE *out = fopen("out.S", "w");
 
