@@ -1,7 +1,9 @@
 #include <stdio.h>
 
 #include "ast.h"
+#include "bytecode.h"
 #include "common.h"
+#include "error.h"
 #include "symbol_table.h"
 
 void print_ast(AST* ast, int indent) {
@@ -10,6 +12,10 @@ void print_ast(AST* ast, int indent) {
             for (int i = 0; i < ast->count; i++) {
                 print_ast(ast->items[i], 0);
             }
+            break;
+        case AST_EXTERN:
+            print_indent(0, "extern ");
+            print_ast(ast->externed, 0);
             break;
         case AST_PROCEDURE:
             print_indent(0, "proc ");
@@ -28,7 +34,8 @@ void print_ast(AST* ast, int indent) {
                 if (i < ast->return_count - 1) printf(", ");
             }
             printf(")\n");
-            print_ast(ast->body, 0);
+            if (ast->body != NULL)
+                print_ast(ast->body, 0);
             break;
         case AST_CALL:
             print_ast(ast->callee, indent);
@@ -38,6 +45,20 @@ void print_ast(AST* ast, int indent) {
                 if (i < ast->arg_count - 1) printf(", ");
             }
             printf(")");
+            break;
+        case AST_INDEX:
+            print_ast(ast->access, indent);
+            printf("[");
+            print_ast(ast->index, 0);
+            printf("]\n");
+            break;
+        case AST_LIST:
+            printf("{");
+            for (int i = 0; i < ast->count; i++) {
+                print_ast(ast->items[i], 0);
+                if (i < ast->count - 1) printf(", ");
+            }
+            printf("}");
             break;
         case AST_SYMBOL:
             print_indent(0, "%s", ast->ident);
@@ -75,6 +96,7 @@ void print_ast(AST* ast, int indent) {
                 case OP_MINUS:          printf(" - "); break;
                 case OP_DIVIDE:         printf(" / "); break;
                 case OP_MULTIPLY:       printf(" * "); break;
+                default: UNREACHABLE("invalid operation.");
             }
             print_ast(ast->right, 0);
             printf(")");
@@ -118,5 +140,44 @@ void print_ast(AST* ast, int indent) {
         default:
             printf("unknown\n");
             break;
+    }
+}
+
+bool op_is_arithmetic(BinaryOp op) {
+    switch (op) {
+        case OP_DIVIDE:
+        case OP_PLUS:
+        case OP_MINUS:
+        case OP_MULTIPLY:
+            return true;
+        default:
+            return false;
+    }
+}
+
+bool op_is_conditional(BinaryOp op) {
+    switch (op) {
+        case OP_EQUALS:
+        case OP_LESS_EQUALS:
+        case OP_GREATER_THAN:
+        case OP_GREATER_EQUALS:
+        case OP_LESS_THAN:
+            return true;
+        default:
+            return false;
+    }
+}
+
+
+BinaryOp op_opposite(BinaryOp op) {
+    switch(op) {
+        case OP_EQUALS: return OP_NEQUALS;
+        case OP_NEQUALS: return OP_EQUALS;
+        case OP_LESS_THAN: return OP_GREATER_EQUALS;
+        case OP_GREATER_THAN: return OP_LESS_EQUALS;
+        case OP_LESS_EQUALS: return OP_GREATER_THAN;
+        case OP_GREATER_EQUALS: return OP_LESS_THAN;
+        default:
+            UNREACHABLE("invalid binary op");
     }
 }

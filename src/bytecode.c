@@ -8,8 +8,28 @@
 int vreg_count = 0;
 int stack_offset = 0;
 
+//const char *registers[] = {
+//     "eax", "ecx", "edx", "edi",
+// };
+
+// const char *registers_8bit_low[] = { // NOTE: this is meant to be a temporary solution for accessing lower 8 bits for setCC instructions
+//     "al", "cl", "dl", "dil",
+// };
+
+// const char *registers_64bit[] = {
+//     "rax", "rcx", "rdx", "rdi"
+// };
+
 // NOTE: in the future these instructions will hold more information like
 // size of type, signed or unsigned, etc;
+
+const Opcode jump_condition_opcode_table[OP_COUNT] = {
+    [OP_EQUALS] = OPCODE_JMP_EQ,
+    [OP_LESS_THAN] = OPCODE_JMP_LT,
+    [OP_GREATER_THAN] = OPCODE_JMP_GT,
+    [OP_LESS_EQUALS] = OPCODE_JMP_LE,
+    [OP_GREATER_EQUALS] = OPCODE_JMP_GE,
+};
 
 Operand gen_jmp(Bytecode *bytecode, Operand label) {
     Instr jmp;
@@ -19,11 +39,12 @@ Operand gen_jmp(Bytecode *bytecode, Operand label) {
     return label;
 }
 
-Operand gen_conditional_jump(Bytecode *bytecode, Opcode type, Operand label, Operand condition) {
+Operand gen_conditional_jump(Bytecode *bytecode, Opcode type, Operand label, Operand arg1, Operand arg2) {
     Instr jmp;
     jmp.opcode = type;
     jmp.dest = label;
-    jmp.arg1 = condition;
+    jmp.arg1 = arg1;
+    jmp.arg2 = arg2;
     array_append(*bytecode, jmp);
     return label;
 }
@@ -87,6 +108,19 @@ Operand gen_load_instr(Bytecode *bytecode, int stack_offset) {
     return load.dest;
 }
 
+Operand gen_load_at_instr(Bytecode *bytecode, int stack_offset, int vreg) {
+    Instr load;
+    load.opcode = OPCODE_LOAD_INDEX;
+    load.dest.type = OPERAND_VREG;
+    load.dest.vreg = vreg_count++;
+    load.arg1.type = OPERAND_STACK;
+    load.arg1.stack_offset = stack_offset;
+    load.arg2.type = OPERAND_VREG;
+    load.arg2.vreg = vreg;
+    array_append(*bytecode, load);
+    return load.dest;
+}
+
 Operand gen_store_instr(Bytecode *bytecode, int stack_offset, int vreg) {
     Instr store;
     store.opcode = OPCODE_STORE;
@@ -102,9 +136,18 @@ Operand gen_int_lit_bytecode(Bytecode *bytecode, AST *int_lit) {
     return gen_loadi_instr(bytecode, int_lit->int_lit);
 }
 
-Operand gen_expr_bytecode(Bytecode *bytecode, AST *expr) {
+Operand emit_expr_bytecode(EmitContext *context, Bytecode *bytecode, AST *expr) {
     if (expr->type == AST_INT_LIT) {
         return gen_int_lit_bytecode(bytecode, expr);
+    }
+    if (expr->type == AST_LIST) {
+        return (Operand){0};
+    }
+    if (expr->type == AST_INDEX) {
+        SymbolData *arr = get_symbol(context->scope, expr->access->ident);
+        Operand at = emit_expr_bytecode(context, bytecode, expr->index);
+    
+        return gen_load_at_instr(bytecode, arr->stack_offset, at.vreg);
     }
     if (expr->type == AST_CALL) {
         Operand dest;
@@ -112,7 +155,7 @@ Operand gen_expr_bytecode(Bytecode *bytecode, AST *expr) {
         dest.vreg = vreg_count++;
 
         for (int i = 0; i < expr->arg_count; i++) {
-            Operand dest = gen_expr_bytecode(bytecode, expr->args[i]);
+            Operand dest = emit_expr_bytecode(context, bytecode, expr->args[i]);
             Instr param;
             param.opcode = OPCODE_PARAM;
             param.arg1 = dest;
@@ -122,16 +165,15 @@ Operand gen_expr_bytecode(Bytecode *bytecode, AST *expr) {
         return gen_call_instr_into(bytecode, dest, create_label_from(expr->callee->ident));
     }
     if (expr->type == AST_SYMBOL) {
-        SymbolData *var = get_symbol(expr->symbol_table,
-                                     expr->ident);
+        SymbolData *var = get_symbol(context->scope, expr->ident);
         return gen_load_instr(bytecode, var->stack_offset);
     }
 
     Instr instr;
     instr.dest.type = OPERAND_VREG;
     instr.dest.vreg = vreg_count++;
-    instr.arg1 = gen_expr_bytecode(bytecode, expr->left);
-    instr.arg2 = gen_expr_bytecode(bytecode, expr->right);
+    instr.arg1 = emit_expr_bytecode(context, bytecode, expr->left);
+    instr.arg2 = emit_expr_bytecode(context, bytecode, expr->right);
 
     switch (expr->op) {
         case OP_PLUS:           instr.opcode = OPCODE_ADD; break;
@@ -143,55 +185,65 @@ Operand gen_expr_bytecode(Bytecode *bytecode, AST *expr) {
         case OP_GREATER_THAN:   instr.opcode = OPCODE_CMP_GT; break;
         case OP_LESS_EQUALS:    instr.opcode = OPCODE_CMP_LEQ; break;
         case OP_GREATER_EQUALS: instr.opcode = OPCODE_CMP_GEQ; break;
+        default: UNREACHABLE("invalid operation");
     }
     array_append(*bytecode, instr);
 
     return instr.dest;
 }
 
-void gen_if_chain(Bytecode *bytecode, AST *ast, Operand end_label) {
-    if (ast->type == AST_ELIF) {
-        Operand expr = gen_expr_bytecode(bytecode, ast->condition);
-        Operand label = gen_conditional_jump(bytecode, OPCODE_JMP_NEQ, create_label(), expr);
 
-        emit_statement_bytecode(bytecode, ast->then);
+void emit_branch_comp(EmitContext *context, Bytecode *bytecode, Operand label, AST *expr) {// special case of expression
+    if (expr->type == AST_BINARY_OP && op_is_conditional(expr->op)) {
+        Operand left = emit_expr_bytecode(context, bytecode, expr->left);
+        Operand right = emit_expr_bytecode(context, bytecode, expr->right);
+
+        gen_conditional_jump(bytecode, jump_condition_opcode_table[op_opposite(expr->op)], label, left, right);
+    } else {
+        UNREACHABLE("to add...");
+    }
+}
+
+
+void emit_if_chain(EmitContext *context, Bytecode *bytecode, AST *ast, Operand end_label) {
+    if (ast->type == AST_ELIF) {
+        // Operand expr = emit_expr_bytecode(context, bytecode, ast->condition);
+        Operand label = create_label();
+        emit_branch_comp(context, bytecode, label, ast->condition);
+
+        emit_statement_bytecode(context, bytecode, ast->then);
 
         gen_jmp(bytecode, end_label);
         gen_label(bytecode, label);
-        if (ast->otherwise) gen_if_chain(bytecode, ast->otherwise, end_label);
+        if (ast->otherwise) emit_if_chain(context, bytecode, ast->otherwise, end_label);
         return;
     } else if (ast->type == AST_ELSE) {
-        emit_block_bytecode(bytecode, ast->then);
+        emit_block_bytecode(context, bytecode, ast->then);
         return;
     }
     assert(0 && "only elif and else should be chained in 'statement->otherwise' ");
 }
 
 
-
-
-
-void print_procedure(Procedure procedure) {
-    printf("%s:\n", procedure.name);
-    pretty_print_bytecode(procedure.bytecode);
-}
-
-void pretty_print_program(Program program) {
-    for (int i = 0; i < program.count; i++) {
-        print_procedure(program.items[i]);
-        printf("\n");
-    }
-}
-
-void emit_program_bytecode(Program *program, AST *ast) {
+void emit_program_bytecode(EmitContext *context, Program *program, AST *ast) {
     for (int i = 0; i < ast->count; i++) {
         Procedure procedure = {0};
-        emit_procedure_bytecode(&procedure, ast->items[i]);
-        array_append(*program, procedure);
+        switch (ast->items[i]->type) {
+            case AST_PROCEDURE:
+                emit_procedure_bytecode(context, &procedure, ast->items[i]);
+                array_append(*program, procedure);
+                break;
+            case AST_EXTERN:
+                break;
+            default:
+                UNREACHABLE("not top-level decl");
+                break;
+        }
     }
 }
 
-void emit_procedure_bytecode(Procedure *procedure, AST *ast) {
+
+void emit_procedure_bytecode(EmitContext *context, Procedure *procedure, AST *ast) {
     assert(ast->type == AST_PROCEDURE);
 
     procedure->name = ast->name->ident;
@@ -200,36 +252,46 @@ void emit_procedure_bytecode(Procedure *procedure, AST *ast) {
     stack_offset = 0;
     vreg_count = 0;
 
+    context->scope = ast->symbols;
     for (int i = 0; i < ast->param_count; i++) {
-        SymbolData *data = get_symbol(ast->symbols, ast->params[i]->symbol->ident);
+        SymbolData *data = get_symbol(context->scope, ast->params[i]->symbol->ident);
 
         stack_offset += 4;
         data->stack_offset = stack_offset;
     }
-
-    emit_block_bytecode(&procedure->bytecode, ast->body);
+    emit_block_bytecode(context, &procedure->bytecode, ast->body);
+    context->scope = ast->symbols->prev;
 
     procedure->local_var_size = stack_offset;
     procedure->vreg_count = vreg_count;
 }
 
-void emit_decl_bytecode(Bytecode *bytecode, AST *decl) {
-    Operand expr = gen_expr_bytecode(bytecode, decl->expr);
-    SymbolData *var = get_symbol(decl->symbol->symbol_table,
-                                 decl->symbol->ident);
-    stack_offset += 4;
-    var->stack_offset = stack_offset;
 
-    gen_store_instr(bytecode, var->stack_offset, expr.vreg);
+void emit_decl_bytecode(EmitContext *context, Bytecode *bytecode, AST *decl) {
+    SymbolData *var = get_symbol(context->scope, decl->symbol->ident);
+
+    if (decl->qtype->type == QUECTO_ARRAY) {
+        var->stack_offset = stack_offset + 4;
+        for (int i = 0; i < decl->qtype->array_size; i++) {
+            stack_offset += 4;
+            Operand expr = emit_expr_bytecode(context, bytecode, decl->expr->items[i]);
+            gen_store_instr(bytecode, stack_offset, expr.vreg);   
+        }
+    } else {
+        stack_offset += 4;
+        var->stack_offset = stack_offset;
+
+        Operand expr = emit_expr_bytecode(context, bytecode, decl->expr);
+        gen_store_instr(bytecode, stack_offset, expr.vreg);
+    }
 }
 
-void emit_call_bytecode(Bytecode *bytecode, AST *call) {
-    for (int i = 0; i < call->arg_count; i++) {
-        Operand dest = gen_expr_bytecode(bytecode, call->args[i]);
-        /*SymbolData *var = get_symbol(call->symbol->symbol_table,
-                                     call->symbol->ident);*/
 
+void emit_call_bytecode(EmitContext *context, Bytecode *bytecode, AST *call) {
+    for (int i = 0; i < call->arg_count; i++) {
+        Operand dest = emit_expr_bytecode(context, bytecode, call->args[i]);
         Instr param;
+
         param.opcode = OPCODE_PARAM;
         param.arg1 = dest;
         array_append(*bytecode, param);
@@ -237,192 +299,93 @@ void emit_call_bytecode(Bytecode *bytecode, AST *call) {
     gen_call_instr(bytecode, create_label_from(call->callee->ident));
 }
 
-void emit_statement_bytecode(Bytecode *bytecode, AST *statement) {
+
+void emit_statement_bytecode(EmitContext *context, Bytecode *bytecode, AST *statement) {
     switch (statement->type) {
         case AST_CALL:
-            emit_call_bytecode(bytecode, statement);
+            emit_call_bytecode(context, bytecode, statement);
             break;
         case AST_BLOCK:
-            emit_block_bytecode(bytecode, statement);
+            emit_block_bytecode(context, bytecode, statement);
             break;
         case AST_DECL:
-            emit_decl_bytecode(bytecode, statement);
+            emit_decl_bytecode(context, bytecode, statement);
             break;
         case AST_ASSIGNMENT:
-            emit_assign_bytecode(bytecode, statement);
+            emit_assign_bytecode(context, bytecode, statement);
             break;
         case AST_RETURN:
-            emit_return_bytecode(bytecode, statement);
+            emit_return_bytecode(context, bytecode, statement);
             break;
         case AST_IF:
-            emit_if_bytecode(bytecode, statement);
+            emit_if_bytecode(context, bytecode, statement);
             break;
         case AST_WHILE:
-            emit_while_bytecode(bytecode, statement);
+            emit_while_bytecode(context, bytecode, statement);
             break;
         case AST_BINARY_OP:
-            gen_expr_bytecode(bytecode, statement);
+            emit_expr_bytecode(context, bytecode, statement);
             break;
         default:
             UNREACHABLE("ASTType");
     }
 }
 
-void emit_assign_bytecode(Bytecode *bytecode, AST *assignment) {
-    Operand expr = gen_expr_bytecode(bytecode, assignment->expr);
-    SymbolData *var = get_symbol(assignment->symbol->symbol_table,
-                                 assignment->symbol->ident);
+void emit_assign_bytecode(EmitContext *context, Bytecode *bytecode, AST *assignment) {
+    Operand expr = emit_expr_bytecode(context, bytecode, assignment->expr);
+    SymbolData *var = get_symbol(context->scope, assignment->symbol->ident);
+
     gen_store_instr(bytecode, var->stack_offset, expr.vreg);
 }
 
-void emit_return_bytecode(Bytecode *bytecode, AST *ret) {
+void emit_return_bytecode(EmitContext *context, Bytecode *bytecode, AST *ret) {
     // TODO: in the future should probably have a return stack similar to function param stack
     // to support multiple return values
     Instr instr;
     instr.opcode = OPCODE_RET;
-    instr.arg1 = gen_expr_bytecode(bytecode, ret->expr);
+    instr.arg1 = emit_expr_bytecode(context, bytecode, ret->expr);
     array_append(*bytecode, instr);
 }
 
-void emit_if_bytecode(Bytecode *bytecode, AST *ifs) {
-    Operand expr = gen_expr_bytecode(bytecode, ifs->condition);
-    Operand end_label = create_label();
-    Operand next_cmp = gen_conditional_jump(bytecode, OPCODE_JMP_NEQ, create_label(), expr);
 
-    emit_statement_bytecode(bytecode, ifs->then);
+
+void emit_if_bytecode(EmitContext *context, Bytecode *bytecode, AST *ifs) {
+    // Operand expr = emit_expr_bytecode(context, bytecode, ifs->condition);
+    Operand end_label = create_label();
+    
+    // Operand next_cmp = gen_conditional_jump(bytecode, OPCODE_JMP_NEQ, create_label(), expr);
+    emit_branch_comp(context, bytecode, end_label, ifs->condition);
+
+    emit_statement_bytecode(context, bytecode, ifs->then);
     gen_jmp(bytecode, end_label);
 
-    gen_label(bytecode, next_cmp);
-    if (ifs->otherwise) gen_if_chain(bytecode, ifs->otherwise, end_label);
+    // gen_label(bytecode, next_cmp);
+    if (ifs->otherwise) emit_if_chain(context, bytecode, ifs->otherwise, end_label);
     gen_label(bytecode, end_label);
 }
 
-void emit_while_bytecode(Bytecode *bytecode, AST *whiles) {
+void emit_while_bytecode(EmitContext *context, Bytecode *bytecode, AST *whiles) {
     Operand begin_label = create_label();
     Operand end_label = create_label();
 
     gen_label(bytecode, begin_label);
 
-    Operand expr = gen_expr_bytecode(bytecode, whiles->condition);
-    gen_conditional_jump(bytecode, OPCODE_JMP_NEQ, end_label, expr);
+    // Operand expr = emit_expr_bytecode(context, bytecode, whiles->condition);
+    emit_branch_comp(context, bytecode, end_label, whiles->condition);    
+    // // gen_conditional_jump(bytecode, OPCODE_JMP_NEQ, end_label, expr);
 
-    emit_statement_bytecode(bytecode, whiles->then);
+    emit_statement_bytecode(context, bytecode, whiles->then);
     gen_jmp(bytecode, begin_label);
     gen_label(bytecode, end_label);
 }
 
-void emit_block_bytecode(Bytecode *bytecode, AST *ast) {
+
+void emit_block_bytecode(EmitContext *context, Bytecode *bytecode, AST *ast) {
     for (int i = 0; i < ast->count; i++) {
-        emit_statement_bytecode(bytecode, ast->items[i]);
+        emit_statement_bytecode(context, bytecode, ast->items[i]);
     }
 }
 
-void print_bytecode_op(Operand op) {
-    if (op.type == OPERAND_IMM) {
-        printf("%d", op.imm);
-    } else if (op.type == OPERAND_VREG) {
-        printf("r%d", op.vreg);
-    } else if (op.type == OPERAND_LABEL) {
-        printf(".%s", op.label_name);
-    } else if (op.type == OPERAND_STACK) {
-        printf("[rbp - %d]", op.stack_offset);
-    } else {
-        printf("%s", registers[op.reg]);
-    }
-}
-
-void print_bytecode_operation(const char *name, Operand dst, Operand arg1, Operand arg2) {
-    printf("\t");
-    print_bytecode_op(dst);
-    printf(" = %s ", name);
-    print_bytecode_op(arg1);
-    printf(", ");
-    print_bytecode_op(arg2);
-    printf("\n");
-}
-
-void pretty_print_bytecode(Bytecode bytecode) {
-    // TODO: this function needs to be reworked to support
-    // multiple operand types. I need to decide on what types
-    // of operands each instruction can support, and if immediate
-    // arithemtic should have separate instructions or not (leaning towards no for now)
-    for (int i = 0; i < bytecode.count; i++) {
-        Instr instr = bytecode.items[i];
-        printf("%d: ", i);
-        switch (instr.opcode) {
-            case OPCODE_ADD:
-                print_bytecode_operation("add", instr.dest, instr.arg1, instr.arg2);
-                break;
-            case OPCODE_SUB:
-                print_bytecode_operation("sub", instr.dest, instr.arg1, instr.arg2);
-                break;
-            case OPCODE_MUL:
-                print_bytecode_operation("mul", instr.dest, instr.arg1, instr.arg2);
-                break;
-            case OPCODE_DIV:
-                print_bytecode_operation("div", instr.dest, instr.arg1, instr.arg2);
-                break;
-            case OPCODE_CMP_EQ:
-                print_bytecode_operation("c.eq", instr.dest, instr.arg1, instr.arg2);
-                break;
-            case OPCODE_CMP_LT:
-                print_bytecode_operation("c.lt", instr.dest, instr.arg1, instr.arg2);
-                break;
-            case OPCODE_CMP_GT:
-                print_bytecode_operation("c.gt", instr.dest, instr.arg1, instr.arg2);
-                break;
-            case OPCODE_CMP_LEQ:
-                print_bytecode_operation("c.le", instr.dest, instr.arg1, instr.arg2);
-                break;
-            case OPCODE_CMP_GEQ:
-                print_bytecode_operation("c.ge", instr.dest, instr.arg1, instr.arg2);
-                break;
-            case OPCODE_LOAD:
-                printf("\tr%d = [bp - %d]\n", instr.dest.vreg, instr.arg1.stack_offset);
-                break;
-            case OPCODE_STORE:
-                printf("\t[bp - %d] = r%d\n", instr.dest.stack_offset, instr.arg1.vreg);
-                break;
-            case OPCODE_COPY:
-                printf("\t");
-                print_bytecode_op(instr.dest);
-                printf(" = ");
-                print_bytecode_op(instr.arg1);
-                printf("\n");
-                break;
-            case OPCODE_LOADI:
-                printf("\t");
-                print_bytecode_op(instr.dest);
-                printf(" = loadi ");
-                print_bytecode_op(instr.arg1);
-                printf("\n");
-                break;
-            case OPCODE_RET:
-                printf("\tret r%d\n", instr.arg1.vreg);
-                break;
-            case OPCODE_JMP:
-                printf("\tjmp %s\n", instr.dest.label_name);
-                break;
-            case OPCODE_JMP_NEQ:
-                printf("\tj.ne r%d, %s\n", instr.arg1.vreg, instr.dest.label_name);
-                break;
-            case OPCODE_PARAM:
-                printf("\tparam r%d\n", instr.arg1.vreg);
-                break;
-            case OPCODE_CALL:
-                if (instr.dest.type == OPERAND_INVALID)
-                    printf("\tcall %s\n", instr.arg1.label_name);
-                else
-                    printf("\tr%d = call %s\n", instr.dest.vreg, instr.arg1.label_name);
-                break;
-            case OPCODE_LABEL:
-                printf("%s:\n", instr.dest.label_name);
-                break;
-            default:
-                printf("error unrecognized instruction in bytecode\n");
-        }
-    }
-}
 
 IntervalArray create_live_intervals_from_bytecode(Bytecode bytecode, int vreg_count) {
     IntervalArray intervals;
@@ -456,21 +419,6 @@ IntervalArray create_live_intervals_from_bytecode(Bytecode bytecode, int vreg_co
 
     return intervals;
 }
-
-void print_live_intervals(IntervalArray intervals) {
-    for (int i = 0; i < intervals.count; i++) {
-        printf("r%d:\t[%d, %d)\n", intervals.items[i].vreg, intervals.items[i].start, intervals.items[i].end);
-    }
-}
-
-const char *registers[] = {
-    "eax", "ecx", "edx", "edi",
-};
-
-const char *registers_8bit_low[] = { // NOTE: this is meant to be a temporary solution for accessing lower 8 bits for setCC instructions
-    "al", "cl", "dl", "dil",
-};
-
 
 // NOTE: assumes intervals is already sorted
 LocationArray linear_scan_register_allocation(IntervalArray *intervals, int vreg_count, PhysRegs *pregs) {
@@ -530,4 +478,161 @@ LocationArray linear_scan_register_allocation(IntervalArray *intervals, int vreg
         locations.items[vreg] = location;
     }
     return locations;
+}
+
+
+void print_procedure(Procedure procedure) {
+    printf("%s:\n", procedure.name);
+    pretty_print_bytecode(procedure.bytecode);
+}
+
+
+void pretty_print_program(Program program) {
+    for (int i = 0; i < program.count; i++) {
+        print_procedure(program.items[i]);
+        printf("\n");
+    }
+}
+
+
+void print_live_intervals(IntervalArray intervals) {
+    for (int i = 0; i < intervals.count; i++) {
+        printf("r%d:\t[%d, %d)\n", intervals.items[i].vreg, intervals.items[i].start, intervals.items[i].end);
+    }
+}
+
+
+void print_bytecode_op(Operand op) {
+    switch(op.type) {
+        case OPERAND_IMM:      printf("%d", op.imm); break;
+        case OPERAND_VREG:     printf("r%d", op.vreg); break;
+        case OPERAND_LABEL:    printf("%s", op.label_name); break;
+        case OPERAND_STACK:    printf("[rbp - %d]", op.stack_offset); break;
+        default:
+            UNREACHABLE("operand not valid");
+            break;
+    }
+}
+
+
+void print_bytecode_branch(const char *name, Operand dst, Operand arg1, Operand arg2) {
+    printf("\t%s ", name);
+    print_bytecode_op(dst);
+    printf(", ");
+    print_bytecode_op(arg1);
+    printf(", ");
+    print_bytecode_op(arg2);
+    printf("\n");
+}
+
+void print_bytecode_operation(const char *name, Operand dst, Operand arg1, Operand arg2) {
+    printf("\t");
+    print_bytecode_op(dst);
+    printf(" = %s ", name);
+    print_bytecode_op(arg1);
+    printf(", ");
+    print_bytecode_op(arg2);
+    printf("\n");
+}
+
+
+void pretty_print_bytecode(Bytecode bytecode) {
+    // TODO: this function needs to be reworked to support
+    // multiple operand types. I need to decide on what types
+    // of operands each instruction can support, and if immediate
+    // arithemtic should have separate instructions or not (leaning towards no for now)
+    for (int i = 0; i < bytecode.count; i++) {
+        Instr instr = bytecode.items[i];
+        printf("%d: ", i);
+        switch (instr.opcode) {
+            case OPCODE_ADD:
+                print_bytecode_operation("add", instr.dest, instr.arg1, instr.arg2);
+                break;
+            case OPCODE_SUB:
+                print_bytecode_operation("sub", instr.dest, instr.arg1, instr.arg2);
+                break;
+            case OPCODE_MUL:
+                print_bytecode_operation("mul", instr.dest, instr.arg1, instr.arg2);
+                break;
+            case OPCODE_DIV:
+                print_bytecode_operation("div", instr.dest, instr.arg1, instr.arg2);
+                break;
+            case OPCODE_CMP_EQ:
+                print_bytecode_operation("c.eq", instr.dest, instr.arg1, instr.arg2);
+                break;
+            case OPCODE_CMP_LT:
+                print_bytecode_operation("c.lt", instr.dest, instr.arg1, instr.arg2);
+                break;
+            case OPCODE_CMP_GT:
+                print_bytecode_operation("c.gt", instr.dest, instr.arg1, instr.arg2);
+                break;
+            case OPCODE_CMP_LEQ:
+                print_bytecode_operation("c.le", instr.dest, instr.arg1, instr.arg2);
+                break;
+            case OPCODE_CMP_GEQ:
+                print_bytecode_operation("c.ge", instr.dest, instr.arg1, instr.arg2);
+                break;
+            case OPCODE_JMP_EQ:
+                print_bytecode_branch("j.eq", instr.dest, instr.arg1, instr.arg2);
+                    break;
+            case OPCODE_JMP_LT:
+                print_bytecode_branch("j.lt", instr.dest, instr.arg1, instr.arg2);
+                break;
+            case OPCODE_JMP_GT:
+                print_bytecode_branch("j.gt", instr.dest, instr.arg1, instr.arg2);
+                break;
+            case OPCODE_JMP_LE:
+                print_bytecode_branch("j.le", instr.dest, instr.arg1, instr.arg2);
+                break;
+            case OPCODE_JMP_GE:
+                print_bytecode_branch("j.ge", instr.dest, instr.arg1, instr.arg2);
+                break;
+            case OPCODE_LOAD_INDEX:
+                printf("\tr%d = [bp - %d + r%d]\n", instr.dest.vreg, instr.arg1.stack_offset, instr.arg2.vreg);
+                break;
+            case OPCODE_LOAD:
+                printf("\tr%d = [bp - %d]\n", instr.dest.vreg, instr.arg1.stack_offset);
+                break;
+            case OPCODE_STORE:
+                printf("\t[bp - %d] = r%d\n", instr.dest.stack_offset, instr.arg1.vreg);
+                break;
+            case OPCODE_COPY:
+                printf("\t");
+                print_bytecode_op(instr.dest);
+                printf(" = ");
+                print_bytecode_op(instr.arg1);
+                printf("\n");
+                break;
+            case OPCODE_LOADI:
+                printf("\t");
+                print_bytecode_op(instr.dest);
+                printf(" = loadi ");
+                print_bytecode_op(instr.arg1);
+                printf("\n");
+                break;
+            case OPCODE_RET:
+                printf("\tret r%d\n", instr.arg1.vreg);
+                break;
+            case OPCODE_JMP:
+                printf("\tjmp %s\n", instr.dest.label_name);
+                break;
+            case OPCODE_JMP_NEQ:
+                printf("\tj.ne r%d, %s\n", instr.arg1.vreg, instr.dest.label_name);
+                break;
+            case OPCODE_PARAM:
+                printf("\tparam r%d\n", instr.arg1.vreg);
+                break;
+            case OPCODE_CALL:
+                if (instr.dest.type == OPERAND_INVALID)
+                    printf("\tcall %s\n", instr.arg1.label_name);
+                else
+                    printf("\tr%d = call %s\n", instr.dest.vreg, instr.arg1.label_name);
+                break;
+            case OPCODE_LABEL:
+                printf("%s:\n", instr.dest.label_name);
+                break;
+            default:
+                printf("error unrecognized instruction in bytecode\n");
+        }
+    }
 }

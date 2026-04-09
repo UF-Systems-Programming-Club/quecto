@@ -36,6 +36,7 @@ typedef enum {
     TOKEN_WHILE,
     TOKEN_PROC,
     TOKEN_ARROW,
+    TOKEN_EXTERN,
 
     TOKEN_U8,
     TOKEN_I8,
@@ -74,6 +75,6 @@ bool is_number(char c);
 bool is_alpha(char c);
 void print_token(Token tok);
 TokenArray tokenize(const char* buf, size_t buf_size);
-KeywordEntry *lookup_keyword(const char *str, unsigned int len); // I think this should be an unsigned int, as that is what GPERF generates
+KeywordEntry *lookup_keyword(const char *str, size_t len);
 
 #endif

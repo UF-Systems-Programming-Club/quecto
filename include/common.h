@@ -9,6 +9,8 @@
 #include <string.h>
 #include <assert.h>
 
+#define MAX_PARAMS 4
+
 #define UNREACHABLE(err)\
     do {\
         fprintf(stderr, "UNREACHABLE reached at %s:%d in %s(): %s\n", __FILE__, __LINE__, __func__, (err));\
@@ -54,18 +56,26 @@
 #define FNV_PRIME 0x100000001b3
 #define FNV_BASIS 0xcbf29ce484222325
 
-uint64_t fnv1a_hash(const char *str);
+uint64_t fnv1a_hash(const void *str, size_t n);
+
 
 typedef struct {
-    char **keys;
+    size_t size;
+    void *data;
+} Key;
+
+typedef struct {
+    Key *keys;
     void **items;
     size_t count;
     size_t capacity;
 } HashTable;
 
 void ht_insert(HashTable *ht, const char *str, void *item);
+void ht_ninsert(HashTable *ht, const void *key, size_t key_size, void *item);
 void ht_resize(HashTable *ht);
 void *ht_search(HashTable *ht, const char *str);
+void *ht_nsearch(HashTable *ht, const void *key, size_t key_size);
 
 // for printing
 
@@ -83,6 +93,7 @@ typedef struct {
 
 void arena_create(Arena *a, size_t capacity);
 void *arena_alloc(Arena *a, size_t size);
+void *arena_intern(Arena *a, HashTable *intern_table, const void *value, size_t size);
 void arena_clear(Arena *a);
 void arena_free(Arena *a);
 #define arena_alloc_type(arena_ptr, type) \

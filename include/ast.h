@@ -5,13 +5,14 @@
 #include "tokenizer.h"
 #include "symbol_table.h"
 
-#define MAX_PARAMS 4
-
 typedef enum {
     AST_PROGRAM,
     AST_BINARY_OP,
     AST_PROCEDURE,
+    AST_EXTERN,
     AST_CALL,
+    AST_INDEX,
+    AST_LIST,
     AST_BLOCK,
     AST_DECL,
     AST_ASSIGNMENT,
@@ -27,6 +28,7 @@ typedef enum {
 
 typedef enum {
     OP_EQUALS,
+    OP_NEQUALS,
     OP_LESS_EQUALS,
     OP_GREATER_EQUALS,
     OP_LESS_THAN,
@@ -35,16 +37,23 @@ typedef enum {
     OP_MINUS,
     OP_MULTIPLY,
     OP_DIVIDE,
+    OP_COUNT,
 } BinaryOp;
 
 typedef struct AST {
     ASTType type;
+    size_t line, col; // for starting point of expr and for debugging
     union {
-        // Program and block
+        // Program and block and list
         struct {
             struct AST **items;
             size_t count;
             size_t capacity;
+        };
+
+        // Extern
+        struct {
+            struct AST *externed;
         };
 
         // Procedure
@@ -64,6 +73,8 @@ typedef struct AST {
             BinaryOp op;
             struct AST *left;
             struct AST *right;
+
+            QuectoType *evaled_type; // evaled at analysis
         };
 
         // Calls
@@ -73,10 +84,16 @@ typedef struct AST {
             size_t arg_count;
         };
 
+        // Indexing
+        struct {
+            struct AST *access; // symbol
+            struct AST *index; // expr
+        };
+
         // Declaration and Assignment
         struct {
             struct AST *symbol;
-            struct QuectoType *qtype;
+            QuectoType *qtype;
             struct AST *expr;
         };
 
@@ -89,7 +106,6 @@ typedef struct AST {
 
         // Symbol
         struct {
-            SymbolTable *symbol_table;
             const char *ident; // NOTE: this is a pointer to the tokenized identifier
                                // so every symbol has a unique string but not the
                                // authority to do anything to it (which makes sense)
@@ -102,5 +118,8 @@ typedef struct AST {
 } AST;
 
 void print_ast(AST *ast, int indent);
+bool op_is_conditional(BinaryOp op);
+bool op_is_arithmetic(BinaryOp op);
+BinaryOp op_opposite(BinaryOp op);
 
 #endif

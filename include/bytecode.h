@@ -16,6 +16,8 @@ typedef enum {
     OPCODE_CMP_GEQ,
     OPCODE_LOAD, // TODO: currently load and store operate on the stack.
                // will need to seperate stack loads from regular loads
+    OPCODE_LOAD_INDEX,
+
     OPCODE_STORE,
     OPCODE_COPY,
     OPCODE_LOADI,
@@ -23,11 +25,16 @@ typedef enum {
 
     OPCODE_JMP,
     OPCODE_JMP_EQ,
+    OPCODE_JMP_LT,
+    OPCODE_JMP_GT,
+    OPCODE_JMP_GE,
+    OPCODE_JMP_LE,
     OPCODE_JMP_NEQ,
     OPCODE_CALL,
     OPCODE_PARAM,
 
     OPCODE_LABEL,      // TODO: might not be the best to conflict metadata on bytecode with operands. this is just for time being
+    OPCODE_COUNT,
 } Opcode;
 
 typedef enum {
@@ -113,11 +120,17 @@ typedef struct {
 } Program;
 
 typedef struct {
+    SymbolTable *scope;
+    const char *current_procedure_name;
+} EmitContext;
+
+typedef struct {
     IntervalArray regs[4]; // TODO: change this to be dependent on the backend (but still static)
 } PhysRegs; // Structure to record the info of hardware and ABI constraints on registers for allocator
 
-extern const char *registers[];
-extern const char *registers_8bit_low[];
+// extern const char *registers[];
+// extern const char *registers_8bit_low[];
+// extern const char *registers_64bit[];
 
 Operand gen_add_instr(Bytecode *bytecode, Operand left, Operand right);
 Operand gen_sub_instr(Bytecode *bytecode, Operand left, Operand right);
@@ -134,15 +147,16 @@ Operand gen_store_instr(Bytecode *bytecode, int stack_offset, int vreg);
 Operand gen_loadi_instr(Bytecode *bytecode, int imm);
 // void gen_ret_instr(Bytecode *bytecode, );
 
-void emit_if_bytecode(Bytecode *bytecode, AST *ifs);
-void emit_while_bytecode(Bytecode *bytecode, AST *whiles);
-void emit_decl_bytecode(Bytecode *bytecode, AST *decl);
-void emit_assign_bytecode(Bytecode *bytecode, AST *assign);
-void emit_block_bytecode(Bytecode *bytecode, AST *block);
-void emit_return_bytecode(Bytecode *bytecode, AST *ret);
-void emit_statement_bytecode(Bytecode *bytecode, AST *statement);
-void emit_procedure_bytecode(Procedure *procedure, AST *ast);
-void emit_program_bytecode(Program *program, AST *ast);
+Operand emit_expr_bytecode(EmitContext *context, Bytecode *bytecode, AST *expr);
+void emit_if_bytecode(EmitContext *context, Bytecode *bytecode, AST *ifs);
+void emit_while_bytecode(EmitContext *context, Bytecode *bytecode, AST *whiles);
+void emit_decl_bytecode(EmitContext *context, Bytecode *bytecode, AST *decl);
+void emit_assign_bytecode(EmitContext *context, Bytecode *bytecode, AST *assign);
+void emit_block_bytecode(EmitContext *context, Bytecode *bytecode, AST *block);
+void emit_return_bytecode(EmitContext *context, Bytecode *bytecode, AST *ret);
+void emit_statement_bytecode(EmitContext *context, Bytecode *bytecode, AST *statement);
+void emit_procedure_bytecode(EmitContext *context, Procedure *procedure, AST *ast);
+void emit_program_bytecode(EmitContext *context, Program *program, AST *ast);
 
 void analyze_program(Program *program, PhysRegs *pregs);
 void pretty_print_bytecode(Bytecode bytecode);

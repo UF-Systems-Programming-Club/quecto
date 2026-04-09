@@ -36,6 +36,7 @@ const char *token_to_string_table[] = {
     [TOKEN_ELSE] = "else",
     [TOKEN_WHILE] = "while",
     [TOKEN_PROC] = "proc",
+    [TOKEN_EXTERN] = "extern",
     [TOKEN_U32] = "u32",
     [TOKEN_I32] = "i32",
     [TOKEN_I8] = "i8",
@@ -122,7 +123,8 @@ void print_token(Token tok) {
         case TOKEN_ELIF:            printf("elif"); break;
         case TOKEN_ELSE:            printf("else"); break;
         case TOKEN_WHILE:           printf("while"); break;
-        case TOKEN_PROC:       printf("proc"); break;
+        case TOKEN_PROC:            printf("proc"); break;
+        case TOKEN_EXTERN:          printf("extern"); break;
         case TOKEN_ARROW:           printf("=>"); break;
         case TOKEN_I32:             printf("i32"); break;
         case TOKEN_U32:             printf("u32"); break;

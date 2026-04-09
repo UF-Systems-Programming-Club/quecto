@@ -117,42 +117,43 @@ AST *create_symbol(ParserState *parser, const char *identifier) {
     AST *symbol = arena_alloc_type(parser->arena, AST);
     symbol->type = AST_SYMBOL;
     symbol->ident = identifier;
-    symbol->symbol_table = parser->cur_symbol_table;
     return symbol;
 }
 
 QuectoType *parse_type(ParserState *parser) {
-    QuectoType *qtype = arena_alloc_type(parser->arena, QuectoType);
+    QuectoType qtype = { 0 };
 
     Token *tok = get_next_token(parser);
     switch(tok->type) {
-        case TOKEN_I32:     qtype->type = QUECTO_I32; break;
-        case TOKEN_U32:     qtype->type = QUECTO_U32; break;
-        case TOKEN_I8:      qtype->type = QUECTO_I8; break;
-        case TOKEN_U8:      qtype->type = QUECTO_U8; break;                    
+        case TOKEN_I32:     qtype.type = QUECTO_I32; break;
+        case TOKEN_U32:     qtype.type = QUECTO_U32; break;
+        case TOKEN_I8:      qtype.type = QUECTO_I8; break;
+        case TOKEN_U8:      qtype.type = QUECTO_U8; break;                    
         default: {
             // report_error(tok->line, tok->col, "not a recognized type");
             printf("inferred decl\n");
             parser->current--;
-            return NULL;
+            qtype.type = QUECTO_UNKNOWN;
         }
     }
+
+    QuectoType *Q = arena_intern(parser->arena, parser->type_intern_table, &qtype, sizeof(QuectoType));
 
     if (peek_next_token_type(parser) == TOKEN_OPEN_SQUARE) {
         expect_next_token(parser, tok, TOKEN_OPEN_SQUARE);
         expect_next_token(parser, tok, TOKEN_INT_LIT);
         
-        QuectoType *qtype_outer = arena_alloc_type(parser->arena, QuectoType);
-        qtype_outer->type = QUECTO_ARRAY;
-        qtype_outer->inner = qtype;
-        qtype_outer->array_size = tok->int_lit;
+        QuectoType qtype_outer;
+        qtype_outer.type = QUECTO_ARRAY;
+        qtype_outer.inner = Q;
+        qtype_outer.array_size = tok->int_lit;
         
         expect_next_token(parser, tok, TOKEN_CLOSE_SQUARE);
 
-        return qtype_outer;
+        return arena_intern(parser->arena, parser->type_intern_table, &qtype_outer, sizeof(QuectoType));
     }
     
-    return qtype;
+    return Q;
 }
 
 AST *parse_program(ParserState *parser) {
@@ -161,7 +162,9 @@ AST *parse_program(ParserState *parser) {
 
     // TODO: implement error synchronization
     while (peek_next_token_type(parser) != TOKEN_EOF) {
-        AST *statement = parse_procedure(parser);
+        AST *statement;
+        if (peek_next_token_type(parser) == TOKEN_EXTERN) statement = parse_extern(parser);
+        else statement = parse_procedure(parser);
         if (statement == NULL) { return program; }
         array_append(*program, statement);
     }
@@ -202,36 +205,23 @@ AST *parse_statement(ParserState *parser) {
     AST *statement = arena_alloc_type(parser->arena, AST);
 
     if (match_next_token(parser, &tok, TOKEN_OPEN_CURLY)) {
+        
         statement->type = AST_BLOCK;
-
-        // create a symbol table for new scope
-        SymbolTable *symbol_table = calloc(1, sizeof(SymbolTable));
-        symbol_table->prev = parser->cur_symbol_table;
-        parser->cur_symbol_table = symbol_table;
-
         while (!match_next_token(parser, &tok, TOKEN_CLOSE_CURLY)) {
             AST *s = parse_statement(parser);
             array_append(*statement, s);
         }
 
-        parser->cur_symbol_table = symbol_table->prev;
-
-        //if (!expect_next_token(parser, &tok, TOKEN_CLOSE_CURLY)) return NULL;
         return statement;
     } else if (match_next_token(parser, &tok, TOKEN_IDENTIFIER)) {
-        // Token ident = tok;
-
+        statement->line = tok.line; statement->col = tok.col;
         statement->symbol = create_symbol(parser, tok.identifier);
 
         if (match_next_token(parser, &tok, TOKEN_COLON)) {
-            QuectoType *qtype = parse_type(parser);
-
-            if (!expect_next_token(parser, &tok, TOKEN_EQUALS)) return NULL;
-
             statement->type = AST_DECL;
-            statement->qtype = qtype;
+            statement->qtype = parse_type(parser);
 
-            insert_symbol(parser->arena, parser->cur_symbol_table, statement->symbol->ident, SYM_TYPE_VARIABLE);
+            if (!expect_next_token(parser, &tok, TOKEN_EQUALS)) return NULL; // probably would be fine if decls didnt have necessary assign
 
             statement->expr = parse_expression(parser, 0);
         } else if (match_next_token(parser, &tok, TOKEN_EQUALS)) {
@@ -269,7 +259,7 @@ AST *parse_statement(ParserState *parser) {
 
 AST *parse_expression(ParserState *parser, int min_prec) {
     Token tok;
-    if (!expect_next_token_multiple(parser, &tok, 4, TOKEN_INT_LIT, TOKEN_FLOAT_LIT, TOKEN_IDENTIFIER, TOKEN_OPEN_PAREN))
+    if (!expect_next_token_multiple(parser, &tok, 5, TOKEN_INT_LIT, TOKEN_FLOAT_LIT, TOKEN_IDENTIFIER, TOKEN_OPEN_PAREN, TOKEN_OPEN_CURLY))
         return NULL;
 
     AST *left = arena_alloc_type(parser->arena, AST);
@@ -284,22 +274,23 @@ AST *parse_expression(ParserState *parser, int min_prec) {
             left->float_lit = tok.float_lit;
             break;
         case TOKEN_IDENTIFIER:
-            if (get_symbol(parser->cur_symbol_table, tok.identifier) == NULL) {
-                report_error(tok.line, tok.col, "undeclared identifier");
-                return NULL;
-            }
+            left->type = AST_SYMBOL; // if we set this as symbol first and none of the postfixes exist this should return fine
+            left->ident = tok.identifier;
 
             Token gbg;
-            if (match_next_token(parser, &gbg, TOKEN_OPEN_PAREN)) {
+            if (match_next_token(parser, &gbg, TOKEN_OPEN_PAREN)) { // TODO : change logic such that we can index on expressions ? (maybe be very loose here but enforce in analysis stage)
                 left->type = AST_CALL;
                 left->callee = create_symbol(parser, tok.identifier);
                 left->arg_count = parse_args(parser, left->args);
                 break;
             }
+            else if (match_next_token(parser, &gbg, TOKEN_OPEN_SQUARE)) {
+                left->type = AST_INDEX;
+                left->access = create_symbol(parser, tok.identifier);
+                left->index = parse_expression(parser, 0);
+                expect_next_token(parser, &gbg, TOKEN_CLOSE_SQUARE);
+            }
 
-            left->type = AST_SYMBOL;
-            left->symbol_table = parser->cur_symbol_table;
-            left->ident = tok.identifier;
             break;
         case TOKEN_OPEN_PAREN:
             left = parse_expression(parser, 0);
@@ -307,7 +298,15 @@ AST *parse_expression(ParserState *parser, int min_prec) {
 
             if (!expect_next_token(parser, &tok, TOKEN_CLOSE_PAREN)) return NULL;
             break;
+        case TOKEN_OPEN_CURLY:
+            left->type = AST_LIST;
+            while (!match_next_token(parser, &tok, TOKEN_CLOSE_CURLY)) {
+                AST *s = parse_expression(parser, 0);
+                if (peek_next_token_type(parser) != TOKEN_CLOSE_CURLY) expect_next_token(parser, &tok, TOKEN_COMMA);
+                array_append(*left, s);
+            }
         default:
+            break;
             UNREACHABLE("TokenType");
     }
 
@@ -347,13 +346,10 @@ AST *parse_param_declaration(ParserState *parser) {
     decl->type = AST_DECL;
 
     expect_next_token(parser, &tok, TOKEN_IDENTIFIER);
-
     decl->symbol = create_symbol(parser, tok.identifier);
-    insert_symbol(parser->arena, parser->cur_symbol_table, tok.identifier, SYM_TYPE_VARIABLE);
 
     expect_next_token(parser, &tok, TOKEN_COLON);
     decl->qtype = parse_type(parser);
-    // maybe add defaults in future
     return decl;
 }
 
@@ -392,46 +388,43 @@ AST *parse_procedure(ParserState *parser) {
     AST *procedure = arena_alloc_type(parser->arena, AST);
     procedure->type = AST_PROCEDURE;
 
-    // procedure->params = (AST){0};
-    // procedure->returns = (AST){0};
-
     expect_next_token(parser, &tok, TOKEN_PROC);
+    
+    procedure->line = tok.line; procedure->col = tok.col;
+    
     expect_next_token(parser, &tok, TOKEN_IDENTIFIER);
-
-    SymbolData *signature = insert_symbol(parser->arena, parser->cur_symbol_table, tok.identifier, SYM_TYPE_PROCEDURE);
 
     procedure->name = arena_alloc_type(parser->arena, AST);
     procedure->name->type = AST_SYMBOL;
     procedure->name->ident = tok.identifier;
 
-    SymbolTable *symbol_table = calloc(1, sizeof(SymbolTable));
-    symbol_table->prev = parser->cur_symbol_table;
-    parser->cur_symbol_table = symbol_table;
-
     procedure->param_count = parse_parameters(parser, procedure->params);
-
     expect_next_token(parser, &tok, TOKEN_ARROW);
 
     procedure->return_count = parse_parameters(parser, procedure->returns);
 
     assert(procedure->return_count <= 1 && "no support for multiple return values yet");
 
-    procedure->body = arena_alloc_type(parser->arena, AST);
-    procedure->body->type = AST_BLOCK;
+    if (match_next_token(parser, &tok, TOKEN_OPEN_CURLY)) {
+        procedure->body = arena_alloc_type(parser->arena, AST);
+        procedure->body->type = AST_BLOCK;
 
-    expect_next_token(parser, &tok, TOKEN_OPEN_CURLY);
-
-    while (!match_next_token(parser, &tok, TOKEN_CLOSE_CURLY)) {
-        AST *s = parse_statement(parser);
-        array_append(*procedure->body, s);
+        while (!match_next_token(parser, &tok, TOKEN_CLOSE_CURLY)) {
+            AST *s = parse_statement(parser);
+            array_append(*procedure->body, s);
+        }
     }
 
-    signature->param_count = procedure->param_count;
-    signature->return_count = procedure->return_count;
-    signature->local_var_size = 0;
-
-    procedure->symbols = symbol_table;
-    parser->cur_symbol_table = symbol_table->prev;
-
     return procedure;
+}
+
+AST *parse_extern(ParserState *parser) {
+    Token tok;
+
+    AST *exter = arena_alloc_type(parser->arena, AST);
+    exter->type = AST_EXTERN;
+    expect_next_token(parser, &tok, TOKEN_EXTERN);
+    exter->externed = parse_procedure(parser);
+
+    return exter;    
 }

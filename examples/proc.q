@@ -13,12 +13,9 @@ proc sum_to (n: i32) => (r: i32) {
     return a;
 }
 
-proc string () => (ret: i8[20]) {
-    return 0;
-}
-
 proc main () => () {
     a : i32 = factorial(5);
     b : i32 = sum_to(8);
+
     return a + b;
 }
