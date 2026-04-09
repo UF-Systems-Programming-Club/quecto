@@ -23,6 +23,14 @@ int stack_offset = 0;
 // NOTE: in the future these instructions will hold more information like
 // size of type, signed or unsigned, etc;
 
+const Opcode jump_condition_opcode_table[OP_COUNT] = {
+    [OP_EQUALS] = OPCODE_JMP_EQ,
+    [OP_LESS_THAN] = OPCODE_JMP_LT,
+    [OP_GREATER_THAN] = OPCODE_JMP_GT,
+    [OP_LESS_EQUALS] = OPCODE_JMP_LE,
+    [OP_GREATER_EQUALS] = OPCODE_JMP_GE,
+};
+
 Operand gen_jmp(Bytecode *bytecode, Operand label) {
     Instr jmp;
     jmp.opcode = OPCODE_JMP;
@@ -31,11 +39,12 @@ Operand gen_jmp(Bytecode *bytecode, Operand label) {
     return label;
 }
 
-Operand gen_conditional_jump(Bytecode *bytecode, Opcode type, Operand label, Operand condition) {
+Operand gen_conditional_jump(Bytecode *bytecode, Opcode type, Operand label, Operand arg1, Operand arg2) {
     Instr jmp;
     jmp.opcode = type;
     jmp.dest = label;
-    jmp.arg1 = condition;
+    jmp.arg1 = arg1;
+    jmp.arg2 = arg2;
     array_append(*bytecode, jmp);
     return label;
 }
@@ -183,10 +192,23 @@ Operand emit_expr_bytecode(EmitContext *context, Bytecode *bytecode, AST *expr) 
 }
 
 
+void emit_branch_comp(EmitContext *context, Bytecode *bytecode, Operand label, AST *expr) {// special case of expression
+    if (expr->type == AST_BINARY_OP && op_is_conditional(expr->op)) {
+        Operand left = emit_expr_bytecode(context, bytecode, expr->left);
+        Operand right = emit_expr_bytecode(context, bytecode, expr->right);
+
+        gen_conditional_jump(bytecode, jump_condition_opcode_table[op_opposite(expr->op)], label, left, right);
+    } else {
+        UNREACHABLE("to add...");
+    }
+}
+
+
 void emit_if_chain(EmitContext *context, Bytecode *bytecode, AST *ast, Operand end_label) {
     if (ast->type == AST_ELIF) {
-        Operand expr = emit_expr_bytecode(context, bytecode, ast->condition);
-        Operand label = gen_conditional_jump(bytecode, OPCODE_JMP_NEQ, create_label(), expr);
+        // Operand expr = emit_expr_bytecode(context, bytecode, ast->condition);
+        Operand label = create_label();
+        emit_branch_comp(context, bytecode, label, ast->condition);
 
         emit_statement_bytecode(context, bytecode, ast->then);
 
@@ -324,15 +346,19 @@ void emit_return_bytecode(EmitContext *context, Bytecode *bytecode, AST *ret) {
     array_append(*bytecode, instr);
 }
 
+
+
 void emit_if_bytecode(EmitContext *context, Bytecode *bytecode, AST *ifs) {
-    Operand expr = emit_expr_bytecode(context, bytecode, ifs->condition);
+    // Operand expr = emit_expr_bytecode(context, bytecode, ifs->condition);
     Operand end_label = create_label();
-    Operand next_cmp = gen_conditional_jump(bytecode, OPCODE_JMP_NEQ, create_label(), expr);
+    
+    // Operand next_cmp = gen_conditional_jump(bytecode, OPCODE_JMP_NEQ, create_label(), expr);
+    emit_branch_comp(context, bytecode, end_label, ifs->condition);
 
     emit_statement_bytecode(context, bytecode, ifs->then);
     gen_jmp(bytecode, end_label);
 
-    gen_label(bytecode, next_cmp);
+    // gen_label(bytecode, next_cmp);
     if (ifs->otherwise) emit_if_chain(context, bytecode, ifs->otherwise, end_label);
     gen_label(bytecode, end_label);
 }
@@ -343,8 +369,9 @@ void emit_while_bytecode(EmitContext *context, Bytecode *bytecode, AST *whiles) 
 
     gen_label(bytecode, begin_label);
 
-    Operand expr = emit_expr_bytecode(context, bytecode, whiles->condition);
-    gen_conditional_jump(bytecode, OPCODE_JMP_NEQ, end_label, expr);
+    // Operand expr = emit_expr_bytecode(context, bytecode, whiles->condition);
+    emit_branch_comp(context, bytecode, end_label, whiles->condition);    
+    // // gen_conditional_jump(bytecode, OPCODE_JMP_NEQ, end_label, expr);
 
     emit_statement_bytecode(context, bytecode, whiles->then);
     gen_jmp(bytecode, begin_label);
@@ -478,7 +505,7 @@ void print_bytecode_op(Operand op) {
     switch(op.type) {
         case OPERAND_IMM:      printf("%d", op.imm); break;
         case OPERAND_VREG:     printf("r%d", op.vreg); break;
-        case OPERAND_LABEL:    printf(".%s", op.label_name); break;
+        case OPERAND_LABEL:    printf("%s", op.label_name); break;
         case OPERAND_STACK:    printf("[rbp - %d]", op.stack_offset); break;
         default:
             UNREACHABLE("operand not valid");
@@ -486,6 +513,16 @@ void print_bytecode_op(Operand op) {
     }
 }
 
+
+void print_bytecode_branch(const char *name, Operand dst, Operand arg1, Operand arg2) {
+    printf("\t%s ", name);
+    print_bytecode_op(dst);
+    printf(", ");
+    print_bytecode_op(arg1);
+    printf(", ");
+    print_bytecode_op(arg2);
+    printf("\n");
+}
 
 void print_bytecode_operation(const char *name, Operand dst, Operand arg1, Operand arg2) {
     printf("\t");
@@ -533,6 +570,21 @@ void pretty_print_bytecode(Bytecode bytecode) {
                 break;
             case OPCODE_CMP_GEQ:
                 print_bytecode_operation("c.ge", instr.dest, instr.arg1, instr.arg2);
+                break;
+            case OPCODE_JMP_EQ:
+                print_bytecode_branch("j.eq", instr.dest, instr.arg1, instr.arg2);
+                    break;
+            case OPCODE_JMP_LT:
+                print_bytecode_branch("j.lt", instr.dest, instr.arg1, instr.arg2);
+                break;
+            case OPCODE_JMP_GT:
+                print_bytecode_branch("j.gt", instr.dest, instr.arg1, instr.arg2);
+                break;
+            case OPCODE_JMP_LE:
+                print_bytecode_branch("j.le", instr.dest, instr.arg1, instr.arg2);
+                break;
+            case OPCODE_JMP_GE:
+                print_bytecode_branch("j.ge", instr.dest, instr.arg1, instr.arg2);
                 break;
             case OPCODE_LOAD_INDEX:
                 printf("\tr%d = [bp - %d + r%d]\n", instr.dest.vreg, instr.arg1.stack_offset, instr.arg2.vreg);

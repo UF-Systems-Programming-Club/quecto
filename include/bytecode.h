@@ -9,7 +9,6 @@ typedef enum {
     OPCODE_SUB,
     OPCODE_MUL,
     OPCODE_DIV,
-    OPCODE_CMP,
     OPCODE_CMP_EQ,
     OPCODE_CMP_LT,
     OPCODE_CMP_GT,
@@ -26,6 +25,10 @@ typedef enum {
 
     OPCODE_JMP,
     OPCODE_JMP_EQ,
+    OPCODE_JMP_LT,
+    OPCODE_JMP_GT,
+    OPCODE_JMP_GE,
+    OPCODE_JMP_LE,
     OPCODE_JMP_NEQ,
     OPCODE_CALL,
     OPCODE_PARAM,
@@ -118,6 +121,7 @@ typedef struct {
 
 typedef struct {
     SymbolTable *scope;
+    const char *current_procedure_name;
 } EmitContext;
 
 typedef struct {

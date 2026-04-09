@@ -28,6 +28,7 @@ typedef enum {
 
 typedef enum {
     OP_EQUALS,
+    OP_NEQUALS,
     OP_LESS_EQUALS,
     OP_GREATER_EQUALS,
     OP_LESS_THAN,
@@ -36,6 +37,7 @@ typedef enum {
     OP_MINUS,
     OP_MULTIPLY,
     OP_DIVIDE,
+    OP_COUNT,
 } BinaryOp;
 
 typedef struct AST {
@@ -116,5 +118,8 @@ typedef struct AST {
 } AST;
 
 void print_ast(AST *ast, int indent);
+bool op_is_conditional(BinaryOp op);
+bool op_is_arithmetic(BinaryOp op);
+BinaryOp op_opposite(BinaryOp op);
 
 #endif

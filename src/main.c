@@ -12,13 +12,6 @@
 #include "error.h"
 #include "backends/linux_x64.h"
 
-#ifdef __MACH__
-#define EXIT_STATUS "0x2000001"
-#define ENTRY_SYMBOL "_main"
-#else
-#define EXIT_STATUS "60"
-#define ENTRY_SYMBOL "_start"
-#endif
 
 void help_prompt();
 int compile(const char *filename);
@@ -108,19 +101,8 @@ int compile(const char *filename) {
     adhere_program(&program, &pregs);
     analyze_program(&program, &pregs);
 
-    compile_program_with(&LINUX_X86_64_BACKEND, &program);
-
     FILE *out = fopen("out.S", "w");
-
-    fprintf(out, "\tglobal\t" ENTRY_SYMBOL "\n\n");
-    fprintf(out, "\tsection\t.text\n");
-    fprintf(out, ENTRY_SYMBOL ":\n");
-    fprintf(out, "\tcall\tmain\n");
-    fprintf(out, "\tmov\tedi, eax\n");
-    fprintf(out, "\tmov\teax, " EXIT_STATUS "\n");
-    fprintf(out, "\tsyscall\n\n");
-
-    compile_program(out, &program);
+    compile_program_with(out, &LINUX_X86_64_BACKEND, &program);
 
     fclose(out);
     

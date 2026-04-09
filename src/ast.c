@@ -1,6 +1,7 @@
 #include <stdio.h>
 
 #include "ast.h"
+#include "bytecode.h"
 #include "common.h"
 #include "error.h"
 #include "symbol_table.h"
@@ -141,3 +142,41 @@ void print_ast(AST* ast, int indent) {
     }
 }
 
+bool op_is_arithmetic(BinaryOp op) {
+    switch (op) {
+        case OP_DIVIDE:
+        case OP_PLUS:
+        case OP_MINUS:
+        case OP_MULTIPLY:
+            return true;
+        default:
+            return false;
+    }
+}
+
+bool op_is_conditional(BinaryOp op) {
+    switch (op) {
+        case OP_EQUALS:
+        case OP_LESS_EQUALS:
+        case OP_GREATER_THAN:
+        case OP_GREATER_EQUALS:
+        case OP_LESS_THAN:
+            return true;
+        default:
+            return false;
+    }
+}
+
+
+BinaryOp op_opposite(BinaryOp op) {
+    switch(op) {
+        case OP_EQUALS: return OP_NEQUALS;
+        case OP_NEQUALS: return OP_EQUALS;
+        case OP_LESS_THAN: return OP_GREATER_EQUALS;
+        case OP_GREATER_THAN: return OP_LESS_EQUALS;
+        case OP_LESS_EQUALS: return OP_GREATER_THAN;
+        case OP_GREATER_EQUALS: return OP_LESS_THAN;
+        default:
+            UNREACHABLE("invalid binary op");
+    }
+}

@@ -50,13 +50,16 @@ typedef struct {
 } CodegenInterface;
 
 typedef void (*EmitFn)(CodegenInterface *iface, Instr instr);
+typedef void (*EmitProcFn)(CodegenInterface *face, Procedure *procedure);
 typedef Bytecode (*AdhereFn)(Bytecode bytecode, PhysRegs *pregs);
-typedef void (*PrintFn)(MachineCode *code);
+typedef void (*FPrintFn)(FILE *out, MachineCode *code);
 
 typedef struct {
   AdhereFn adhere_bytecode_to_spec;
+  EmitProcFn emit_prologue;
+  EmitProcFn emit_epilogue;
   EmitFn emit_machine_code_from[OPCODE_COUNT];
-  PrintFn print_machine_code;
+  FPrintFn print_machine_code;
 } CodegenBackend;
 
 // functions that every backend will need to implement
@@ -67,14 +70,7 @@ typedef struct {
 void adhere_program(Program *program, PhysRegs *pregs);
 Bytecode adhere_bytecode_to_machine_spec(Bytecode bytecode, PhysRegs *pregs);
 
-
-void compile_program(FILE *out, Program *program);
-void emit_procedure_assembly(FILE *out, Procedure procedure);
-
-void compile_program_with(CodegenBackend *backend, Program *program);
+void compile_program_with(FILE *out, CodegenBackend *backend, Program *program);
 void print_machine_code(MachineCode *code, int indent);
-
-// TODO: locations should probably not be passed in here and instead we have some
-// codegen state struct or globals containing that type of info
 
 #endif
