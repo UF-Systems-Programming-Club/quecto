@@ -185,6 +185,7 @@ Operand emit_expr_bytecode(EmitContext *context, Bytecode *bytecode, AST *expr) 
         case OP_GREATER_THAN:   instr.opcode = OPCODE_CMP_GT; break;
         case OP_LESS_EQUALS:    instr.opcode = OPCODE_CMP_LEQ; break;
         case OP_GREATER_EQUALS: instr.opcode = OPCODE_CMP_GEQ; break;
+        default: UNREACHABLE("invalid operation");
     }
     array_append(*bytecode, instr);
 

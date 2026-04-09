@@ -96,6 +96,7 @@ void print_ast(AST* ast, int indent) {
                 case OP_MINUS:          printf(" - "); break;
                 case OP_DIVIDE:         printf(" / "); break;
                 case OP_MULTIPLY:       printf(" * "); break;
+                default: UNREACHABLE("invalid operation.");
             }
             print_ast(ast->right, 0);
             printf(")");
