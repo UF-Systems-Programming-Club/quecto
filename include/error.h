@@ -14,7 +14,7 @@ extern int error_count;
 extern char *src;
 extern size_t src_size;
 
-void report_error(int line, int col, const char *fmt, ...);
-void report_error_without_exit(int line, int col, const char *fmt, ...);
+void report_error(unsigned int line, unsigned int col, const char *fmt, ...);
+void report_error_without_exit(unsigned int line, unsigned int col, const char *fmt, ...);
 
 #endif

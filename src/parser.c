@@ -83,9 +83,9 @@ bool expect_next_token(ParserState *parser, Token *tok, TokenType type) {
         return true;
     } else {
         tok = get_next_token(parser);
-        report_error(tok->line, tok->col, "expected %s but got %s instead",
+        report_error(tok->line, tok->col, "expected \'%s\' but got \'"sv_fmt"\' instead",
                      token_to_string_table[type],
-                     token_to_string_table[peek_next_token_type(parser)]);
+                     sv_arg(tok->lexeme));
         return false;
     }
 }

@@ -251,6 +251,8 @@ TokenArray tokenize(const char *buf, size_t buf_size) {
                 break;
         }
 
+        tok.lexeme.len = next - start;
+        tok.lexeme.str = &buf[start];
         array_append(tokens, tok);
         column += next - start;
         start = next;

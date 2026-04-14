@@ -55,6 +55,7 @@ typedef struct {
         char *identifier;
     };
     unsigned int line, col;
+    StringView lexeme;
 } Token;
 
 typedef struct {
@@ -64,8 +65,8 @@ typedef struct {
 } TokenArray;
 
 typedef struct keyword {
-     const char *name;
-     int token;
+    const char *name;
+    int token;
 } KeywordEntry;
 
 extern const char *token_to_string_table[];

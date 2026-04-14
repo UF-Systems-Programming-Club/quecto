@@ -113,4 +113,13 @@ void arena_free(Arena *a);
 #define arena_alloc_type(arena_ptr, type) \
     (type *)arena_alloc((arena_ptr), sizeof(type))
 
+typedef struct {
+    size_t len;
+    const char *str;
+} StringView;
+
+#define sv_literal(str) (StringView){ sizeof(str) - 1, (str) }
+#define sv_fmt "%.*s"
+#define sv_arg(sv) (int)(sv).len, (sv).str
+
 #endif

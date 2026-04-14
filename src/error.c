@@ -1,15 +1,28 @@
 #include "error.h"
+#include "common.h"
 
 #include <stdlib.h>
 #include <stdarg.h>
+#include <string.h>
 #include <stdio.h>
 
 bool error = false;
 char *src;
 size_t src_size;
 
-void report_error(int line, int col, const char *fmt, ...) {
+char *line_start(unsigned int line) {
+    unsigned int current = 0;
+    unsigned int current_line = 1;
+    while (current_line < line) {
+        char c = src[current++];
+        if (c == '\n') current_line++;
+    }
+    return &src[current];
+}
+
+void report_error(unsigned int line, unsigned int col, const char *fmt, ...) {
     error = true;
+
 
     printf("error %d:%d: ", line, col);
 
@@ -19,10 +32,20 @@ void report_error(int line, int col, const char *fmt, ...) {
     va_end(args);
 
     printf("\n");
+
+    char *line_src = line_start(line);
+    int len = strcspn(line_src, "\n");
+    printf(sv_fmt"\n", len, line_src);
+    for (int i = 1; i < col; i++) {
+        printf("~");
+    }
+    printf("^\n");
+
     exit(0);
 }
 
-void report_error_without_exit(int line, int col, const char *fmt, ...) {
+// TODO: do this
+void report_error_without_exit(unsigned int line, unsigned int col, const char *fmt, ...) {
     error = true;
 
     printf("error %d:%d: ", line, col);
