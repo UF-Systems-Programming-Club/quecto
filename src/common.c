@@ -1,5 +1,6 @@
-#include "common.h"
 #include <stdint.h>
+
+#include "common.h"
 
 // for printing
 const char *tabs = "\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t";
@@ -117,6 +118,18 @@ void *arena_alloc(Arena *a, size_t size) {
     // zero initialize
     memset(ptr, 0, aligned_size);
     return ptr;
+}
+
+void *arena_realloc(Arena *a, void *ptr, size_t old_size, size_t new_size) {
+    uint8_t *res = (uint8_t *)arena_alloc(a, new_size);
+    for (size_t i = 0; i < old_size; i++) {
+        uint8_t *it = (uint8_t *)ptr;
+        *res = *it;
+        it++;
+        res++;
+    }
+
+    return res;
 }
 
 void *arena_intern(Arena *a, HashTable *intern, const void *value, size_t size) {

@@ -49,6 +49,18 @@
         (array).count = 0;\
     } while (0)
 
+// TODO: make sure this minimum isn't too small. don't want to be too memory wasteful
+// and most arena arrays will be a small number of ast children
+#define ARENA_ARRAY_MINIMUM_CAP 16
+#define arena_array_append(arena, array, item)\
+    do {\
+        if ((array).count >= (array).capacity) {\
+            if ((array).capacity == 0) (array).capacity = ARENA_ARRAY_MINIMUM_CAP;\
+            (array).capacity *= 2;\
+            (array).items = arena_realloc((array).items, (array).capacity * sizeof(*(array).items));\
+        }\
+        (array).items[(array).count++] = item;\
+    } while (0)
 
 // NOTE: this hash table implementation does not support removal (yet?), as the symbol table
 // does not require removal
@@ -93,6 +105,7 @@ typedef struct {
 
 void arena_create(Arena *a, size_t capacity);
 void *arena_alloc(Arena *a, size_t size);
+void *arena_realloc(Arena *a, void *ptr, size_t old_size, size_t new_size);
 void *arena_intern(Arena *a, HashTable *intern_table, const void *value, size_t size);
 void arena_clear(Arena *a);
 void arena_free(Arena *a);
