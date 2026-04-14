@@ -16,12 +16,15 @@ typedef struct {
 QuectoType *parse_type(ParserState *parser);
 AST *parse_if_chain(ParserState *parser);
 AST *parse_param_declaration(ParserState *parser);
+
 AST *parse_program(ParserState *parser);
 AST *parse_procedure(ParserState *parser);
-AST *parse_param_list(ParserState *parser);
-AST *parse_return_list(ParserState *parser);
+// AST *parse_params(ParserState *parser);
+size_t parse_params(ParserState *parser, AST *list[MAX_PARAMS]);
+size_t parse_returns(ParserState *parser, AST *list[MAX_PARAMS]);
 AST *parse_statement(ParserState *parser);
 AST *parse_expression(ParserState *parser, int min_prec);
+
 // TODO: decl will need to be changed to var_decl in the future
 // because there will also be type decl and const decl i think
 AST *parse_decl(ParserState *parser);

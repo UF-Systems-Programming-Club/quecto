@@ -123,6 +123,62 @@ AST *create_symbol(ParserState *parser, const char *identifier) {
     return symbol;
 }
 
+AST *parse_program(ParserState *parser) {
+    AST *program = arena_alloc_type(parser->arena, AST);
+    program->type = AST_PROGRAM;
+
+    // TODO: implement error synchronization
+    while (peek_next_token_type(parser) != TOKEN_EOF) {
+        AST *statement;
+        if (peek_next_token_type(parser) == TOKEN_EXTERN) statement = parse_extern(parser);
+        else statement = parse_procedure(parser);
+        if (statement == NULL) { return program; }
+        arena_array_append(parser->arena, *program, statement);
+    }
+    // NOTE: probably doesn't need to be done but consumes EOF for sake of completion
+    get_next_token(parser);
+
+    return program;
+}
+
+AST *parse_procedure(ParserState *parser) {
+    Token tok;
+
+    AST *procedure = arena_alloc_type(parser->arena, AST);
+    procedure->type = AST_PROCEDURE;
+
+    expect_next_token(parser, &tok, TOKEN_PROC);
+    
+    procedure->line = tok.line;
+    procedure->col = tok.col;
+    
+    expect_next_token(parser, &tok, TOKEN_IDENTIFIER);
+
+    procedure->name = arena_alloc_type(parser->arena, AST);
+    procedure->name->type = AST_SYMBOL;
+    procedure->name->ident = tok.identifier;
+
+    procedure->param_count = parse_params(parser, procedure->params);
+    expect_next_token(parser, &tok, TOKEN_ARROW);
+
+    procedure->return_count = parse_returns(parser, procedure->returns);
+
+    assert(procedure->return_count <= 1 && "no support for multiple return values yet");
+
+    if (match_next_token(parser, &tok, TOKEN_OPEN_CURLY)) {
+        procedure->body = arena_alloc_type(parser->arena, AST);
+        procedure->body->type = AST_BLOCK;
+
+        while (!match_next_token(parser, &tok, TOKEN_CLOSE_CURLY)) {
+            AST *s = parse_statement(parser);
+            arena_array_append(parser->arena, *procedure->body, s);
+        }
+    }
+
+    return procedure;
+}
+
+
 QuectoType *parse_type(ParserState *parser) {
     QuectoType qtype = { 0 };
 
@@ -157,24 +213,6 @@ QuectoType *parse_type(ParserState *parser) {
     }
     
     return Q;
-}
-
-AST *parse_program(ParserState *parser) {
-    AST *program = arena_alloc_type(parser->arena, AST);
-    program->type = AST_PROGRAM;
-
-    // TODO: implement error synchronization
-    while (peek_next_token_type(parser) != TOKEN_EOF) {
-        AST *statement;
-        if (peek_next_token_type(parser) == TOKEN_EXTERN) statement = parse_extern(parser);
-        else statement = parse_procedure(parser);
-        if (statement == NULL) { return program; }
-        array_append(*program, statement);
-    }
-    // NOTE: probably doesn't need to be done but consumes EOF for sake of completion
-    get_next_token(parser);
-
-    return program;
 }
 
 AST *parse_if_chain(ParserState *parser) {
@@ -212,7 +250,7 @@ AST *parse_statement(ParserState *parser) {
         statement->type = AST_BLOCK;
         while (!match_next_token(parser, &tok, TOKEN_CLOSE_CURLY)) {
             AST *s = parse_statement(parser);
-            array_append(*statement, s);
+            arena_array_append(parser->arena, *statement, s);
         }
 
         return statement;
@@ -305,7 +343,7 @@ AST *parse_expression(ParserState *parser, int min_prec) {
             while (!match_next_token(parser, &tok, TOKEN_CLOSE_CURLY)) {
                 AST *s = parse_expression(parser, 0);
                 if (peek_next_token_type(parser) != TOKEN_CLOSE_CURLY) expect_next_token(parser, &tok, TOKEN_COMMA);
-                array_append(*left, s);
+                arena_array_append(parser->arena, *left, s);
             }
         default:
             break;
@@ -369,7 +407,7 @@ size_t parse_args(ParserState *parser, AST *list[MAX_PARAMS]) {
     return count;
 }
 
-size_t parse_parameters(ParserState *parser, AST *list[MAX_PARAMS]) {
+size_t parse_params(ParserState *parser, AST *list[MAX_PARAMS]) {
     Token tok;
 
     expect_next_token(parser, &tok, TOKEN_OPEN_PAREN);
@@ -384,40 +422,19 @@ size_t parse_parameters(ParserState *parser, AST *list[MAX_PARAMS]) {
     return count;
 }
 
-AST *parse_procedure(ParserState *parser) {
+size_t parse_returns(ParserState *parser, AST *list[MAX_PARAMS]) {
     Token tok;
 
-    AST *procedure = arena_alloc_type(parser->arena, AST);
-    procedure->type = AST_PROCEDURE;
-
-    expect_next_token(parser, &tok, TOKEN_PROC);
-    
-    procedure->line = tok.line; procedure->col = tok.col;
-    
-    expect_next_token(parser, &tok, TOKEN_IDENTIFIER);
-
-    procedure->name = arena_alloc_type(parser->arena, AST);
-    procedure->name->type = AST_SYMBOL;
-    procedure->name->ident = tok.identifier;
-
-    procedure->param_count = parse_parameters(parser, procedure->params);
-    expect_next_token(parser, &tok, TOKEN_ARROW);
-
-    procedure->return_count = parse_parameters(parser, procedure->returns);
-
-    assert(procedure->return_count <= 1 && "no support for multiple return values yet");
-
-    if (match_next_token(parser, &tok, TOKEN_OPEN_CURLY)) {
-        procedure->body = arena_alloc_type(parser->arena, AST);
-        procedure->body->type = AST_BLOCK;
-
-        while (!match_next_token(parser, &tok, TOKEN_CLOSE_CURLY)) {
-            AST *s = parse_statement(parser);
-            array_append(*procedure->body, s);
-        }
+    expect_next_token(parser, &tok, TOKEN_OPEN_PAREN);
+    size_t count = 0;
+    while (!match_next_token(parser, &tok, TOKEN_CLOSE_PAREN) && count < MAX_PARAMS) {
+        list[count++] = parse_param_declaration(parser);
+        if (peek_next_token_type(parser) != TOKEN_CLOSE_PAREN) expect_next_token(parser, &tok, TOKEN_COMMA);
     }
 
-    return procedure;
+    assert(count < MAX_PARAMS && "parameter list excedes limit");
+
+    return count;
 }
 
 AST *parse_extern(ParserState *parser) {

@@ -55,9 +55,10 @@
 #define arena_array_append(arena, array, item)\
     do {\
         if ((array).count >= (array).capacity) {\
+            size_t old_capacity = (array).capacity;\
             if ((array).capacity == 0) (array).capacity = ARENA_ARRAY_MINIMUM_CAP;\
             (array).capacity *= 2;\
-            (array).items = arena_realloc((array).items, (array).capacity * sizeof(*(array).items));\
+            (array).items = arena_realloc(arena, (array).items, old_capacity * sizeof(*(array).items), (array).capacity * sizeof(*(array).items));\
         }\
         (array).items[(array).count++] = item;\
     } while (0)

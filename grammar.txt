@@ -7,9 +7,9 @@ This isn't a super strict grammar with like BNF or anything, just a nice referen
 
 program = (procedure)* EOF
 
-procedure = 'proc' identifer '(' param_list ')' '=>' '(' return_list ')' block
-param_list = identifier ':' identifier (',' identifier ':' identifier)*
-return_list = identifier (',' identifier)*
+procedure = 'proc' identifer '(' params ')' '=>' '(' returns ')' block
+params = identifier ':' identifier (',' identifier ':' identifier)*
+returns = identifier (',' identifier)*
 
 statement = (expr       |
              decl       |
