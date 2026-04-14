@@ -1,5 +1,6 @@
 #include "error.h"
 
+#include <stdlib.h>
 #include <stdarg.h>
 #include <stdio.h>
 
@@ -8,6 +9,20 @@ char *src;
 size_t src_size;
 
 void report_error(int line, int col, const char *fmt, ...) {
+    error = true;
+
+    printf("error %d:%d: ", line, col);
+
+    va_list args;
+    va_start(args, fmt);
+    vprintf(fmt, args);
+    va_end(args);
+
+    printf("\n");
+    exit(0);
+}
+
+void report_error_without_exit(int line, int col, const char *fmt, ...) {
     error = true;
 
     printf("error %d:%d: ", line, col);

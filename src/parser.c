@@ -82,6 +82,7 @@ bool expect_next_token(ParserState *parser, Token *tok, TokenType type) {
     if (match_next_token(parser, tok, type)) {
         return true;
     } else {
+        tok = get_next_token(parser);
         report_error(tok->line, tok->col, "expected %s but got %s instead",
                      token_to_string_table[type],
                      token_to_string_table[peek_next_token_type(parser)]);
@@ -102,7 +103,7 @@ bool expect_next_token_multiple(ParserState *parser, Token *tok, int count, ...)
     va_end(args);
     va_start(args, count);
 
-    report_error(tok->line, tok->col, "");
+    report_error_without_exit(tok->line, tok->col, "");
     for (int i = 0; i < count - 1; i++) {
         printf("%s, ", token_to_string_table[va_arg(args, TokenType)]);
     }
@@ -110,6 +111,8 @@ bool expect_next_token_multiple(ParserState *parser, Token *tok, int count, ...)
     printf("but got %s instead\n", token_to_string_table[peek_next_token_type(parser)]);
 
     va_end(args);
+
+    exit(0);
     return false;
 }
 
@@ -221,7 +224,7 @@ AST *parse_statement(ParserState *parser) {
             statement->type = AST_DECL;
             statement->qtype = parse_type(parser);
 
-            if (!expect_next_token(parser, &tok, TOKEN_EQUALS)) return NULL; // probably would be fine if decls didnt have necessary assign
+            expect_next_token(parser, &tok, TOKEN_EQUALS);
 
             statement->expr = parse_expression(parser, 0);
         } else if (match_next_token(parser, &tok, TOKEN_EQUALS)) {
@@ -259,8 +262,7 @@ AST *parse_statement(ParserState *parser) {
 
 AST *parse_expression(ParserState *parser, int min_prec) {
     Token tok;
-    if (!expect_next_token_multiple(parser, &tok, 5, TOKEN_INT_LIT, TOKEN_FLOAT_LIT, TOKEN_IDENTIFIER, TOKEN_OPEN_PAREN, TOKEN_OPEN_CURLY))
-        return NULL;
+    expect_next_token_multiple(parser, &tok, 5, TOKEN_INT_LIT, TOKEN_FLOAT_LIT, TOKEN_IDENTIFIER, TOKEN_OPEN_PAREN, TOKEN_OPEN_CURLY);
 
     AST *left = arena_alloc_type(parser->arena, AST);
 
@@ -296,7 +298,7 @@ AST *parse_expression(ParserState *parser, int min_prec) {
             left = parse_expression(parser, 0);
             if (left == NULL) return NULL;
 
-            if (!expect_next_token(parser, &tok, TOKEN_CLOSE_PAREN)) return NULL;
+            expect_next_token(parser, &tok, TOKEN_CLOSE_PAREN);
             break;
         case TOKEN_OPEN_CURLY:
             left->type = AST_LIST;
