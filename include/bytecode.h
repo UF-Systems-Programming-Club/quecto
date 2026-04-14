@@ -132,6 +132,10 @@ typedef struct {
 // extern const char *registers_8bit_low[];
 // extern const char *registers_64bit[];
 
+Instr create_instr_one_op(Opcode opcode, OperandType op, int val);
+Instr create_instr_two_op(Opcode opcode, OperandType op1, int val1, OperandType op2, int val2);
+Instr create_instr_three_op(Opcode opcode, OperandType op1, int val1, OperandType op2, int val2, OperandType op3, int val3);
+
 Operand gen_add_instr(Bytecode *bytecode, Operand left, Operand right);
 Operand gen_sub_instr(Bytecode *bytecode, Operand left, Operand right);
 Operand gen_mul_instr(Bytecode *bytecode, Operand left, Operand right);

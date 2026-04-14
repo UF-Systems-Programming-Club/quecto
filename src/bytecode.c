@@ -31,6 +31,42 @@ const Opcode jump_condition_opcode_table[OP_COUNT] = {
     [OP_GREATER_EQUALS] = OPCODE_JMP_GE,
 };
 
+// TODO: the only thing needed to make these work instead of a plethora of gen_x functions
+// is to change the way labels are handled. should have an index into array of names instead
+// of storing the pointer directly, and probably a hash table to make the reverse look up easy?
+Instr create_instr_one_op(Opcode opcode, OperandType op, int val) {
+    // NOTE: think about making these operate directly on the bytecode to reduce copying
+    Instr instr;
+    instr.dest.type = op;
+    instr.dest.vreg = val;
+    // TODO: figure out if the kind of operand is even needed or if we can get rid of it completely
+    // might be possible to infer operand types from instruction type
+    instr.arg1.type = OPERAND_INVALID;
+    instr.arg2.type = OPERAND_INVALID;
+    return instr;
+}
+
+Instr create_instr_two_op(Opcode opcode, OperandType op1, int val1, OperandType op2, int val2) {
+    Instr instr;
+    instr.dest.type = op1;
+    instr.dest.vreg = val1;
+    instr.arg1.type = op2;
+    instr.arg1.vreg = val2;
+    instr.arg2.type = OPERAND_INVALID;
+    return instr;
+}
+
+Instr create_instr_three_op(Opcode opcode, OperandType op1, int val1, OperandType op2, int val2, OperandType op3, int val3) {
+    Instr instr;
+    instr.dest.type = op1;
+    instr.dest.vreg = val1;
+    instr.arg1.type = op2;
+    instr.arg1.vreg = val2;
+    instr.arg2.type = op3;
+    instr.arg2.vreg = val3;
+    return instr;
+}
+
 Operand gen_jmp(Bytecode *bytecode, Operand label) {
     Instr jmp;
     jmp.opcode = OPCODE_JMP;
