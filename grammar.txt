@@ -3,7 +3,7 @@ This isn't a super strict grammar with like BNF or anything, just a nice referen
 * means 0 or more times
 + means 1 or more times
 | means or
-{ } means optional if surrounding
+? means optional
 
 program = (procedure)* EOF
 
@@ -21,9 +21,10 @@ statement = (expr       |
 
 
 expr = ( '(' expr ')' | number | identifier ) (operator expr)*
-decl = identifer : {type} = expr
+decl = identifer : (type)? = (expr | braced_initializer)
+braced_initializer = '{' (number ',')* '}' 
 assignment = identifier '=' expr
-if = if expr block (elif expr block)* { 'else' block }
+if = if expr block (elif expr block)* ( 'else' block )?
 while = while expr block
 block = '{' (statement)* '}'
 return = 'return' expr

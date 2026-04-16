@@ -83,7 +83,7 @@ bool expect_next_token(ParserState *parser, Token *tok, TokenType type) {
         return true;
     } else {
         tok = get_next_token(parser);
-        report_error(tok->line, tok->col, "expected \'%s\' but got \'"sv_fmt"\' instead",
+        report_error(tok->line, tok->col, "expected \'%s\' but got \'"sv_fmt"\' instead\n",
                      token_to_string_table[type],
                      sv_arg(tok->lexeme));
         return false;
@@ -101,9 +101,11 @@ bool expect_next_token_multiple(ParserState *parser, Token *tok, int count, ...)
         }
     }
     va_end(args);
+
     va_start(args, count);
 
-    report_error_without_exit(tok->line, tok->col, "");
+    tok = get_next_token(parser);
+    report_error_without_exit(tok->line, tok->col, "expected ");
     for (int i = 0; i < count - 1; i++) {
         printf("%s, ", token_to_string_table[va_arg(args, TokenType)]);
     }
@@ -127,16 +129,12 @@ AST *parse_program(ParserState *parser) {
     AST *program = arena_alloc_type(parser->arena, AST);
     program->type = AST_PROGRAM;
 
-    // TODO: implement error synchronization
     while (peek_next_token_type(parser) != TOKEN_EOF) {
         AST *statement;
         if (peek_next_token_type(parser) == TOKEN_EXTERN) statement = parse_extern(parser);
         else statement = parse_procedure(parser);
-        if (statement == NULL) { return program; }
         arena_array_append(parser->arena, *program, statement);
     }
-    // NOTE: probably doesn't need to be done but consumes EOF for sake of completion
-    get_next_token(parser);
 
     return program;
 }
@@ -285,7 +283,7 @@ AST *parse_statement(ParserState *parser) {
     } else if (match_next_token(parser, &tok, TOKEN_WHILE)) {
         statement->type = AST_WHILE;
         statement->condition = parse_expression(parser, 0);
-        statement-> then = parse_statement(parser);
+        statement->then = parse_statement(parser);
         statement->otherwise = NULL;
 
         return statement;
@@ -298,9 +296,22 @@ AST *parse_statement(ParserState *parser) {
     return statement;
 }
 
+AST *parse_braced_initializer(ParserState *parser) {
+    Token tok;
+    AST *ast = arena_alloc_type(parser->arena, AST);
+    expect_next_token(parser, &tok, TOKEN_OPEN_CURLY);
+    ast->type = AST_LIST;
+    while (!match_next_token(parser, &tok, TOKEN_CLOSE_CURLY)) {
+        AST *s = parse_expression(parser, 0);
+        if (peek_next_token_type(parser) != TOKEN_CLOSE_CURLY) expect_next_token(parser, &tok, TOKEN_COMMA);
+        arena_array_append(parser->arena, *ast, s);
+    }
+}
+
 AST *parse_expression(ParserState *parser, int min_prec) {
     Token tok;
-    expect_next_token_multiple(parser, &tok, 5, TOKEN_INT_LIT, TOKEN_FLOAT_LIT, TOKEN_IDENTIFIER, TOKEN_OPEN_PAREN, TOKEN_OPEN_CURLY);
+    // expect_next_token_multiple(parser, &tok, 5, TOKEN_INT_LIT, TOKEN_FLOAT_LIT, TOKEN_IDENTIFIER, TOKEN_OPEN_PAREN, TOKEN_OPEN_CURLY);
+    expect_next_token_multiple(parser, &tok, 4, TOKEN_INT_LIT, TOKEN_FLOAT_LIT, TOKEN_IDENTIFIER, TOKEN_OPEN_PAREN);
 
     AST *left = arena_alloc_type(parser->arena, AST);
 
@@ -334,20 +345,19 @@ AST *parse_expression(ParserState *parser, int min_prec) {
             break;
         case TOKEN_OPEN_PAREN:
             left = parse_expression(parser, 0);
-            if (left == NULL) return NULL;
-
             expect_next_token(parser, &tok, TOKEN_CLOSE_PAREN);
             break;
-        case TOKEN_OPEN_CURLY:
+        /*case TOKEN_OPEN_CURLY:
             left->type = AST_LIST;
             while (!match_next_token(parser, &tok, TOKEN_CLOSE_CURLY)) {
                 AST *s = parse_expression(parser, 0);
                 if (peek_next_token_type(parser) != TOKEN_CLOSE_CURLY) expect_next_token(parser, &tok, TOKEN_COMMA);
                 arena_array_append(parser->arena, *left, s);
             }
+            break;*/
         default:
-            break;
             UNREACHABLE("TokenType");
+            break;
     }
 
     // NOTE: utilizes the fact that get precedence returns -1 when the next token is
@@ -371,7 +381,6 @@ AST *parse_expression(ParserState *parser, int min_prec) {
         }
 
         op->right = parse_expression(parser, get_token_type_precedence(tok.type));
-        if (op->right == NULL) return NULL;
 
         left = op;
     }
