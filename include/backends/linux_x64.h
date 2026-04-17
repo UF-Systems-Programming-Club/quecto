@@ -51,6 +51,8 @@ typedef enum {
     x64_RSP,
 } x64_Register;
 
+int regsize_from_bits(int bits);
+
 extern CodegenBackend LINUX_X86_64_BACKEND;
 
 #endif

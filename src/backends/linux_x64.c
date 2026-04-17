@@ -9,7 +9,7 @@
 #define STR(X) STR_HELPER(X)
 
 #define REG_NAME(SIZE) CONCAT(registers_, CONCAT(SIZE, bit))
-#define VIRT_TO_PHYS_REG(SIZE, ARG) REG_NAME(SIZE)[iface->location.items[(ARG)].register_index]
+#define VIRT_TO_PHYS_REG(SIZE, ARG) registers[regsize_from_bits(SIZE)][iface->location.items[(ARG)].register_index]
 #define X64_INSTRUCTION(name) void emit_x64_from_ir_##name(CodegenInterface *iface, Instr instr)
 
 #define MREG(x) ((MachineOperand){.type = MOPERAND_REG, .reg = (x) })
@@ -65,21 +65,12 @@ const char *x86_reg_to_str[] = {
   [x64_RBP] = "rbp",
 };
 
-
-x64_Register registers_64bit[4] = {
-  x64_RAX, x64_RCX, x64_RDX, x64_RDI
+x64_Register registers[4][4] = {
+  [0] = { x64_AL, x64_CL, x64_DL, x64_DIL },
+  [1] = { },
+  [2] = { x64_EAX, x64_ECX, x64_EDX, x64_EDI },
+  [3] = { x64_RAX, x64_RCX, x64_RDX, x64_RDI }
 };
-
-
-x64_Register registers_32bit[4] = {
-  x64_EAX, x64_ECX, x64_EDX, x64_EDI
-};
-
-
-x64_Register registers_8bit[4] = {
-  x64_AL, x64_CL, x64_DL, x64_DIL
-};
-
 
 x64_Register arg_registers_32bit[4] = {
   x64_EDI, x64_ESI, x64_EDX, x64_ECX
@@ -102,6 +93,15 @@ const X64_Opcode setCC_from_ir[OPCODE_COUNT] = {
   [OPCODE_CMP_LEQ] = X64_SETLE,
   [OPCODE_CMP_GEQ] = X64_SETGE,
 };
+
+
+inline int regsize_from_bits(int bits) {
+  if (bits <= 8) return 0;
+  else if (bits <= 16) return 1;
+  else if (bits <= 32) return 2;
+  else if (bits <= 64) return 3;
+  UNREACHABLE("invalid bit size");
+}
 
 
 bool fprint_machine_operand(FILE *out, MachineOperand operand, bool leading) {

@@ -38,7 +38,7 @@ typedef enum {
 } Opcode;
 
 typedef enum {
-    OPERAND_INVALID, // dont know if this is best approach
+    OPERAND_INVALID = 0, // dont know if this is best approach
     OPERAND_VREG,
     OPERAND_IMM,
     OPERAND_REG,
@@ -101,15 +101,22 @@ typedef struct {
     size_t capacity;
 } IntervalArray;
 
+typedef enum {
+    CC_INFERED,
+    CC_SYSV, // for future use
+} CallingConvention;
+
 typedef struct {
     const char *name;
     int param_count;
     int return_count;
+    CallingConvention convention;
+    
     int local_var_size;
     int vreg_count;
 
     Bytecode bytecode;
-    LocationArray locations;
+    LocationArray locations; // keep locations and intervals apart of procedure for now, maybe this should be moved idk
     IntervalArray intervals;
 } Procedure;
 
@@ -128,29 +135,7 @@ typedef struct {
     IntervalArray regs[4]; // TODO: change this to be dependent on the backend (but still static)
 } PhysRegs; // Structure to record the info of hardware and ABI constraints on registers for allocator
 
-// extern const char *registers[];
-// extern const char *registers_8bit_low[];
-// extern const char *registers_64bit[];
-
-Instr create_instr_one_op(Opcode opcode, OperandType op, int val);
-Instr create_instr_two_op(Opcode opcode, OperandType op1, int val1, OperandType op2, int val2);
-Instr create_instr_three_op(Opcode opcode, OperandType op1, int val1, OperandType op2, int val2, OperandType op3, int val3);
-
-Operand gen_add_instr(Bytecode *bytecode, Operand left, Operand right);
-Operand gen_sub_instr(Bytecode *bytecode, Operand left, Operand right);
-Operand gen_mul_instr(Bytecode *bytecode, Operand left, Operand right);
-Operand gen_div_instr(Bytecode *bytecode, Operand left, Operand right);
-/*void gen_cmp_eq_instr(Bytecode *bytecode, );
-void gen_cmp_lt_instr(Bytecode *bytecode, );
-void gen_cmp_gt_instr(Bytecode *bytecode, );
-void gen_cmp_leq_instr(Bytecode *bytecode, );
-void gen_cmp_geq_instr(Bytecode *bytecode, );*/
-Operand gen_load_instr(Bytecode *bytecode, int stack_offset);
-Operand gen_store_instr(Bytecode *bytecode, int stack_offset, int vreg);
-// void gen_copy_instr(Bytecode *bytecode, );
-Operand gen_loadi_instr(Bytecode *bytecode, int imm);
-// void gen_ret_instr(Bytecode *bytecode, );
-
+Operand gen_instr(Bytecode *bytecode, Opcode opcode, size_t opcount, ...); // operands should be passed as struct
 Operand emit_expr_bytecode(EmitContext *context, Bytecode *bytecode, AST *expr);
 void emit_if_bytecode(EmitContext *context, Bytecode *bytecode, AST *ifs);
 void emit_while_bytecode(EmitContext *context, Bytecode *bytecode, AST *whiles);
