@@ -6,11 +6,7 @@
 #define MAX_KEYWORD_LEN 128
 
 typedef enum {
-    TOKEN_PLUS,
-    TOKEN_MINUS,
-    TOKEN_MULTIPLY,
     TOKEN_SEMICOLON,
-    TOKEN_DIVIDE,
     TOKEN_INT_LIT,
     TOKEN_FLOAT_LIT,
     TOKEN_EOF,
@@ -23,12 +19,18 @@ typedef enum {
     TOKEN_IDENTIFIER,
     TOKEN_COLON,
     TOKEN_COMMA,
+    
+    TOKEN_PLUS,
+    TOKEN_MINUS,
+    TOKEN_MULTIPLY,
+    TOKEN_DIVIDE,
     TOKEN_EQUALS,
     TOKEN_EQUALS_EQUALS,
     TOKEN_LESS_EQUALS,
     TOKEN_GREATER_EQUALS,
     TOKEN_LESS_THAN,
     TOKEN_GREATER_THAN,
+    
     TOKEN_RETURN,
     TOKEN_IF,
     TOKEN_ELIF,
@@ -40,8 +42,8 @@ typedef enum {
 
     TOKEN_U8,
     TOKEN_I8,
-    TOKEN_I32,
     TOKEN_U32,
+    TOKEN_I32,
 
     TOKEN_COUNT // Make sure this token is the last one
                 // listed in the enum, as this is assumed by compile time assertions

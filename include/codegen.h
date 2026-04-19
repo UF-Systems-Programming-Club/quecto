@@ -46,6 +46,7 @@ typedef struct {
   MachineCode output;
   LocationArray location;
   IntervalArray interval;
+  VregInfoTable vreg_info;
   CodegenContext ctx;
 } CodegenInterface;
 

@@ -95,51 +95,16 @@ bool is_alpha(char c) {
 
 void print_token(Token tok) {
     switch (tok.type) {
-        case TOKEN_PLUS:            printf("+"); break;
-        case TOKEN_MINUS:           printf("-"); break;
-        case TOKEN_MULTIPLY:        printf("*"); break;
-        case TOKEN_DIVIDE:          printf("/"); break;
-        case TOKEN_SEMICOLON:       printf(";"); break;
-        case TOKEN_INT_LIT:         printf("%u", tok.int_lit); break;
-        case TOKEN_FLOAT_LIT:       printf("%.2f", tok.float_lit); break;
-        case TOKEN_EOF:             printf("EOF"); break;
-        case TOKEN_OPEN_PAREN:      printf("("); break;
-        case TOKEN_CLOSE_PAREN:     printf(")"); break;
-        case TOKEN_OPEN_CURLY:      printf("{"); break;
-        case TOKEN_CLOSE_CURLY:     printf("}"); break;
-        case TOKEN_OPEN_SQUARE:     printf("["); break;
-        case TOKEN_CLOSE_SQUARE:    printf("]"); break;
-        case TOKEN_IDENTIFIER:      printf("%s", tok.identifier); break;
-        case TOKEN_COLON:           printf(":"); break;
-        case TOKEN_COMMA:           printf(","); break;
-        case TOKEN_EQUALS:          printf("="); break;
-        case TOKEN_EQUALS_EQUALS:   printf("=="); break;
-        case TOKEN_LESS_EQUALS:     printf("<="); break;
-        case TOKEN_GREATER_EQUALS:  printf(">="); break;
-        case TOKEN_LESS_THAN:       printf("<"); break;
-        case TOKEN_GREATER_THAN:    printf(">"); break;
-        case TOKEN_RETURN:          printf("return"); break;
-        case TOKEN_IF:              printf("if"); break;
-        case TOKEN_ELIF:            printf("elif"); break;
-        case TOKEN_ELSE:            printf("else"); break;
-        case TOKEN_WHILE:           printf("while"); break;
-        case TOKEN_PROC:            printf("proc"); break;
-        case TOKEN_EXTERN:          printf("extern"); break;
-        case TOKEN_ARROW:           printf("=>"); break;
-        case TOKEN_I32:             printf("i32"); break;
-        case TOKEN_U32:             printf("u32"); break;
-        case TOKEN_I8:              printf("i8"); break;
-        case TOKEN_U8:              printf("u8"); break;
-        default:                    UNREACHABLE("TokenType");
+        case TOKEN_INT_LIT: printf("%u", tok.int_lit); break;
+        case TOKEN_FLOAT_LIT: printf("%.2f", tok.float_lit); break;
+        case TOKEN_IDENTIFIER: printf("%s", tok.identifier); break;
+        default: printf("%s", token_to_string_table[tok.type]); break;
     }
     printf("\n");
 }
 
 TokenArray tokenize(const char *buf, size_t buf_size) {
     TokenArray tokens = {0};
-
-    // TODO: should have an array or hashmap of keywords to make
-    // keyword recognization faster and smaller
 
     size_t start = 0;
     size_t next = 0;

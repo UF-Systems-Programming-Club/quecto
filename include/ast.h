@@ -43,6 +43,7 @@ typedef enum {
 typedef struct AST {
     ASTType type;
     size_t line, col; // for starting point of expr and for debugging
+    QuectoType *evaled_type;
     union {
         // Program and block and list
         struct {
@@ -73,8 +74,6 @@ typedef struct AST {
             BinaryOp op;
             struct AST *left;
             struct AST *right;
-
-            QuectoType *evaled_type; // evaled at analysis
         };
 
         // Calls
@@ -93,7 +92,6 @@ typedef struct AST {
         // Declaration and Assignment
         struct {
             struct AST *symbol;
-            QuectoType *qtype;
             struct AST *expr;
         };
 

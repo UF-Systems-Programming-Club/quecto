@@ -49,6 +49,7 @@ MachineCode emit_procedure_with(CodegenBackend *backend, Procedure procedure) {
     CodegenInterface iface = {
         .interval = procedure.intervals,
         .location = procedure.locations,
+        .vreg_info = procedure.vreg_info,
         .output = {0},
         .ctx = {
             .procedure_name = procedure.name,

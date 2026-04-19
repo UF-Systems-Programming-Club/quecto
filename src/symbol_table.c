@@ -84,6 +84,54 @@ bool quecto_is_integer(QuectoType *a) {
 }
 
 
+bool quecto_is_primitive(QuectoType *a) {
+    switch (a->type) {
+        case QUECTO_I32:
+        case QUECTO_U32:
+        case QUECTO_I8:
+        case QUECTO_U8:
+            return true;
+        default:
+            return false;
+    }
+}
+
+
+int quecto_type_size(QuectoType *a) {
+    if (quecto_is_primitive(a)) {
+        return quecto_primitive_width[a->type];
+    } else {
+         switch (a->type) {
+            case QUECTO_ARRAY:
+                 return quecto_type_size(a->inner) * a->array_size;
+            default:
+                UNREACHABLE("invalid");
+         }   
+    }
+    return -1;
+}
+
+
+bool quecto_is_signed(QuectoType *a) {
+    if (quecto_is_primitive(a)) {
+        switch (a->type) {
+            case QUECTO_I32:
+            case QUECTO_I8:
+                return true;
+            default:
+                return false;
+        }
+    } else {
+        switch (a->type) {
+            case QUECTO_ARRAY:
+                return quecto_is_signed(a->inner);
+            default:
+                UNREACHABLE("invalid");
+                return false;
+        }
+    }
+}
+
 void print_type(QuectoType *qtype) {
     if (qtype == NULL) {
         printf("(null)");

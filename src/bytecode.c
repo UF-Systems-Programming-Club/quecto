@@ -9,9 +9,6 @@
 #define IMM(info) (Operand) { .type = OPERAND_IMM, info }
 #define STACK(info) (Operand) { .type = OPERAND_STACK, info }
 
-int vreg_count = 0;
-int stack_offset = 0;
-
 // NOTE: in the future these instructions will hold more information like
 // size of type, signed or unsigned, etc;
 
@@ -81,9 +78,24 @@ void gen_label(Bytecode *bytecode, Operand label) {
 }
 
 
+int allocate_vreg(EmitContext *context, QuectoType *type) {
+    assert(type != NULL && "quecto type not initialized or nulled");
+    
+    VregInfo info;
+    info.size = quecto_type_size(type);
+    info.sign = quecto_is_signed(type);
+    
+    arena_array_append(context->arena, context->vreg_info, info);
+    return context->vreg_count++;
+}
+
+
 Operand emit_expr_bytecode(EmitContext *context, Bytecode *bytecode, AST *expr) {
     if (expr->type == AST_INT_LIT) {
-        return gen_instr(bytecode, OPCODE_LOADI, 2, VREG( .vreg = vreg_count++ ), IMM( .imm = expr->int_lit ));
+        return gen_instr(bytecode, OPCODE_LOADI, 2,
+                            VREG( .vreg = allocate_vreg(context, expr->evaled_type)),
+                            IMM( .imm = expr->int_lit )
+                        );
     }
     if (expr->type == AST_LIST) {
         return (Operand){0};
@@ -97,8 +109,8 @@ Operand emit_expr_bytecode(EmitContext *context, Bytecode *bytecode, AST *expr) 
     if (expr->type == AST_CALL) {
         Operand dest;
         dest.type = OPERAND_VREG;
-        dest.vreg = vreg_count++;
-
+        dest.vreg = allocate_vreg(context, expr->evaled_type);
+            
         for (int i = 0; i < expr->arg_count; i++) {
             Operand dest = emit_expr_bytecode(context, bytecode, expr->args[i]);
             Instr param;
@@ -112,12 +124,15 @@ Operand emit_expr_bytecode(EmitContext *context, Bytecode *bytecode, AST *expr) 
     if (expr->type == AST_SYMBOL) {
         SymbolData *var = get_symbol(context->scope, expr->ident);
 
-        return gen_instr(bytecode, OPCODE_LOAD, 2, VREG( .vreg = vreg_count++ ), STACK( .stack_offset = var->stack_offset ));
+        return gen_instr(bytecode, OPCODE_LOAD, 2,
+                            VREG( .vreg = allocate_vreg(context, expr->evaled_type)),
+                            STACK( .stack_offset = var->stack_offset )
+                        );
     }
 
     Instr instr;
     instr.dest.type = OPERAND_VREG;
-    instr.dest.vreg = vreg_count++;
+    instr.dest.vreg = allocate_vreg(context, expr->evaled_type);
     instr.arg1 = emit_expr_bytecode(context, bytecode, expr->left);
     instr.arg2 = emit_expr_bytecode(context, bytecode, expr->right);
 
@@ -195,41 +210,44 @@ void emit_procedure_bytecode(EmitContext *context, Procedure *procedure, AST *as
     procedure->name = ast->name->ident;
     procedure->param_count = ast->param_count;
     procedure->return_count = ast->return_count;
-    stack_offset = 0;
-    vreg_count = 0;
 
+    context->stack_offset = 0;
+    context->vreg_count = 0;
+    context->vreg_info = (VregInfoTable) {0};
+        
     context->scope = ast->symbols;
     for (int i = 0; i < ast->param_count; i++) {
         SymbolData *data = get_symbol(context->scope, ast->params[i]->symbol->ident);
 
-        stack_offset += 4;
-        data->stack_offset = stack_offset;
+        context->stack_offset += 4;
+        data->stack_offset = context->stack_offset;
     }
     emit_block_bytecode(context, &procedure->bytecode, ast->body);
     context->scope = ast->symbols->prev;
 
-    procedure->local_var_size = stack_offset;
-    procedure->vreg_count = vreg_count;
+    procedure->local_var_size = context->stack_offset;
+    procedure->vreg_count = context->vreg_count;
+    procedure->vreg_info = context->vreg_info;
 }
 
 
 void emit_decl_bytecode(EmitContext *context, Bytecode *bytecode, AST *decl) {
     SymbolData *var = get_symbol(context->scope, decl->symbol->ident);
 
-    if (decl->qtype->type == QUECTO_ARRAY) {
-        var->stack_offset = stack_offset + 4;
-        for (int i = 0; i < decl->qtype->array_size; i++) {
-            stack_offset += 4;
+    if (decl->evaled_type->type == QUECTO_ARRAY) {
+        var->stack_offset = context->stack_offset + 4;
+        for (int i = 0; i < decl->evaled_type->array_size; i++) {
+            context->stack_offset += 4;
             Operand expr = emit_expr_bytecode(context, bytecode, decl->expr->items[i]);
 
-            gen_instr(bytecode, OPCODE_STORE, 2, STACK( .stack_offset = stack_offset ), VREG ( .vreg = expr.vreg ));
+            gen_instr(bytecode, OPCODE_STORE, 2, STACK( .stack_offset = context->stack_offset ), VREG ( .vreg = expr.vreg ));
         }
     } else {
-        stack_offset += 4;
-        var->stack_offset = stack_offset;
+        context->stack_offset += 4;
+        var->stack_offset = context->stack_offset;
 
         Operand expr = emit_expr_bytecode(context, bytecode, decl->expr);
-        gen_instr(bytecode, OPCODE_STORE, 2, STACK( .stack_offset = stack_offset ), VREG ( .vreg = expr.vreg ));
+        gen_instr(bytecode, OPCODE_STORE, 2, STACK( .stack_offset = context->stack_offset ), VREG ( .vreg = expr.vreg ));
     }
 }
 
@@ -279,12 +297,14 @@ void emit_statement_bytecode(EmitContext *context, Bytecode *bytecode, AST *stat
     }
 }
 
+
 void emit_assign_bytecode(EmitContext *context, Bytecode *bytecode, AST *assignment) {
     Operand expr = emit_expr_bytecode(context, bytecode, assignment->expr);
     SymbolData *var = get_symbol(context->scope, assignment->symbol->ident);
 
     gen_instr(bytecode, OPCODE_STORE, 2, STACK( .stack_offset = var->stack_offset), VREG( .vreg = expr.vreg ));
 }
+
 
 void emit_return_bytecode(EmitContext *context, Bytecode *bytecode, AST *ret) {
     // TODO: in the future should probably have a return stack similar to function param stack
@@ -294,7 +314,6 @@ void emit_return_bytecode(EmitContext *context, Bytecode *bytecode, AST *ret) {
     instr.arg1 = emit_expr_bytecode(context, bytecode, ret->expr);
     array_append(*bytecode, instr);
 }
-
 
 
 void emit_if_bytecode(EmitContext *context, Bytecode *bytecode, AST *ifs) {

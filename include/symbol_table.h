@@ -62,7 +62,10 @@ SymbolData *insert_symbol(Arena *arena, SymbolTable *symbol_table, const char *s
 void *get_symbol(SymbolTable *symbol_table, const char *str);
 
 bool quecto_types_equal(QuectoType *a, QuectoType *b);
+bool quecto_is_primitive(QuectoType *a);
 bool quecto_is_integer(QuectoType *a);
+bool quecto_is_signed(QuectoType *a);
+int quecto_type_size(QuectoType *a);
 void print_type(QuectoType *type);
  
 #endif

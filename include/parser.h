@@ -6,6 +6,16 @@
 #include "tokenizer.h"
 #include "ast.h"
 
+typedef enum {
+    PCLF_DECL,
+    PCLF_ASSIGN,
+    PCLF_BLOCK,
+    PCLF_WHILE,
+    PCLF_IF,
+    PCLF_RET,
+    PCLF_EXPR
+} ParserClsfcn; 
+
 typedef struct {
     TokenArray tokens;
     int current;
@@ -20,6 +30,7 @@ AST *parse_param_declaration(ParserState *parser);
 AST *parse_program(ParserState *parser);
 AST *parse_procedure(ParserState *parser);
 // AST *parse_params(ParserState *parser);
+AST *parse_braced_initializer(ParserState *parser);
 size_t parse_params(ParserState *parser, AST *list[MAX_PARAMS]);
 size_t parse_returns(ParserState *parser, AST *list[MAX_PARAMS]);
 AST *parse_statement(ParserState *parser);

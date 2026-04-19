@@ -7,6 +7,10 @@
 typedef struct {
   Arena *arena;
   HashTable *type_intern_table;
+  
+  QuectoType **returns;
+  size_t return_count;
+  
   SymbolTable *symbol_table;
 } AnalysisContext;
 

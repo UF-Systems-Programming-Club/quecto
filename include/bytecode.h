@@ -101,6 +101,19 @@ typedef struct {
     size_t capacity;
 } IntervalArray;
 
+typedef struct {
+    int size;
+    bool sign;
+} VregInfo;
+
+
+typedef struct {
+    VregInfo *items;
+    size_t count;
+    size_t capacity;
+} VregInfoTable;
+
+
 typedef enum {
     CC_INFERED,
     CC_SYSV, // for future use
@@ -114,6 +127,7 @@ typedef struct {
     
     int local_var_size;
     int vreg_count;
+    VregInfoTable vreg_info;
 
     Bytecode bytecode;
     LocationArray locations; // keep locations and intervals apart of procedure for now, maybe this should be moved idk
@@ -127,6 +141,11 @@ typedef struct {
 } Program;
 
 typedef struct {
+    int stack_offset;
+    int vreg_count;
+    VregInfoTable vreg_info;
+
+    Arena *arena;
     SymbolTable *scope;
     const char *current_procedure_name;
 } EmitContext;

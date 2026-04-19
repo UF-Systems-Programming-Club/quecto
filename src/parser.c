@@ -20,58 +20,33 @@ int get_token_precedence_table[] = {
 };
 
 bool token_is_operator(TokenType type) {
-    switch (type) {
-        case TOKEN_EQUALS_EQUALS:
-        case TOKEN_GREATER_EQUALS:
-        case TOKEN_LESS_EQUALS:
-        case TOKEN_LESS_THAN:
-        case TOKEN_GREATER_THAN:
-        case TOKEN_PLUS:
-        case TOKEN_MINUS:
-        case TOKEN_MULTIPLY:
-        case TOKEN_DIVIDE:
-            return true;
-        default:
-            return false;
-    }
+    return TOKEN_PLUS <= type && type <= TOKEN_GREATER_THAN; // works cause they are grouped together
 }
+
 
 bool token_is_primitive(TokenType type) {
-    switch (type) {
-        case TOKEN_I32:
-        case TOKEN_U32:
-        case TOKEN_I8:
-        case TOKEN_U8:
-            return true;
-        default:
-            return false;
-    }
+    return TOKEN_U8 <= type && type <= TOKEN_I32;
 }
+
 
 int get_token_type_precedence(TokenType type) {
-    if (token_is_operator(type)) return get_token_precedence_table[type];
-    return -1;
+    return (token_is_operator(type)) ? get_token_precedence_table[type] : -1;
 }
+
 
 Token *get_next_token(ParserState *parser) {
-    if (parser->current >= parser->tokens.count) return &parser->tokens.items[parser->tokens.count - 1];
-    return &parser->tokens.items[parser->current++];
+    return (parser->current < parser->tokens.count) ? &parser->tokens.items[parser->current++] :
+            &parser->tokens.items[parser->tokens.count - 1];
 }
 
-TokenType peek_next_token_type(ParserState *parser) {
-    if (parser->current >= parser->tokens.count) return parser->tokens.items[parser->tokens.count - 1].type;
 
-    return parser->tokens.items[parser->current].type;
-}
-
-TokenType peek_next_next_token_type(ParserState *parser) {
-    if (parser->current + 1 >= parser->tokens.count) return parser->tokens.items[parser->tokens.count - 1].type;
-
-    return parser->tokens.items[parser->current + 1].type;
+TokenType peek_token_type(ParserState *parser, int dist) {
+    return (parser->current + dist < parser->tokens.count) ? parser->tokens.items[parser->current + dist].type :
+                 parser->tokens.items[parser->tokens.count - 1].type;
 }
 
 bool match_next_token(ParserState *parser, Token *tok, TokenType type) {
-    if (peek_next_token_type(parser) == type) {
+    if (peek_token_type(parser, 0) == type) {
         *tok = *get_next_token(parser);
         return true;
     }
@@ -110,7 +85,7 @@ bool expect_next_token_multiple(ParserState *parser, Token *tok, int count, ...)
         printf("%s, ", token_to_string_table[va_arg(args, TokenType)]);
     }
     printf("or %s, ", token_to_string_table[va_arg(args, TokenType)]);
-    printf("but got %s instead\n", token_to_string_table[peek_next_token_type(parser)]);
+    printf("but got %s instead\n", token_to_string_table[peek_token_type(parser, -1)]);
 
     va_end(args);
 
@@ -125,19 +100,69 @@ AST *create_symbol(ParserState *parser, const char *identifier) {
     return symbol;
 }
 
+
+QuectoType *parse_type(ParserState *parser) {
+    QuectoType qtype = { 0 };
+
+    Token *tok = get_next_token(parser);
+    switch(tok->type) {
+        case TOKEN_I32:     qtype.type = QUECTO_I32; break;
+        case TOKEN_U32:     qtype.type = QUECTO_U32; break;
+        case TOKEN_I8:      qtype.type = QUECTO_I8; break;
+        case TOKEN_U8:      qtype.type = QUECTO_U8; break;                    
+        default: {
+            // report_error(tok->line, tok->col, "not a recognized type");
+            printf("inferred decl\n");
+            parser->current--;
+            qtype.type = QUECTO_UNKNOWN;
+        }
+    }
+
+    QuectoType *Q = arena_intern(parser->arena, parser->type_intern_table, &qtype, sizeof(QuectoType));
+
+    if (peek_token_type(parser, 0) == TOKEN_OPEN_SQUARE) {
+        expect_next_token(parser, tok, TOKEN_OPEN_SQUARE);
+        expect_next_token(parser, tok, TOKEN_INT_LIT);
+        
+        QuectoType qtype_outer;
+        qtype_outer.type = QUECTO_ARRAY;
+        qtype_outer.inner = Q;
+        qtype_outer.array_size = tok->int_lit;
+        
+        expect_next_token(parser, tok, TOKEN_CLOSE_SQUARE);
+        return arena_intern(parser->arena, parser->type_intern_table, &qtype_outer, sizeof(QuectoType));
+    }
+    
+    return Q;
+}
+
+
 AST *parse_program(ParserState *parser) {
     AST *program = arena_alloc_type(parser->arena, AST);
     program->type = AST_PROGRAM;
 
-    while (peek_next_token_type(parser) != TOKEN_EOF) {
+    while (peek_token_type(parser, 0) != TOKEN_EOF) {
         AST *statement;
-        if (peek_next_token_type(parser) == TOKEN_EXTERN) statement = parse_extern(parser);
+        if (peek_token_type(parser, 0) == TOKEN_EXTERN) statement = parse_extern(parser);
         else statement = parse_procedure(parser);
         arena_array_append(parser->arena, *program, statement);
     }
 
     return program;
 }
+
+
+AST *parse_extern(ParserState *parser) {
+    Token tok;
+
+    AST *exter = arena_alloc_type(parser->arena, AST);
+    exter->type = AST_EXTERN;
+    expect_next_token(parser, &tok, TOKEN_EXTERN);
+    exter->externed = parse_procedure(parser);
+
+    return exter;    
+}
+
 
 AST *parse_procedure(ParserState *parser) {
     Token tok;
@@ -176,42 +201,55 @@ AST *parse_procedure(ParserState *parser) {
     return procedure;
 }
 
-
-QuectoType *parse_type(ParserState *parser) {
-    QuectoType qtype = { 0 };
-
-    Token *tok = get_next_token(parser);
-    switch(tok->type) {
-        case TOKEN_I32:     qtype.type = QUECTO_I32; break;
-        case TOKEN_U32:     qtype.type = QUECTO_U32; break;
-        case TOKEN_I8:      qtype.type = QUECTO_I8; break;
-        case TOKEN_U8:      qtype.type = QUECTO_U8; break;                    
-        default: {
-            // report_error(tok->line, tok->col, "not a recognized type");
-            printf("inferred decl\n");
-            parser->current--;
-            qtype.type = QUECTO_UNKNOWN;
+ParserClsfcn classify_statement(ParserState *parser) {
+    switch(peek_token_type(parser, 0)) {
+        case TOKEN_OPEN_CURLY: return PCLF_BLOCK;
+        case TOKEN_IDENTIFIER: {
+            switch(peek_token_type(parser, 1)) {
+                case TOKEN_COLON: return PCLF_DECL;
+                case TOKEN_EQUALS: return PCLF_ASSIGN;
+                default: break;
+            }   
         }
+        break;
+        case TOKEN_RETURN: return PCLF_RET;
+        case TOKEN_IF: return PCLF_IF;
+        case TOKEN_WHILE: return PCLF_WHILE;
+        default: break;
     }
-
-    QuectoType *Q = arena_intern(parser->arena, parser->type_intern_table, &qtype, sizeof(QuectoType));
-
-    if (peek_next_token_type(parser) == TOKEN_OPEN_SQUARE) {
-        expect_next_token(parser, tok, TOKEN_OPEN_SQUARE);
-        expect_next_token(parser, tok, TOKEN_INT_LIT);
-        
-        QuectoType qtype_outer;
-        qtype_outer.type = QUECTO_ARRAY;
-        qtype_outer.inner = Q;
-        qtype_outer.array_size = tok->int_lit;
-        
-        expect_next_token(parser, tok, TOKEN_CLOSE_SQUARE);
-
-        return arena_intern(parser->arena, parser->type_intern_table, &qtype_outer, sizeof(QuectoType));
-    }
-    
-    return Q;
+    return PCLF_EXPR;
 }
+
+
+AST *parse_block(ParserState *parser) {
+    AST *block = arena_alloc_type(parser->arena, AST);
+    block->type = AST_BLOCK;
+
+    Token tok;
+    expect_next_token(parser, &tok, TOKEN_OPEN_CURLY);
+    while (!match_next_token(parser, &tok, TOKEN_CLOSE_CURLY)) {
+        AST *s = parse_statement(parser);
+        arena_array_append(parser->arena, *block, s);
+    }
+
+    return block;
+}
+
+
+AST *parse_if(ParserState *parser) {
+    AST *_if = arena_alloc_type(parser->arena, AST);
+    _if->type = AST_IF;
+
+    Token tok;
+    expect_next_token(parser, &tok, TOKEN_IF);
+
+    _if->condition = parse_expression(parser, 0);
+    _if->then = parse_statement(parser);
+    _if->otherwise = parse_if_chain(parser);
+
+    return _if;
+}
+
 
 AST *parse_if_chain(ParserState *parser) {
     Token tok;
@@ -238,63 +276,87 @@ AST *parse_if_chain(ParserState *parser) {
     return NULL;
 }
 
+
+AST *parse_while(ParserState *parser) {
+    AST *_while = arena_alloc_type(parser->arena, AST);
+    _while->type = AST_WHILE;
+
+    Token tok;
+    expect_next_token(parser, &tok, TOKEN_WHILE);
+
+    _while->condition = parse_expression(parser, 0);
+    _while->then = parse_statement(parser);
+    _while->otherwise = parse_if_chain(parser);
+
+    return _while;
+}
+
+
+AST *parse_assignment(ParserState *parser) {
+    AST *assignment = arena_alloc_type(parser->arena, AST);
+    assignment->type = AST_ASSIGNMENT;
+
+    Token tok;
+
+    expect_next_token(parser, &tok, TOKEN_IDENTIFIER);
+    assignment->symbol = create_symbol(parser, tok.identifier);
+    expect_next_token(parser, &tok, TOKEN_EQUALS);
+    assignment->expr = parse_expression(parser, 0);
+
+    return assignment;
+}
+
+
+AST *parse_stmt_return(ParserState *parser) {
+    AST *_return = arena_alloc_type(parser->arena, AST);
+    _return->type = AST_RETURN;
+
+    Token tok;
+    
+    expect_next_token(parser, &tok, TOKEN_RETURN);
+    _return->expr = parse_expression(parser, 0);
+
+    return _return;
+}
+
+
+AST *parse_stmt_declaration(ParserState *parser) {
+    AST *decl = arena_alloc_type(parser->arena, AST);
+    decl->type = AST_DECL;
+
+    Token tok;
+
+    expect_next_token(parser, &tok, TOKEN_IDENTIFIER);
+    decl->symbol = create_symbol(parser, tok.identifier);
+    expect_next_token(parser, &tok, TOKEN_COLON);
+    decl->evaled_type = parse_type(parser);
+    expect_next_token(parser, &tok, TOKEN_EQUALS);
+    decl->expr = (peek_token_type(parser, 0) == TOKEN_OPEN_CURLY) ?
+                parse_braced_initializer(parser) : parse_expression(parser, 0);
+
+    return decl;
+}
+
+
 AST *parse_statement(ParserState *parser) {
     Token tok;
 
-    AST *statement = arena_alloc_type(parser->arena, AST);
+    AST *statement = NULL;
 
-    if (match_next_token(parser, &tok, TOKEN_OPEN_CURLY)) {
-        
-        statement->type = AST_BLOCK;
-        while (!match_next_token(parser, &tok, TOKEN_CLOSE_CURLY)) {
-            AST *s = parse_statement(parser);
-            arena_array_append(parser->arena, *statement, s);
-        }
-
-        return statement;
-    } else if (match_next_token(parser, &tok, TOKEN_IDENTIFIER)) {
-        statement->line = tok.line; statement->col = tok.col;
-        statement->symbol = create_symbol(parser, tok.identifier);
-
-        if (match_next_token(parser, &tok, TOKEN_COLON)) {
-            statement->type = AST_DECL;
-            statement->qtype = parse_type(parser);
-
-            expect_next_token(parser, &tok, TOKEN_EQUALS);
-
-            statement->expr = parse_expression(parser, 0);
-        } else if (match_next_token(parser, &tok, TOKEN_EQUALS)) {
-            statement->type = AST_ASSIGNMENT;
-            statement->expr = parse_expression(parser, 0);
-        } else {
-            parser->current--; // match_next_token consumes so current has to rewind to parse properly (idk if this is best fix)
-            statement = parse_expression(parser, 0);
-        }
-    } else if (match_next_token(parser, &tok, TOKEN_RETURN)) {
-        statement->type = AST_RETURN;
-        statement->expr = parse_expression(parser, 0);
-    } else if (match_next_token(parser, &tok, TOKEN_IF)) {
-        statement->type = AST_IF;
-        statement->condition = parse_expression(parser, 0);
-        statement->then = parse_statement(parser);
-        statement->otherwise = parse_if_chain(parser);
-
-        return statement;
-    } else if (match_next_token(parser, &tok, TOKEN_WHILE)) {
-        statement->type = AST_WHILE;
-        statement->condition = parse_expression(parser, 0);
-        statement->then = parse_statement(parser);
-        statement->otherwise = NULL;
-
-        return statement;
-    } else {
-        statement = parse_expression(parser, 0);
+    switch (classify_statement(parser)) {
+        case PCLF_BLOCK:  return parse_block(parser);
+        case PCLF_IF:     return parse_if(parser); 
+        case PCLF_WHILE:  return parse_while(parser);
+        case PCLF_ASSIGN: statement = parse_assignment(parser); break;
+        case PCLF_DECL:   statement = parse_stmt_declaration(parser); break;
+        case PCLF_RET:    statement = parse_stmt_return(parser); break;
+        case PCLF_EXPR:   statement = parse_expression(parser, 0); break;
     }
 
-    if (!match_next_token(parser, &tok, TOKEN_SEMICOLON)) return NULL;
-
+    expect_next_token(parser, &tok, TOKEN_SEMICOLON);
     return statement;
 }
+
 
 AST *parse_braced_initializer(ParserState *parser) {
     Token tok;
@@ -303,14 +365,15 @@ AST *parse_braced_initializer(ParserState *parser) {
     ast->type = AST_LIST;
     while (!match_next_token(parser, &tok, TOKEN_CLOSE_CURLY)) {
         AST *s = parse_expression(parser, 0);
-        if (peek_next_token_type(parser) != TOKEN_CLOSE_CURLY) expect_next_token(parser, &tok, TOKEN_COMMA);
+        if (peek_token_type(parser, 0) != TOKEN_CLOSE_CURLY) expect_next_token(parser, &tok, TOKEN_COMMA);
         arena_array_append(parser->arena, *ast, s);
     }
+    return ast;
 }
+
 
 AST *parse_expression(ParserState *parser, int min_prec) {
     Token tok;
-    // expect_next_token_multiple(parser, &tok, 5, TOKEN_INT_LIT, TOKEN_FLOAT_LIT, TOKEN_IDENTIFIER, TOKEN_OPEN_PAREN, TOKEN_OPEN_CURLY);
     expect_next_token_multiple(parser, &tok, 4, TOKEN_INT_LIT, TOKEN_FLOAT_LIT, TOKEN_IDENTIFIER, TOKEN_OPEN_PAREN);
 
     AST *left = arena_alloc_type(parser->arena, AST);
@@ -347,14 +410,6 @@ AST *parse_expression(ParserState *parser, int min_prec) {
             left = parse_expression(parser, 0);
             expect_next_token(parser, &tok, TOKEN_CLOSE_PAREN);
             break;
-        /*case TOKEN_OPEN_CURLY:
-            left->type = AST_LIST;
-            while (!match_next_token(parser, &tok, TOKEN_CLOSE_CURLY)) {
-                AST *s = parse_expression(parser, 0);
-                if (peek_next_token_type(parser) != TOKEN_CLOSE_CURLY) expect_next_token(parser, &tok, TOKEN_COMMA);
-                arena_array_append(parser->arena, *left, s);
-            }
-            break;*/
         default:
             UNREACHABLE("TokenType");
             break;
@@ -362,7 +417,7 @@ AST *parse_expression(ParserState *parser, int min_prec) {
 
     // NOTE: utilizes the fact that get precedence returns -1 when the next token is
     // not an operator
-    while (get_token_type_precedence(peek_next_token_type(parser)) > min_prec) {
+    while (get_token_type_precedence(peek_token_type(parser, 0)) > min_prec) {
         AST *op = arena_alloc_type(parser->arena, AST);
         op->type = AST_BINARY_OP;
         op->left = left;
@@ -388,6 +443,7 @@ AST *parse_expression(ParserState *parser, int min_prec) {
     return left;
 }
 
+
 AST *parse_param_declaration(ParserState *parser) {
     Token tok;
 
@@ -398,9 +454,10 @@ AST *parse_param_declaration(ParserState *parser) {
     decl->symbol = create_symbol(parser, tok.identifier);
 
     expect_next_token(parser, &tok, TOKEN_COLON);
-    decl->qtype = parse_type(parser);
+    decl->evaled_type = parse_type(parser);
     return decl;
 }
+
 
 size_t parse_args(ParserState *parser, AST *list[MAX_PARAMS]) {
     Token tok;
@@ -408,13 +465,14 @@ size_t parse_args(ParserState *parser, AST *list[MAX_PARAMS]) {
     size_t count = 0;
     while (!match_next_token(parser, &tok, TOKEN_CLOSE_PAREN) && count < MAX_PARAMS) {
         list[count++] = parse_expression(parser, 0);
-        if (peek_next_token_type(parser) != TOKEN_CLOSE_PAREN) expect_next_token(parser, &tok, TOKEN_COMMA);
+        if (peek_token_type(parser, 0) != TOKEN_CLOSE_PAREN) expect_next_token(parser, &tok, TOKEN_COMMA);
     }
 
     assert(count < MAX_PARAMS && "arg list excedes limit");
 
     return count;
 }
+
 
 size_t parse_params(ParserState *parser, AST *list[MAX_PARAMS]) {
     Token tok;
@@ -423,13 +481,14 @@ size_t parse_params(ParserState *parser, AST *list[MAX_PARAMS]) {
     size_t count = 0;
     while (!match_next_token(parser, &tok, TOKEN_CLOSE_PAREN) && count < MAX_PARAMS) {
         list[count++] = parse_param_declaration(parser);
-        if (peek_next_token_type(parser) != TOKEN_CLOSE_PAREN) expect_next_token(parser, &tok, TOKEN_COMMA);
+        if (peek_token_type(parser, 0) != TOKEN_CLOSE_PAREN) expect_next_token(parser, &tok, TOKEN_COMMA);
     }
 
     assert(count < MAX_PARAMS && "parameter list excedes limit");
 
     return count;
 }
+
 
 size_t parse_returns(ParserState *parser, AST *list[MAX_PARAMS]) {
     Token tok;
@@ -438,7 +497,7 @@ size_t parse_returns(ParserState *parser, AST *list[MAX_PARAMS]) {
     size_t count = 0;
     while (!match_next_token(parser, &tok, TOKEN_CLOSE_PAREN) && count < MAX_PARAMS) {
         list[count++] = parse_param_declaration(parser);
-        if (peek_next_token_type(parser) != TOKEN_CLOSE_PAREN) expect_next_token(parser, &tok, TOKEN_COMMA);
+        if (peek_token_type(parser, 0) != TOKEN_CLOSE_PAREN) expect_next_token(parser, &tok, TOKEN_COMMA);
     }
 
     assert(count < MAX_PARAMS && "parameter list excedes limit");
@@ -446,13 +505,4 @@ size_t parse_returns(ParserState *parser, AST *list[MAX_PARAMS]) {
     return count;
 }
 
-AST *parse_extern(ParserState *parser) {
-    Token tok;
 
-    AST *exter = arena_alloc_type(parser->arena, AST);
-    exter->type = AST_EXTERN;
-    expect_next_token(parser, &tok, TOKEN_EXTERN);
-    exter->externed = parse_procedure(parser);
-
-    return exter;    
-}

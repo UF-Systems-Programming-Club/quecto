@@ -9,7 +9,7 @@
 #define STR(X) STR_HELPER(X)
 
 #define REG_NAME(SIZE) CONCAT(registers_, CONCAT(SIZE, bit))
-#define VIRT_TO_PHYS_REG(SIZE, ARG) registers[regsize_from_bits(SIZE)][iface->location.items[(ARG)].register_index]
+#define VIRT_TO_PHYS_REG(SIZE, ARG) registers[regsize_from_bytes(SIZE)][iface->location.items[(ARG)].register_index]
 #define X64_INSTRUCTION(name) void emit_x64_from_ir_##name(CodegenInterface *iface, Instr instr)
 
 #define MREG(x) ((MachineOperand){.type = MOPERAND_REG, .reg = (x) })
@@ -95,11 +95,11 @@ const X64_Opcode setCC_from_ir[OPCODE_COUNT] = {
 };
 
 
-inline int regsize_from_bits(int bits) {
-  if (bits <= 8) return 0;
-  else if (bits <= 16) return 1;
-  else if (bits <= 32) return 2;
-  else if (bits <= 64) return 3;
+inline int regsize_from_bytes(int bytes) {
+  if (bytes <= 1) return 0;
+  else if (bytes <= 2) return 1;
+  else if (bytes <= 4) return 2;
+  else if (bytes <= 8) return 3;
   UNREACHABLE("invalid bit size");
 }
 
@@ -173,44 +173,44 @@ void emit_x64_epilogue(CodegenInterface *iface, Procedure *procedure) {
 
 
 X64_INSTRUCTION(add) {
-  EMIT(iface->output, X64_ADD, MREG(VIRT_TO_PHYS_REG(32, instr.dest.vreg)), MREG(VIRT_TO_PHYS_REG(32, instr.arg2.vreg)), MINV);
+  EMIT(iface->output, X64_ADD, MREG(VIRT_TO_PHYS_REG(iface->vreg_info.items[instr.dest.vreg].size, instr.dest.vreg)), MREG(VIRT_TO_PHYS_REG(iface->vreg_info.items[instr.arg2.vreg].size, instr.arg2.vreg)), MINV);
 }
 
 
 X64_INSTRUCTION(sub) {
-  EMIT(iface->output, X64_SUB, MREG(VIRT_TO_PHYS_REG(32, instr.dest.vreg)), MREG(VIRT_TO_PHYS_REG(32, instr.arg2.vreg)), MINV);
+  EMIT(iface->output, X64_SUB, MREG(VIRT_TO_PHYS_REG(iface->vreg_info.items[instr.dest.vreg].size, instr.dest.vreg)), MREG(VIRT_TO_PHYS_REG(iface->vreg_info.items[instr.arg2.vreg].size, instr.arg2.vreg)), MINV);
 }
 
 
 X64_INSTRUCTION(mul) {
-  EMIT(iface->output, X64_IMUL, MREG(VIRT_TO_PHYS_REG(32, instr.dest.vreg)), MREG(VIRT_TO_PHYS_REG(32, instr.arg2.vreg)), MINV);
+  EMIT(iface->output, X64_IMUL, MREG(VIRT_TO_PHYS_REG(iface->vreg_info.items[instr.dest.vreg].size, instr.dest.vreg)), MREG(VIRT_TO_PHYS_REG(iface->vreg_info.items[instr.arg2.vreg].size, instr.arg2.vreg)), MINV);
 }
 
 
 X64_INSTRUCTION(load) {
-  EMIT(iface->output, X64_MOV, MREG(VIRT_TO_PHYS_REG(32, instr.dest.vreg)), MSTK(instr.arg1.stack_offset), MINV);
+  EMIT(iface->output, X64_MOV, MREG(VIRT_TO_PHYS_REG(iface->vreg_info.items[instr.dest.vreg].size, instr.dest.vreg)), MSTK(instr.arg1.stack_offset), MINV);
 }
 
 
 X64_INSTRUCTION(store) {
-  EMIT(iface->output, X64_MOV, MSTK(instr.dest.stack_offset), MREG(VIRT_TO_PHYS_REG(32, instr.arg1.vreg)), MINV);
+  EMIT(iface->output, X64_MOV, MSTK(instr.dest.stack_offset), MREG(VIRT_TO_PHYS_REG(iface->vreg_info.items[instr.arg1.vreg].size, instr.arg1.vreg)), MINV);
 }
 
 
 X64_INSTRUCTION(loadi) {
-  EMIT(iface->output, X64_MOV, MREG(VIRT_TO_PHYS_REG(32, instr.dest.vreg)), MIMM(instr.arg1.imm), MINV);
+  EMIT(iface->output, X64_MOV, MREG(VIRT_TO_PHYS_REG(iface->vreg_info.items[instr.dest.vreg].size, instr.dest.vreg)), MIMM(instr.arg1.imm), MINV);
 }
 
 
 X64_INSTRUCTION(copy) {
-  if (VIRT_TO_PHYS_REG(32, instr.dest.vreg) == (VIRT_TO_PHYS_REG(32, instr.arg1.vreg))) return;
+  if (VIRT_TO_PHYS_REG(iface->vreg_info.items[instr.dest.vreg].size, instr.dest.vreg) == (VIRT_TO_PHYS_REG(iface->vreg_info.items[instr.arg1.vreg].size, instr.arg1.vreg))) return;
 
-  EMIT(iface->output, X64_MOV, MREG(VIRT_TO_PHYS_REG(32, instr.dest.vreg)), MREG(VIRT_TO_PHYS_REG(32, instr.arg1.vreg)), MINV);
+  EMIT(iface->output, X64_MOV, MREG(VIRT_TO_PHYS_REG(iface->vreg_info.items[instr.dest.vreg].size, instr.dest.vreg)), MREG(VIRT_TO_PHYS_REG(iface->vreg_info.items[instr.arg1.vreg].size, instr.arg1.vreg)), MINV);
 }
 
 
 X64_INSTRUCTION(ret) {
-  EMIT(iface->output, X64_MOV, MREG(x64_EAX), MREG(VIRT_TO_PHYS_REG(32, instr.arg1.vreg)), MINV);
+  EMIT(iface->output, X64_MOV, MREG(x64_EAX), MREG(VIRT_TO_PHYS_REG(iface->vreg_info.items[instr.arg1.vreg].size, instr.arg1.vreg)), MINV);
   EMIT(iface->output, X64_JMP, MLBL(".end"), MINV, MINV); // goes to epilogue (works for nasm)
 }
 
@@ -221,13 +221,13 @@ X64_INSTRUCTION(jmp) {
 
 
 X64_INSTRUCTION(jmpCC) {
-  EMIT(iface->output, X64_CMP, MINV, MREG(VIRT_TO_PHYS_REG(32, instr.arg1.vreg)), MREG(VIRT_TO_PHYS_REG(32, instr.arg2.vreg)));
+  EMIT(iface->output, X64_CMP, MINV, MREG(VIRT_TO_PHYS_REG(iface->vreg_info.items[instr.arg1.vreg].size, instr.arg1.vreg)), MREG(VIRT_TO_PHYS_REG(iface->vreg_info.items[instr.arg2.vreg].size, instr.arg2.vreg)));
   EMIT(iface->output, jmpCC_from_ir[instr.opcode], MLBL(instr.dest.label_name), MINV, MINV);
 }
 
 
 X64_INSTRUCTION(cmpCC) {
-  EMIT(iface->output, X64_CMP, MINV, MREG(VIRT_TO_PHYS_REG(32, instr.arg1.vreg)), MREG(VIRT_TO_PHYS_REG(32, instr.arg2.vreg)));
+  EMIT(iface->output, X64_CMP, MINV, MREG(VIRT_TO_PHYS_REG(iface->vreg_info.items[instr.arg1.vreg].size, instr.arg1.vreg)), MREG(VIRT_TO_PHYS_REG(iface->vreg_info.items[instr.arg2.vreg].size, instr.arg2.vreg)));
   EMIT(iface->output, setCC_from_ir[instr.opcode], MREG(VIRT_TO_PHYS_REG(8, instr.dest.vreg)), MINV, MINV);
 }
 
@@ -239,26 +239,26 @@ X64_INSTRUCTION(call) {
       Interval span = iface->interval.items[j];
       if (span.start < iface->ctx.current_instruction && iface->ctx.current_instruction < span.end) {
           spill_offset += 4;
-          EMIT(iface->output, X64_MOV, MSTK(spill_offset + iface->ctx.stack_offset), MREG(VIRT_TO_PHYS_REG(32, span.vreg)), MINV);
+          EMIT(iface->output, X64_MOV, MSTK(spill_offset + iface->ctx.stack_offset), MREG(VIRT_TO_PHYS_REG(iface->vreg_info.items[span.vreg].size, span.vreg)), MINV);
       }
   }
 
   for (int j = 0; j < iface->ctx.arg_count; j++) {
-    EMIT(iface->output, X64_MOV, MREG(arg_registers_32bit[j]), MREG(VIRT_TO_PHYS_REG(32, iface->ctx.args[j].vreg)), MINV);
+    EMIT(iface->output, X64_MOV, MREG(arg_registers_32bit[j]), MREG(VIRT_TO_PHYS_REG(iface->vreg_info.items[iface->ctx.args[j].vreg].size, iface->ctx.args[j].vreg)), MINV);
   }
   
   iface->ctx.arg_count = 0;
   EMIT(iface->output, X64_CALL, MLBL(instr.arg1.label_name), MINV, MINV);
   
   if (instr.dest.type == OPERAND_VREG) {
-    EMIT(iface->output, X64_MOV, MREG(VIRT_TO_PHYS_REG(32, instr.dest.vreg)), MREG(x64_EAX), MINV);
+    EMIT(iface->output, X64_MOV, MREG(VIRT_TO_PHYS_REG(iface->vreg_info.items[instr.dest.vreg].size, instr.dest.vreg)), MREG(x64_EAX), MINV);
   }
   spill_offset = 0;
   for (int j = 0; j < iface->interval.count; j++) {
       Interval span = iface->interval.items[j];
       if (span.start < iface->ctx.current_instruction && iface->ctx.current_instruction < span.end) {
           spill_offset += 4;
-          EMIT(iface->output, X64_MOV, MREG(VIRT_TO_PHYS_REG(32, span.vreg)), MSTK(spill_offset + iface->ctx.stack_offset), MINV);
+          EMIT(iface->output, X64_MOV, MREG(VIRT_TO_PHYS_REG(iface->vreg_info.items[span.vreg].size, span.vreg)), MSTK(spill_offset + iface->ctx.stack_offset), MINV);
       }
     }
 }

@@ -24,13 +24,13 @@ void print_ast(AST* ast, int indent) {
             printf("(");
             for (int i = 0; i < ast->param_count; i++) {
                 print_ast(ast->params[i]->symbol, 0);
-                printf(": "); print_type(ast->params[i]->qtype);
+                printf(": "); print_type(ast->params[i]->evaled_type);
                 if (i < ast->param_count - 1) printf(", ");
             }
             printf(") => (");
             for (int i = 0; i < ast->return_count; i++) {
                 print_ast(ast->returns[i]->symbol, 0);
-                printf(": "); print_type(ast->returns[i]->qtype);
+                printf(": "); print_type(ast->returns[i]->evaled_type);
                 if (i < ast->return_count - 1) printf(", ");
             }
             printf(")\n");
@@ -78,7 +78,7 @@ void print_ast(AST* ast, int indent) {
         case AST_DECL:
             print_ast(ast->symbol, indent);
             printf(" : ");
-            if (ast->qtype != NULL) print_type(ast->qtype);
+            if (ast->evaled_type != NULL) print_type(ast->evaled_type);
             printf(" = ");
             print_ast(ast->expr, 0);
             printf(";\n");
