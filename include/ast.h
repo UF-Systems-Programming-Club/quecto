@@ -12,6 +12,7 @@ typedef enum {
     AST_EXTERN,
     AST_CALL,
     AST_INDEX,
+    AST_ACCESS,
     AST_LIST,
     AST_BLOCK,
     AST_DECL,
@@ -87,6 +88,11 @@ typedef struct AST {
         struct {
             struct AST *access; // symbol
             struct AST *index; // expr
+        };
+
+        struct {
+            struct AST *on;
+            struct AST *what;
         };
 
         // Declaration and Assignment

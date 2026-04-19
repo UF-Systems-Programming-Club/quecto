@@ -18,7 +18,7 @@ const uint32_t quecto_primitive_width[] = {
     [QUECTO_UNKNOWN] = -1,
 };
 
-QuectoType default_integer_type = (QuectoType) { .type = QUECTO_COMP_INT };
+QuectoType default_integer_type = (QuectoType) { .type = QUECTO_U32 };
 
 static_assert(sizeof(symbol_type_to_string_table) / sizeof(char *) == SYM_TYPE_COUNT,
         "Every symbol type should have entry in string table.");

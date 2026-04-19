@@ -19,6 +19,7 @@ const char *token_to_string_table[] = {
     [TOKEN_CLOSE_SQUARE] = "]",
     [TOKEN_SEMICOLON] = ";",
     [TOKEN_COLON] = ":",
+    [TOKEN_PERIOD] = ".",
     [TOKEN_COMMA] = ",",
     [TOKEN_EQUALS] = "=",
     [TOKEN_EQUALS_EQUALS] = "==",
@@ -145,6 +146,7 @@ TokenArray tokenize(const char *buf, size_t buf_size) {
             case ']': tok.type = TOKEN_CLOSE_SQUARE;break;
             case ';': tok.type = TOKEN_SEMICOLON;   break;
             case ':': tok.type = TOKEN_COLON;       break;
+            case '.': tok.type = TOKEN_PERIOD;      break;
             case ',': tok.type = TOKEN_COMMA;       break;
             case '<':
                 switch (buf[next]) {

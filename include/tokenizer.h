@@ -19,6 +19,7 @@ typedef enum {
     TOKEN_IDENTIFIER,
     TOKEN_COLON,
     TOKEN_COMMA,
+    TOKEN_PERIOD,
     
     TOKEN_PLUS,
     TOKEN_MINUS,

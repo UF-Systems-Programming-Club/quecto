@@ -104,7 +104,7 @@ Operand emit_expr_bytecode(EmitContext *context, Bytecode *bytecode, AST *expr) 
         SymbolData *arr = get_symbol(context->scope, expr->access->ident);
         Operand at = emit_expr_bytecode(context, bytecode, expr->index);
 
-        return gen_instr(bytecode, OPCODE_LOAD, 2, STACK( .stack_offset = arr->stack_offset ), VREG( .vreg = at.vreg ));
+        return gen_instr(bytecode, OPCODE_LOAD_INDEX, 2, VREG( .vreg = allocate_vreg(context, expr->evaled_type)), STACK( .stack_offset = arr->stack_offset ), VREG( .vreg = at.vreg ));
     }
     if (expr->type == AST_CALL) {
         Operand dest;
@@ -189,17 +189,24 @@ void emit_if_chain(EmitContext *context, Bytecode *bytecode, AST *ast, Operand e
 void emit_program_bytecode(EmitContext *context, Program *program, AST *ast) {
     for (int i = 0; i < ast->count; i++) {
         Procedure procedure = {0};
-        switch (ast->items[i]->type) {
+        AST *current = ast->items[i];
+
+        switch (current->type) {
             case AST_PROCEDURE:
-                emit_procedure_bytecode(context, &procedure, ast->items[i]);
-                array_append(*program, procedure);
+                emit_procedure_bytecode(context, &procedure, current);
                 break;
             case AST_EXTERN:
+                procedure.externed = true;
+                procedure.name = current->externed->name->ident;
+                procedure.param_count = current->externed->param_count;
+                procedure.return_count = current->externed->return_count;
                 break;
             default:
                 UNREACHABLE("not top-level decl");
                 break;
         }
+
+        array_append(*program, procedure);
     }
 }
 
@@ -237,13 +244,13 @@ void emit_decl_bytecode(EmitContext *context, Bytecode *bytecode, AST *decl) {
     if (decl->evaled_type->type == QUECTO_ARRAY) {
         var->stack_offset = context->stack_offset + 4;
         for (int i = 0; i < decl->evaled_type->array_size; i++) {
-            context->stack_offset += 4;
+            context->stack_offset += quecto_type_size(decl->evaled_type->inner);
             Operand expr = emit_expr_bytecode(context, bytecode, decl->expr->items[i]);
 
             gen_instr(bytecode, OPCODE_STORE, 2, STACK( .stack_offset = context->stack_offset ), VREG ( .vreg = expr.vreg ));
         }
     } else {
-        context->stack_offset += 4;
+        context->stack_offset += quecto_type_size(decl->evaled_type);
         var->stack_offset = context->stack_offset;
 
         Operand expr = emit_expr_bytecode(context, bytecode, decl->expr);

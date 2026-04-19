@@ -5,16 +5,10 @@
 #include "symbol_table.h"
 #include <stdio.h>
 
-#ifdef __MACH__
-#define EXIT_STATUS "0x2000001"
-#define ENTRY_SYMBOL "_main"
-#else
-#define EXIT_STATUS "60"
-#define ENTRY_SYMBOL "_start"
-#endif
 
 void adhere_program(Program *program, PhysRegs *pregs) { // pregs arent used yet
     for (int i = 0; i < program->count; i++) {
+        if (program->items[i].externed) continue;
         program->items[i].bytecode = adhere_bytecode_to_machine_spec(program->items[i].bytecode, pregs);
     }
 }
@@ -22,6 +16,7 @@ void adhere_program(Program *program, PhysRegs *pregs) { // pregs arent used yet
 void analyze_program(Program *program, PhysRegs *pregs) {
     for (int i = 0; i < program->count; i++) {
         Procedure *procedure = &program->items[i];
+        if (procedure->externed) continue;
         procedure->intervals = create_live_intervals_from_bytecode(procedure->bytecode, procedure->vreg_count);
 
         for (int i = 0; i < procedure->intervals.count - 1; i++) {
@@ -72,15 +67,13 @@ MachineCode emit_procedure_with(CodegenBackend *backend, Procedure procedure) {
 
 
 void compile_program_with(FILE *out, CodegenBackend *backend, Program *program) {
-     fprintf(out, "\tglobal\t" ENTRY_SYMBOL "\n\n");
-    fprintf(out, "\tsection\t.text\n");
-    fprintf(out, ENTRY_SYMBOL ":\n");
-    fprintf(out, "\tcall\tmain\n");
-    fprintf(out, "\tmov\tedi, eax\n");
-    fprintf(out, "\tmov\teax, " EXIT_STATUS "\n");
-    fprintf(out, "\tsyscall\n\n");
-    
+
+    backend->emit_symbols(out, program);
+    backend->emit_entry(out, program);
+
     for (int i = 0; i < program->count; i++) {
+        if (program->items[i].externed) continue;
+        
         fprintf(out, "%s:\n", program->items[i].name);
         MachineCode code = emit_procedure_with(backend, program->items[i]);
         backend->print_machine_code(out, &code);

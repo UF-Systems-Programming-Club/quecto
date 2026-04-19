@@ -50,7 +50,12 @@ void print_ast(AST* ast, int indent) {
             print_ast(ast->access, indent);
             printf("[");
             print_ast(ast->index, 0);
-            printf("]\n");
+            printf("]");
+            break;
+        case AST_ACCESS:
+            print_ast(ast->on, indent);
+            printf(".");
+            print_ast(ast->what, 0);
             break;
         case AST_LIST:
             printf("{");

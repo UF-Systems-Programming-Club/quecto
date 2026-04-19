@@ -124,6 +124,7 @@ typedef struct {
     int param_count;
     int return_count;
     CallingConvention convention;
+    bool externed;
     
     int local_var_size;
     int vreg_count;

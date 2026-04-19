@@ -19,10 +19,11 @@ int get_token_precedence_table[] = {
     [TOKEN_DIVIDE] = 3,
     [TOKEN_OPEN_PAREN] = 4,
     [TOKEN_OPEN_SQUARE] = 4,
+    [TOKEN_PERIOD] = 5,
 };
 
 bool token_is_operator(TokenType type) {
-    return (TOKEN_PLUS <= type && type <= TOKEN_GREATER_THAN) || (type == TOKEN_OPEN_PAREN) || (type == TOKEN_OPEN_SQUARE); // works cause they are grouped together
+    return (TOKEN_PLUS <= type && type <= TOKEN_GREATER_THAN) || (type == TOKEN_OPEN_PAREN) || (type == TOKEN_OPEN_SQUARE) || (type == TOKEN_PERIOD);
 }
 
 
@@ -98,10 +99,14 @@ bool expect_next_token_multiple(ParserState *parser, Token *tok, int count, ...)
     return false;
 }
 
-AST *create_symbol(ParserState *parser, const char *identifier) {
+
+AST *parse_identifier(ParserState *parser) {
+    Token tok;
+    expect_next_token(parser, &tok, TOKEN_IDENTIFIER);
+
     AST *symbol = arena_alloc_type(parser->arena, AST);
     symbol->type = AST_SYMBOL;
-    symbol->ident = identifier;
+    symbol->ident = tok.identifier;
     return symbol;
 }
 
@@ -301,8 +306,7 @@ AST *parse_assignment(ParserState *parser) {
 
     Token tok;
 
-    expect_next_token(parser, &tok, TOKEN_IDENTIFIER);
-    assignment->symbol = create_symbol(parser, tok.identifier);
+    assignment->symbol = parse_identifier(parser);
     expect_next_token(parser, &tok, TOKEN_EQUALS);
     assignment->expr = parse_expression(parser, 0);
 
@@ -329,13 +333,14 @@ AST *parse_stmt_declaration(ParserState *parser) {
 
     Token tok;
 
-    expect_next_token(parser, &tok, TOKEN_IDENTIFIER);
-    decl->symbol = create_symbol(parser, tok.identifier);
+    decl->symbol = parse_identifier(parser);
     expect_next_token(parser, &tok, TOKEN_COLON);
     decl->evaled_type = parse_type(parser);
-    expect_next_token(parser, &tok, TOKEN_EQUALS);
+
+    if (match_next_token(parser, &tok, TOKEN_EQUALS)) {
     decl->expr = (peek_token_type(parser, 0) == TOKEN_OPEN_CURLY) ?
                 parse_braced_initializer(parser) : parse_expression(parser, 0);
+    };
 
     return decl;
 }
@@ -429,6 +434,19 @@ AST *parse_index(ParserState *parser, AST *on) {
 }
 
 
+AST *parse_access(ParserState *parser, AST *on) {
+    AST *access = arena_alloc_type(parser->arena, AST);
+    access->type = AST_ACCESS;
+    access->on = on;
+
+    Token tok;
+    expect_next_token(parser, &tok, TOKEN_PERIOD);
+    access->what = parse_identifier(parser);
+    
+    return access;
+}
+
+
 AST *parse_expression(ParserState *parser, int min_prec) {  
     Token tok;
     expect_next_token_multiple(parser, &tok, 4, TOKEN_INT_LIT, TOKEN_FLOAT_LIT, TOKEN_IDENTIFIER, TOKEN_OPEN_PAREN);
@@ -466,6 +484,7 @@ AST *parse_expression(ParserState *parser, int min_prec) {
         switch (peek_token_type(parser, 0)) {
             case TOKEN_OPEN_SQUARE: left = parse_index(parser, left); break;
             case TOKEN_OPEN_PAREN:  left = parse_call(parser, left); break;
+            case TOKEN_PERIOD:      left = parse_access(parser, left); break;
             default:                left = parse_binary_op(parser, left); break;
         }
     }
@@ -480,11 +499,10 @@ AST *parse_param_declaration(ParserState *parser) {
     AST *decl = arena_alloc_type(parser->arena, AST);
     decl->type = AST_DECL;
 
-    expect_next_token(parser, &tok, TOKEN_IDENTIFIER);
-    decl->symbol = create_symbol(parser, tok.identifier);
-
+    decl->symbol = parse_identifier(parser);
     expect_next_token(parser, &tok, TOKEN_COLON);
     decl->evaled_type = parse_type(parser);
+
     return decl;
 }
 

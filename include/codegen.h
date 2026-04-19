@@ -54,9 +54,12 @@ typedef void (*EmitFn)(CodegenInterface *iface, Instr instr);
 typedef void (*EmitProcFn)(CodegenInterface *face, Procedure *procedure);
 typedef Bytecode (*AdhereFn)(Bytecode bytecode, PhysRegs *pregs);
 typedef void (*FPrintFn)(FILE *out, MachineCode *code);
+typedef void (*EmitProgramDataFn)(FILE *out, Program *program);
 
 typedef struct {
   AdhereFn adhere_bytecode_to_spec;
+  EmitProgramDataFn emit_symbols;
+  EmitProgramDataFn emit_entry;
   EmitProcFn emit_prologue;
   EmitProcFn emit_epilogue;
   EmitFn emit_machine_code_from[OPCODE_COUNT];

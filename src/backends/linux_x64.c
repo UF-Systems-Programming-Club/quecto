@@ -2,6 +2,15 @@
 #include "bytecode.h"
 #include "codegen.h"
   
+#ifdef __MACH__
+#define EXIT_STATUS "0x2000001"
+#define ENTRY_SYMBOL "_main"
+#else
+#define EXIT_STATUS "60"
+#define ENTRY_SYMBOL "_start"
+#endif
+
+
 #define CONCAT_HELPER(a, b) a##b
 #define CONCAT(a, b) CONCAT_HELPER(a, b)
 
@@ -191,6 +200,10 @@ X64_INSTRUCTION(load) {
   EMIT(iface->output, X64_MOV, MREG(VIRT_TO_PHYS_REG(iface->vreg_info.items[instr.dest.vreg].size, instr.dest.vreg)), MSTK(instr.arg1.stack_offset), MINV);
 }
 
+X64_INSTRUCTION(load_index) {
+  EMIT(iface->output, X64_MOV, MREG(VIRT_TO_PHYS_REG(iface->vreg_info.items[instr.dest.vreg].size, instr.dest.vreg)), MSTK(instr.arg1.stack_offset), MREG( VIRT_TO_PHYS_REG(iface->vreg_info.items[instr.arg2.vreg].size, instr.arg2.vreg)));
+}
+
 
 X64_INSTRUCTION(store) {
   EMIT(iface->output, X64_MOV, MSTK(instr.dest.stack_offset), MREG(VIRT_TO_PHYS_REG(iface->vreg_info.items[instr.arg1.vreg].size, instr.arg1.vreg)), MINV);
@@ -274,9 +287,31 @@ X64_INSTRUCTION(param) {
 }
 
 
+void emit_entry(FILE *out, Program *program) {
+    fprintf(out, "section\t.text\n");
+    fprintf(out, ENTRY_SYMBOL ":\n");
+    fprintf(out, "\tcall\tmain\n");
+    fprintf(out, "\tmov\tedi, eax\n");
+    fprintf(out, "\tmov\teax, " EXIT_STATUS "\n");
+    fprintf(out, "\tsyscall\n\n");
+}
+
+
+void emit_symbols(FILE *out, Program *program) {
+    fprintf(out, "global\t" ENTRY_SYMBOL "\n");
+    for (int i = 0; i < program->count; i++) {
+      if (program->items[i].externed)
+        fprintf(out, "extern\t%s\n", program->items[i].name);
+    }
+    fprintf(out, "\n");
+}
+
+
 CodegenBackend LINUX_X86_64_BACKEND = (CodegenBackend) {
   .adhere_bytecode_to_spec = &adhere_bytecode_to_machine_spec,
   .print_machine_code = &fprint_x64_machine_code,
+  .emit_entry = &emit_entry,
+  .emit_symbols = &emit_symbols,
   .emit_epilogue = &emit_x64_epilogue,
   .emit_prologue = &emit_x64_prologue,
   .emit_machine_code_from =  {
@@ -290,7 +325,7 @@ CodegenBackend LINUX_X86_64_BACKEND = (CodegenBackend) {
     [OPCODE_CMP_LEQ] = &emit_x64_from_ir_cmpCC,
     [OPCODE_CMP_GEQ] = &emit_x64_from_ir_cmpCC,
     [OPCODE_LOAD] = &emit_x64_from_ir_load,
-    [OPCODE_LOAD_INDEX] = NULL, //&emit_x64_from_ir_,
+    [OPCODE_LOAD_INDEX] = &emit_x64_from_ir_load_index,//&emit_x64_from_ir_,
     [OPCODE_STORE] = &emit_x64_from_ir_store,
     [OPCODE_COPY] = &emit_x64_from_ir_copy,
     [OPCODE_LOADI] = &emit_x64_from_ir_loadi,

@@ -4,13 +4,122 @@
 #include "error.h"
 #include "symbol_table.h"
 
-QuectoType *resolve_binary_type(QuectoType *left, QuectoType *right) {
-    if (quecto_types_equal(left, right)) return left;
-    if (quecto_is_integer(left) && quecto_is_integer(right)) {
-        return quecto_primitive_width[left->type] > quecto_primitive_width[right->type] ? left : right;
+void analyze_ast(AnalysisContext *context, AST *program) { // assumes ast is a AST_PROGRAM
+    assert(program->type == AST_PROGRAM);
+    
+    for (int i = 0; i < program->count; i++) {
+        switch(program->items[i]->type) {
+            case AST_PROCEDURE: analyze_procedure(context, program->items[i]); break;
+            case AST_EXTERN:    analyze_procedure(context, program->items[i]->externed); break;
+            default: UNREACHABLE("not top-level decl"); break;
+        }
     }
-    return right;
 }
+
+
+void analyze_procedure(AnalysisContext *context, AST *procedure) {
+    assert(procedure->type == AST_PROCEDURE);
+
+    SymbolData *signature = insert_symbol(context->arena, context->symbol_table, procedure->name->ident, SYM_TYPE_PROCEDURE);
+    
+    signature->param_count = procedure->param_count;
+    signature->return_count = procedure->return_count;
+    signature->local_var_size = 0;
+
+    procedure->symbols = arena_alloc_type(context->arena, SymbolTable);
+    procedure->symbols->prev = context->symbol_table;
+    context->symbol_table = procedure->symbols;
+    
+    for (int i = 0; i < procedure->param_count; i++) {
+        SymbolData *sym = insert_symbol(context->arena, context->symbol_table, procedure->params[i]->symbol->ident, SYM_TYPE_VARIABLE);
+        sym->qtype = procedure->params[i]->evaled_type;
+        signature->param_types[i] = procedure->params[i]->evaled_type;
+    }
+    for (int i = 0; i < procedure->return_count; i++) {
+        SymbolData *sym = insert_symbol(context->arena, context->symbol_table, procedure->returns[i]->symbol->ident, SYM_TYPE_VARIABLE);
+        sym->qtype = procedure->returns[i]->evaled_type;
+        signature->return_types[i] = procedure->returns[i]->evaled_type;
+    }
+
+    context->returns = signature->return_types;
+    context->return_count = procedure->return_count;
+
+    if (procedure->body != NULL)
+        analyze_block(context, procedure->body);
+
+    context->symbol_table = procedure->symbols->prev;
+}
+
+
+void analyze_block(AnalysisContext *context, AST *block) {
+    assert(block->type == AST_BLOCK);
+
+    for (int i = 0; i < block->count; i++) {
+        analyze_statement(context, block->items[i]);
+    }
+}
+
+
+void analyze_statement(AnalysisContext *context, AST *statement) {
+    switch (statement->type) {
+        case AST_ASSIGNMENT: analyze_assignment(context, statement); break;
+        case AST_DECL: analyze_declaration(context, statement); break;
+        case AST_BLOCK: analyze_block(context, statement); break;
+        case AST_CALL: analyze_expression(context, statement, NULL); break;
+        case AST_WHILE:
+        case AST_IF:
+        case AST_ELIF: analyze_expression(context, statement->condition, NULL);
+        case AST_ELSE: analyze_statement(context, statement->then);
+            if (statement->otherwise) // this should always be NULL for ELSE and WHILE
+                analyze_statement(context, statement->otherwise);
+            break;
+        case AST_RETURN: 
+            if (statement->expr)
+                analyze_expression(context, statement->expr, context->returns[0]);
+            break;
+        default:
+            UNREACHABLE("AST NOT STATEMENT");
+            break;
+    }
+}
+
+
+void analyze_declaration(AnalysisContext *context, AST *decl) {
+    SymbolData *symbol = insert_symbol(context->arena, context->symbol_table, decl->symbol->ident, SYM_TYPE_VARIABLE);
+    symbol->stack_offset = 0;
+
+    if (decl->expr == NULL && decl->evaled_type->type == QUECTO_UNKNOWN) {
+        report_error(decl->line, decl->col, "cannot infer type without expr");
+        return;
+    }
+
+    QuectoType *is = analyze_expression(context, decl->expr, decl->evaled_type);
+    if (decl->evaled_type->type == QUECTO_UNKNOWN) {
+        decl->evaled_type = (is->type == QUECTO_COMP_INT) ? &default_integer_type : is;
+    }
+
+    if (!quecto_types_equal(decl->evaled_type, is)) {
+        report_error(decl->line, decl->col, "declared as ");  print_type(decl->evaled_type); printf(" but assigned "); print_type(is); printf(".\n");
+    }
+
+    symbol->qtype = decl->evaled_type;
+}
+
+
+void analyze_assignment(AnalysisContext *context, AST *assignment) {
+    SymbolData *var;
+    if ((var = get_symbol(context->symbol_table, assignment->symbol->ident)) == NULL) {
+        report_error(assignment->line, assignment->col, "assigning to not yet defined symbol");
+        return;
+    }
+
+    QuectoType *expr_type = analyze_expression(context, assignment->expr, var->qtype);
+
+    if (!quecto_types_equal(var->qtype, expr_type)) {
+        report_error(assignment->line, assignment->col, "mismatched types");
+    }
+}
+
 
 QuectoType *analyze_expression(AnalysisContext *context, AST *expr, QuectoType *expected) {
     switch(expr->type) {
@@ -38,7 +147,7 @@ QuectoType *analyze_expression(AnalysisContext *context, AST *expr, QuectoType *
         case AST_INT_LIT:
             expr->evaled_type = expected;
             if (expected == NULL || expected->type == QUECTO_UNKNOWN) {
-                expr->evaled_type = arena_intern(context->arena, context->type_intern_table, &(QuectoType) {.type = QUECTO_I32}, sizeof(QuectoType));
+                expr->evaled_type = &default_integer_type;
             }
             return expr->evaled_type;
         case AST_SYMBOL: {
@@ -94,147 +203,10 @@ QuectoType *analyze_expression(AnalysisContext *context, AST *expr, QuectoType *
 }
 
 
-void analyze_statement(AnalysisContext *context, AST *statement) {
-    switch (statement->type) {
-        case AST_ASSIGNMENT: {
-            SymbolData *var;
-            if ((var = get_symbol(context->symbol_table, statement->symbol->ident)) == NULL) {
-                report_error(statement->line, statement->col, "assigning to not yet defined symbol");
-                break;
-            }
-
-            QuectoType *expr_type = analyze_expression(context, statement->expr, var->qtype);
-            
-            if (!quecto_types_equal(var->qtype, expr_type)) {
-                report_error(statement->line, statement->col, "mismatched types");
-            }
-            break;
-        }
-        case AST_DECL: {          
-            QuectoType *expr_type = analyze_expression(context, statement->expr, statement->evaled_type);
-            if (expr_type == NULL) {
-                report_error(statement->line, statement->col, "error analyzing expression");
-                break;
-            }
-
-            SymbolData *symbol = insert_symbol(context->arena, context->symbol_table, statement->symbol->ident, SYM_TYPE_VARIABLE);
-            symbol->stack_offset = 0;
-            symbol->qtype = statement->evaled_type;
-
-            if (statement->evaled_type->type == QUECTO_UNKNOWN) { // infer from expr
-                if (expr_type->type == QUECTO_COMP_INT) {
-                    statement->evaled_type = arena_intern(context->arena, context->type_intern_table, &(QuectoType) {.type = QUECTO_U32}, sizeof(QuectoType));
-                    statement->expr->evaled_type = statement->evaled_type;
-                    symbol->qtype = statement->evaled_type;
-                } else {
-                    statement->evaled_type = expr_type;
-                    symbol->qtype = statement->evaled_type;
-                }
-                break;
-            }
-            if (quecto_is_integer(statement->evaled_type) && expr_type->type == QUECTO_COMP_INT) {
-                break;
-            } else if (!quecto_types_equal(statement->evaled_type, expr_type)) {
-                report_error(statement->line, statement->col, "declared as ");
-                print_type(statement->evaled_type);
-                printf(" but assigned ");
-                print_type(expr_type);
-                printf(".\n");
-                break;
-            }
-            break;
-        }
-        case AST_CALL: {
-                analyze_expression(context, statement, NULL);
-                break;
-            }
-        case AST_IF:
-        case AST_ELIF:
-             {
-                analyze_expression(context, statement->condition, NULL);
-                analyze_statement(context, statement->then);
-                if (statement->otherwise)
-                    analyze_statement(context, statement->otherwise);
-                break;
-            }
-        case AST_ELSE: {
-                analyze_statement(context, statement->then);
-            }
-            break;
-        case AST_WHILE: {
-                analyze_expression(context, statement->condition, NULL);
-                analyze_statement(context, statement->then);
-                break;
-            }
-        case AST_RETURN: {
-                if (statement->expr) analyze_expression(context, statement->expr, context->returns[0]);
-                break;
-            }
-        case AST_BLOCK:
-            analyze_block(context, statement);
-            break;
-        default:
-            UNREACHABLE("AST NOT STATEMENT");
-            break;
+QuectoType *resolve_binary_type(QuectoType *left, QuectoType *right) {
+    if (quecto_types_equal(left, right)) return left;
+    if (quecto_is_integer(left) && quecto_is_integer(right)) {
+        return quecto_primitive_width[left->type] > quecto_primitive_width[right->type] ? left : right;
     }
+    return right;
 }
-
-void analyze_block(AnalysisContext *context, AST *block) {
-    assert(block->type == AST_BLOCK);
-
-    for (int i = 0; i < block->count; i++) {
-        analyze_statement(context, block->items[i]); // will have to be changed at some point to BLOCK's scope which would be child of PROC's scope
-    }
-}
-
-void analyze_procedure(AnalysisContext *context, AST *procedure) {
-    assert(procedure->type == AST_PROCEDURE);
-
-    SymbolData *signature = insert_symbol(context->arena, context->symbol_table, procedure->name->ident, SYM_TYPE_PROCEDURE);
-    
-    signature->param_count = procedure->param_count;
-    signature->return_count = procedure->return_count;
-    signature->local_var_size = 0;
-
-    procedure->symbols = arena_alloc_type(context->arena, SymbolTable);
-    procedure->symbols->prev = context->symbol_table;
-    context->symbol_table = procedure->symbols;
-    
-    for (int i = 0; i < procedure->param_count; i++) {
-        SymbolData *sym = insert_symbol(context->arena, context->symbol_table, procedure->params[i]->symbol->ident, SYM_TYPE_VARIABLE);
-        sym->qtype = procedure->params[i]->evaled_type;
-        signature->param_types[i] = procedure->params[i]->evaled_type;
-    }
-    for (int i = 0; i < procedure->return_count; i++) {
-        SymbolData *sym = insert_symbol(context->arena, context->symbol_table, procedure->returns[i]->symbol->ident, SYM_TYPE_VARIABLE);
-        sym->qtype = procedure->returns[i]->evaled_type;
-        signature->return_types[i] = procedure->returns[i]->evaled_type;
-    }
-
-    context->returns = signature->return_types;
-    context->return_count = procedure->return_count;
-
-    if (procedure->body != NULL)
-        analyze_block(context, procedure->body);
-
-    context->symbol_table = procedure->symbols->prev;
-}
-
-void analyze_ast(AnalysisContext *context, AST *program) { // assumes ast is a AST_PROGRAM
-    assert(program->type == AST_PROGRAM);
-    
-    for (int i = 0; i < program->count; i++) {
-        switch(program->items[i]->type) {
-            case AST_PROCEDURE:
-                analyze_procedure(context, program->items[i]);    
-                break;
-            case AST_EXTERN:
-                analyze_procedure(context, program->items[i]->externed);
-                break;
-            default:
-                UNREACHABLE("not top-level decl");
-                break;
-        }
-    }
-}
-
