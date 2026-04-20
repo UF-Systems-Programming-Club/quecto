@@ -90,102 +90,6 @@ int allocate_vreg(EmitContext *context, QuectoType *type) {
 }
 
 
-Operand emit_expr_bytecode(EmitContext *context, Bytecode *bytecode, AST *expr) {
-    if (expr->type == AST_INT_LIT) {
-        return gen_instr(bytecode, OPCODE_LOADI, 2,
-                            VREG( .vreg = allocate_vreg(context, expr->evaled_type)),
-                            IMM( .imm = expr->int_lit )
-                        );
-    }
-    if (expr->type == AST_LIST) {
-        return (Operand){0};
-    }
-    if (expr->type == AST_INDEX) {
-        SymbolData *arr = get_symbol(context->scope, expr->access->ident);
-        Operand at = emit_expr_bytecode(context, bytecode, expr->index);
-
-        return gen_instr(bytecode, OPCODE_LOAD_INDEX, 2, VREG( .vreg = allocate_vreg(context, expr->evaled_type)), STACK( .stack_offset = arr->stack_offset ), VREG( .vreg = at.vreg ));
-    }
-    if (expr->type == AST_CALL) {
-        Operand dest;
-        dest.type = OPERAND_VREG;
-        dest.vreg = allocate_vreg(context, expr->evaled_type);
-            
-        for (int i = 0; i < expr->arg_count; i++) {
-            Operand dest = emit_expr_bytecode(context, bytecode, expr->args[i]);
-            Instr param;
-            param.opcode = OPCODE_PARAM;
-            param.arg1 = dest;
-            array_append(*bytecode, param);
-        }
-
-        return gen_instr(bytecode, OPCODE_CALL, 2, dest, create_label_from(expr->callee->ident));
-    }
-    if (expr->type == AST_SYMBOL) {
-        SymbolData *var = get_symbol(context->scope, expr->ident);
-
-        return gen_instr(bytecode, OPCODE_LOAD, 2,
-                            VREG( .vreg = allocate_vreg(context, expr->evaled_type)),
-                            STACK( .stack_offset = var->stack_offset )
-                        );
-    }
-
-    Instr instr;
-    instr.dest.type = OPERAND_VREG;
-    instr.dest.vreg = allocate_vreg(context, expr->evaled_type);
-    instr.arg1 = emit_expr_bytecode(context, bytecode, expr->left);
-    instr.arg2 = emit_expr_bytecode(context, bytecode, expr->right);
-
-    switch (expr->op) {
-        case OP_PLUS:           instr.opcode = OPCODE_ADD; break;
-        case OP_MINUS:          instr.opcode = OPCODE_SUB; break;
-        case OP_MULTIPLY:       instr.opcode = OPCODE_MUL; break;
-        case OP_DIVIDE:         instr.opcode = OPCODE_DIV; break;
-        case OP_EQUALS:         instr.opcode = OPCODE_CMP_EQ; break;
-        case OP_LESS_THAN:      instr.opcode = OPCODE_CMP_LT; break;
-        case OP_GREATER_THAN:   instr.opcode = OPCODE_CMP_GT; break;
-        case OP_LESS_EQUALS:    instr.opcode = OPCODE_CMP_LEQ; break;
-        case OP_GREATER_EQUALS: instr.opcode = OPCODE_CMP_GEQ; break;
-        default: UNREACHABLE("invalid operation");
-    }
-    array_append(*bytecode, instr);
-
-    return instr.dest;
-}
-
-
-void emit_branch_comp(EmitContext *context, Bytecode *bytecode, Operand label, AST *expr) {// special case of expression
-    if (expr->type == AST_BINARY_OP && op_is_conditional(expr->op)) {
-        Operand left = emit_expr_bytecode(context, bytecode, expr->left);
-        Operand right = emit_expr_bytecode(context, bytecode, expr->right);
-
-        gen_instr(bytecode, jump_condition_opcode_table[op_opposite(expr->op)], 3, label, left, right);
-    } else {
-        UNREACHABLE("to add...");
-    }
-}
-
-
-void emit_if_chain(EmitContext *context, Bytecode *bytecode, AST *ast, Operand end_label) {
-    if (ast->type == AST_ELIF) {
-        // Operand expr = emit_expr_bytecode(context, bytecode, ast->condition);
-        Operand label = create_label();
-        emit_branch_comp(context, bytecode, label, ast->condition);
-
-        emit_statement_bytecode(context, bytecode, ast->then);
-
-        gen_instr(bytecode, OPCODE_JMP, 1, end_label);
-        gen_label(bytecode, label);
-        if (ast->otherwise) emit_if_chain(context, bytecode, ast->otherwise, end_label);
-        return;
-    } else if (ast->type == AST_ELSE) {
-        emit_block_bytecode(context, bytecode, ast->then);
-        return;
-    }
-    assert(0 && "only elif and else should be chained in 'statement->otherwise' ");
-}
-
-
 void emit_program_bytecode(EmitContext *context, Program *program, AST *ast) {
     for (int i = 0; i < ast->count; i++) {
         Procedure procedure = {0};
@@ -238,6 +142,28 @@ void emit_procedure_bytecode(EmitContext *context, Procedure *procedure, AST *as
 }
 
 
+void emit_block_bytecode(EmitContext *context, Bytecode *bytecode, AST *ast) {
+    for (int i = 0; i < ast->count; i++) {
+        emit_statement_bytecode(context, bytecode, ast->items[i]);
+    }
+}
+
+
+void emit_statement_bytecode(EmitContext *context, Bytecode *bytecode, AST *statement) {
+    switch (statement->type) {
+        case AST_CALL:       (void)emit_call_bytecode(context, bytecode, statement, false);   break;
+        case AST_BLOCK:      emit_block_bytecode(context, bytecode, statement);  break;
+        case AST_DECL:       emit_decl_bytecode(context, bytecode, statement);   break;
+        case AST_ASSIGNMENT: emit_assign_bytecode(context, bytecode, statement); break;
+        case AST_RETURN:     emit_return_bytecode(context, bytecode, statement); break;
+        case AST_IF:         emit_if_bytecode(context, bytecode, statement);     break;
+        case AST_WHILE:      emit_while_bytecode(context, bytecode, statement);  break;
+        case AST_BINARY_OP:  emit_expr_bytecode(context, bytecode, statement);   break;
+        default:  UNREACHABLE("ASTType");
+    }
+}
+
+
 void emit_decl_bytecode(EmitContext *context, Bytecode *bytecode, AST *decl) {
     SymbolData *var = get_symbol(context->scope, decl->symbol->ident);
 
@@ -259,52 +185,6 @@ void emit_decl_bytecode(EmitContext *context, Bytecode *bytecode, AST *decl) {
 }
 
 
-void emit_call_bytecode(EmitContext *context, Bytecode *bytecode, AST *call) {
-    for (int i = 0; i < call->arg_count; i++) {
-        Operand dest = emit_expr_bytecode(context, bytecode, call->args[i]);
-        Instr param;
-
-        param.opcode = OPCODE_PARAM;
-        param.arg1 = dest;
-        array_append(*bytecode, param);
-    }
-
-    gen_instr(bytecode, OPCODE_CALL, 2, (Operand) {0}, create_label_from(call->callee->ident));
-}
-
-
-void emit_statement_bytecode(EmitContext *context, Bytecode *bytecode, AST *statement) {
-    switch (statement->type) {
-        case AST_CALL:
-            emit_call_bytecode(context, bytecode, statement);
-            break;
-        case AST_BLOCK:
-            emit_block_bytecode(context, bytecode, statement);
-            break;
-        case AST_DECL:
-            emit_decl_bytecode(context, bytecode, statement);
-            break;
-        case AST_ASSIGNMENT:
-            emit_assign_bytecode(context, bytecode, statement);
-            break;
-        case AST_RETURN:
-            emit_return_bytecode(context, bytecode, statement);
-            break;
-        case AST_IF:
-            emit_if_bytecode(context, bytecode, statement);
-            break;
-        case AST_WHILE:
-            emit_while_bytecode(context, bytecode, statement);
-            break;
-        case AST_BINARY_OP:
-            emit_expr_bytecode(context, bytecode, statement);
-            break;
-        default:
-            UNREACHABLE("ASTType");
-    }
-}
-
-
 void emit_assign_bytecode(EmitContext *context, Bytecode *bytecode, AST *assignment) {
     Operand expr = emit_expr_bytecode(context, bytecode, assignment->expr);
     SymbolData *var = get_symbol(context->scope, assignment->symbol->ident);
@@ -313,31 +193,49 @@ void emit_assign_bytecode(EmitContext *context, Bytecode *bytecode, AST *assignm
 }
 
 
-void emit_return_bytecode(EmitContext *context, Bytecode *bytecode, AST *ret) {
-    // TODO: in the future should probably have a return stack similar to function param stack
-    // to support multiple return values
-    Instr instr;
-    instr.opcode = OPCODE_RET;
-    instr.arg1 = emit_expr_bytecode(context, bytecode, ret->expr);
-    array_append(*bytecode, instr);
+void emit_branch_comp(EmitContext *context, Bytecode *bytecode, Operand label, AST *expr) {// special case of expression
+    if (expr->type == AST_BINARY_OP && op_is_conditional(expr->op)) {
+        Operand left = emit_expr_bytecode(context, bytecode, expr->left);
+        Operand right = emit_expr_bytecode(context, bytecode, expr->right);
+        gen_instr(bytecode, jump_condition_opcode_table[op_opposite(expr->op)], 3, label, left, right);
+    } else {
+        UNREACHABLE("to add...");
+    }
 }
 
 
 void emit_if_bytecode(EmitContext *context, Bytecode *bytecode, AST *ifs) {
-    // Operand expr = emit_expr_bytecode(context, bytecode, ifs->condition);
     Operand end_label = create_label();
     
-    // Operand next_cmp = gen_conditional_jump(bytecode, OPCODE_JMP_NEQ, create_label(), expr);
     emit_branch_comp(context, bytecode, end_label, ifs->condition);
-
     emit_statement_bytecode(context, bytecode, ifs->then);
 
     gen_instr(bytecode, OPCODE_JMP, 1, end_label);
 
-    // gen_label(bytecode, next_cmp);
     if (ifs->otherwise) emit_if_chain(context, bytecode, ifs->otherwise, end_label);
     gen_label(bytecode, end_label);
 }
+
+
+void emit_if_chain(EmitContext *context, Bytecode *bytecode, AST *ast, Operand end_label) {
+    if (ast->type == AST_ELIF) {
+        // Operand expr = emit_expr_bytecode(context, bytecode, ast->condition);
+        Operand label = create_label();
+        emit_branch_comp(context, bytecode, label, ast->condition);
+
+        emit_statement_bytecode(context, bytecode, ast->then);
+
+        gen_instr(bytecode, OPCODE_JMP, 1, end_label);
+        gen_label(bytecode, label);
+        if (ast->otherwise) emit_if_chain(context, bytecode, ast->otherwise, end_label);
+        return;
+    } else if (ast->type == AST_ELSE) {
+        emit_block_bytecode(context, bytecode, ast->then);
+        return;
+    }
+    assert(0 && "only elif and else should be chained in 'statement->otherwise' ");
+}
+
 
 void emit_while_bytecode(EmitContext *context, Bytecode *bytecode, AST *whiles) {
     Operand begin_label = create_label();
@@ -353,10 +251,71 @@ void emit_while_bytecode(EmitContext *context, Bytecode *bytecode, AST *whiles) 
 }
 
 
-void emit_block_bytecode(EmitContext *context, Bytecode *bytecode, AST *ast) {
-    for (int i = 0; i < ast->count; i++) {
-        emit_statement_bytecode(context, bytecode, ast->items[i]);
+void emit_return_bytecode(EmitContext *context, Bytecode *bytecode, AST *ret) {
+    // TODO: in the future should probably have a return stack similar to function param stack
+    // to support multiple return values
+    Instr instr;
+    instr.opcode = OPCODE_RET;
+    instr.arg1 = emit_expr_bytecode(context, bytecode, ret->expr);
+    array_append(*bytecode, instr);
+}
+
+
+Operand emit_expr_bytecode(EmitContext *context, Bytecode *bytecode, AST *expr) {
+    switch(expr->type) {
+        case AST_INT_LIT: return gen_instr(bytecode, OPCODE_LOADI, 2, VREG(.vreg = allocate_vreg(context, expr->evaled_type)), IMM(.imm = expr->int_lit));
+        case AST_SYMBOL: {
+            SymbolData *var = get_symbol(context->scope, expr->ident);
+            return gen_instr(bytecode, OPCODE_LOAD, 2, VREG( .vreg = allocate_vreg(context, expr->evaled_type)), STACK( .stack_offset = var->stack_offset ));
+        }
+        case AST_INDEX: {
+            SymbolData *arr = get_symbol(context->scope, expr->access->ident);
+            Operand at = emit_expr_bytecode(context, bytecode, expr->index);
+            return gen_instr(bytecode, OPCODE_LOAD_INDEX, 2, VREG( .vreg = allocate_vreg(context, expr->evaled_type)), STACK( .stack_offset = arr->stack_offset ), VREG( .vreg = at.vreg ));
+        }
+        case AST_CALL: return emit_call_bytecode(context, bytecode, expr, true);
+        case AST_BINARY_OP: return emit_binary_op_bytecode(context, bytecode, expr);
+        default: UNREACHABLE("invalid expr ast type");
     }
+}
+
+
+Operand emit_call_bytecode(EmitContext *context, Bytecode *bytecode, AST *call, bool has_destination) {
+    for (int i = 0; i < call->arg_count; i++) {
+        Operand dest = emit_expr_bytecode(context, bytecode, call->args[i]);
+        Instr param;
+
+        param.opcode = OPCODE_PARAM;
+        param.arg1 = dest;
+        array_append(*bytecode, param);
+    }
+
+    return gen_instr(bytecode, OPCODE_CALL, 2, has_destination ? VREG(.vreg = allocate_vreg(context, call->evaled_type)) : (Operand) {0}, create_label_from(call->callee->ident));
+}
+
+
+Operand emit_binary_op_bytecode(EmitContext *context, Bytecode *bytecode, AST *op) {
+    Instr instr;
+    instr.dest.type = OPERAND_VREG;
+    instr.dest.vreg = allocate_vreg(context, op->evaled_type);
+    instr.arg1 = emit_expr_bytecode(context, bytecode, op->left);
+    instr.arg2 = emit_expr_bytecode(context, bytecode, op->right);
+
+    switch (op->op) {
+        case OP_PLUS:           instr.opcode = OPCODE_ADD; break;
+        case OP_MINUS:          instr.opcode = OPCODE_SUB; break;
+        case OP_MULTIPLY:       instr.opcode = OPCODE_MUL; break;
+        case OP_DIVIDE:         instr.opcode = OPCODE_DIV; break;
+        case OP_EQUALS:         instr.opcode = OPCODE_CMP_EQ; break;
+        case OP_LESS_THAN:      instr.opcode = OPCODE_CMP_LT; break;
+        case OP_GREATER_THAN:   instr.opcode = OPCODE_CMP_GT; break;
+        case OP_LESS_EQUALS:    instr.opcode = OPCODE_CMP_LEQ; break;
+        case OP_GREATER_EQUALS: instr.opcode = OPCODE_CMP_GEQ; break;
+        default: UNREACHABLE("invalid operation");
+    }
+    array_append(*bytecode, instr);
+
+    return instr.dest;
 }
 
 

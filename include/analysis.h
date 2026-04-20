@@ -15,6 +15,7 @@ typedef struct {
 } AnalysisContext;
 
 QuectoType *resolve_binary_type(QuectoType *left, QuectoType *right);
+SymbolData *lookup_or_error(AnalysisContext *context, AST *symbol, const char *message);
 
 void analyze_ast(AnalysisContext *context, AST *ast);
 void analyze_block(AnalysisContext *context, AST *block);
@@ -23,5 +24,10 @@ void analyze_statement(AnalysisContext *context, AST *statement);
 void analyze_assignment(AnalysisContext *context, AST *assignment);
 void analyze_declaration(AnalysisContext *context, AST *decl);
 QuectoType *analyze_expression(AnalysisContext *context, AST *expr, QuectoType *expected);
+QuectoType *analyze_call(AnalysisContext *context, AST *call);
+QuectoType *analyze_index(AnalysisContext *context, AST *index);
+QuectoType *analyze_binary_op(AnalysisContext *context, AST *op, QuectoType *expected);
+QuectoType *analyze_list(AnalysisContext *context, AST *list, QuectoType *expected);
+QuectoType *analyze_symbol(AnalysisContext *context, AST *symbol);
 
 #endif

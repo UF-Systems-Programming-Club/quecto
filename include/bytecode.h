@@ -157,7 +157,10 @@ typedef struct {
 
 Operand gen_instr(Bytecode *bytecode, Opcode opcode, size_t opcount, ...); // operands should be passed as struct
 Operand emit_expr_bytecode(EmitContext *context, Bytecode *bytecode, AST *expr);
+Operand emit_call_bytecode(EmitContext *context, Bytecode *bytecode, AST *call, bool has_destination);
+Operand emit_binary_op_bytecode(EmitContext *context, Bytecode *bytecode, AST *op);
 void emit_if_bytecode(EmitContext *context, Bytecode *bytecode, AST *ifs);
+void emit_if_chain(EmitContext *context, Bytecode *bytecode, AST *ast, Operand end_label);
 void emit_while_bytecode(EmitContext *context, Bytecode *bytecode, AST *whiles);
 void emit_decl_bytecode(EmitContext *context, Bytecode *bytecode, AST *decl);
 void emit_assign_bytecode(EmitContext *context, Bytecode *bytecode, AST *assign);
