@@ -24,6 +24,7 @@ typedef enum {
     X64_SETG,
     X64_SETLE,
     X64_SETGE,
+    X64_LEA,
     X64_PUSH,
     X64_POP,
 
@@ -41,11 +42,13 @@ typedef enum {
     x64_CL,
     x64_DL,
     x64_DIL,
+    x64_SIL,
 
     x64_RAX,
     x64_RCX,
     x64_RDX,
     x64_RDI,
+    x64_RSI,
 
     x64_RBP,
     x64_RSP,

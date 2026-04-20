@@ -24,15 +24,15 @@ void analyze_ast(AnalysisContext *context, AST *program) { // assumes ast is a A
     
     for (int i = 0; i < program->count; i++) {
         switch(program->items[i]->type) {
-            case AST_PROCEDURE: analyze_procedure(context, program->items[i]); break;
-            case AST_EXTERN:    analyze_procedure(context, program->items[i]->externed); break;
+            case AST_PROCEDURE: analyze_procedure(context, program->items[i], false); break;
+            case AST_EXTERN:    analyze_procedure(context, program->items[i]->externed, true); break;
             default: UNREACHABLE("not top-level decl"); break;
         }
     }
 }
 
 
-void analyze_procedure(AnalysisContext *context, AST *procedure) {
+void analyze_procedure(AnalysisContext *context, AST *procedure, bool externed) {
     assert(procedure->type == AST_PROCEDURE);
 
     SymbolData *signature = insert_symbol(context->arena, context->symbol_table, procedure->name->ident, SYM_TYPE_PROCEDURE);
@@ -40,6 +40,7 @@ void analyze_procedure(AnalysisContext *context, AST *procedure) {
     signature->param_count = procedure->param_count;
     signature->return_count = procedure->return_count;
     signature->local_var_size = 0;
+    signature->externed = externed;
 
     procedure->symbols = arena_alloc_type(context->arena, SymbolTable);
     procedure->symbols->prev = context->symbol_table;
@@ -121,13 +122,32 @@ void analyze_declaration(AnalysisContext *context, AST *decl) {
 }
 
 
-void analyze_assignment(AnalysisContext *context, AST *assignment) {
-    SymbolData *var = lookup_or_error(context, assignment->symbol, "assignment to undefined symbol");
-    QuectoType *expr_type = analyze_expression(context, assignment->expr, var->qtype);
 
-    if (!quecto_types_equal(var->qtype, expr_type)) {
-        report_error(assignment->line, assignment->col, "mismatched types");
+
+void analyze_assignment(AnalysisContext *context, AST *assignment) {
+    SymbolData *var;
+    QuectoType *expr_type;
+    switch (assignment->symbol->type) { // should rename this b/c not just symbol anymore
+        case AST_SYMBOL:
+            var = lookup_or_error(context, assignment->symbol, "assignment to undefined symbol");
+            expr_type = analyze_expression(context, assignment->expr, var->qtype);
+            if (!quecto_types_equal(var->qtype, expr_type)) {
+                report_error(assignment->line, assignment->col, "mismatched types");
+            }
+            break;
+        case AST_INDEX:
+            var = lookup_or_error(context, get_underlying_symbol_from(assignment->symbol), "assignment to undefined symbol");
+            analyze_index(context, assignment->symbol);
+            expr_type = analyze_expression(context, assignment->expr, var->qtype->inner);
+            if (!quecto_types_equal(var->qtype->inner, expr_type)) {
+                report_error(assignment->line, assignment->col, "mismatched types");
+            }
+            break;
+        default: {
+            report_error(assignment->line, assignment->col, "expr not assignable");
+        }
     }
+
 }
 
 
@@ -162,8 +182,7 @@ QuectoType *analyze_call(AnalysisContext *context, AST *call) {
         analyze_expression(context, call->args[i], signature->param_types[i]);
     }
 
-    call->evaled_type = signature->return_types[0];
-    return signature->return_types[0];
+    return call->evaled_type = signature->return_types[0];
 }
 
 
@@ -182,8 +201,7 @@ QuectoType *analyze_index(AnalysisContext *context, AST *index) {
 
     analyze_expression(context, index->index, NULL);
 
-    index->evaled_type = signature->qtype->inner;
-    return signature->qtype->inner;
+    return index->evaled_type = signature->qtype->inner;
 }
 
 
@@ -197,8 +215,7 @@ QuectoType *analyze_binary_op(AnalysisContext *context, AST *op, QuectoType *exp
     if (!left_valid && right_valid) left = analyze_expression(context, op->left, right);
     if (!right_valid && left_valid) right = analyze_expression(context, op->right, left);
 
-    op->evaled_type = resolve_binary_type(left, right);
-    return op->evaled_type;
+    return op->evaled_type = resolve_binary_type(left, right);
 }
 
 
@@ -212,8 +229,7 @@ QuectoType *analyze_list(AnalysisContext *context, AST *list, QuectoType *expect
         analyze_expression(context, list->items[i], expected->inner);
     }
         
-    list->evaled_type = expected;
-    return list->evaled_type;
+    return  list->evaled_type = expected;
 }
 
 

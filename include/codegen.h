@@ -15,7 +15,12 @@ typedef struct {
   MachineOperandType type;
   union {
     int reg;
-    int stack;
+    struct {
+      int base; // defaults to rbp if bytecode operand doesnt specify
+      int stack;
+      int index;
+      int size;
+    };
     int imm;
     const char *label;
   };

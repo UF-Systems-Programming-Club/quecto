@@ -214,11 +214,15 @@ ParserClsfcn classify_statement(ParserState *parser) {
     switch(peek_token_type(parser, 0)) {
         case TOKEN_OPEN_CURLY: return PCLF_BLOCK;
         case TOKEN_IDENTIFIER: {
-            switch(peek_token_type(parser, 1)) {
-                case TOKEN_COLON: return PCLF_DECL;
-                case TOKEN_EQUALS: return PCLF_ASSIGN;
-                default: break;
-            }   
+            int i = 0;
+            while (peek_token_type(parser, i) != TOKEN_EOF) {
+                switch(peek_token_type(parser, i)) {
+                    case TOKEN_COLON: return PCLF_DECL;
+                    case TOKEN_EQUALS: return PCLF_ASSIGN;
+                    default: break;
+                }
+                i++;
+            }
         }
         break;
         case TOKEN_RETURN: return PCLF_RET;
@@ -306,7 +310,7 @@ AST *parse_assignment(ParserState *parser) {
 
     Token tok;
 
-    assignment->symbol = parse_identifier(parser);
+    assignment->symbol = parse_expression(parser, 0);
     expect_next_token(parser, &tok, TOKEN_EQUALS);
     assignment->expr = parse_expression(parser, 0);
 

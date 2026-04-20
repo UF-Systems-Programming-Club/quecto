@@ -19,7 +19,7 @@ SymbolData *lookup_or_error(AnalysisContext *context, AST *symbol, const char *m
 
 void analyze_ast(AnalysisContext *context, AST *ast);
 void analyze_block(AnalysisContext *context, AST *block);
-void analyze_procedure(AnalysisContext *context, AST *procedure);
+void analyze_procedure(AnalysisContext *context, AST *procedure, bool externed);
 void analyze_statement(AnalysisContext *context, AST *statement);
 void analyze_assignment(AnalysisContext *context, AST *assignment);
 void analyze_declaration(AnalysisContext *context, AST *decl);

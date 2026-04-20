@@ -148,6 +148,10 @@ void print_ast(AST* ast, int indent) {
     }
 }
 
+AST *get_underlying_symbol_from(AST *index) {
+    return (index->access && index->access->type == AST_SYMBOL) ? index->access : get_underlying_symbol_from(index->access);
+}
+
 bool op_is_arithmetic(BinaryOp op) {
     switch (op) {
         case OP_DIVIDE:

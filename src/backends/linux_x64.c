@@ -22,7 +22,8 @@
 #define X64_INSTRUCTION(name) void emit_x64_from_ir_##name(CodegenInterface *iface, Instr instr)
 
 #define MREG(x) ((MachineOperand){.type = MOPERAND_REG, .reg = (x) })
-#define MSTK(o) ((MachineOperand){.type = MOPERAND_STACK, .stack = (o) })
+#define MSTK(o) ((MachineOperand){.type = MOPERAND_STACK, .stack = (o), .base = -1, .index = -1, .size = 4 })
+#define MSTK_IND(o, i, s) ((MachineOperand){.type = MOPERAND_STACK, .base = -1, .stack = (o), .index = (i), .size = (s) })
 #define MIMM(i) ((MachineOperand){.type = MOPERAND_IMM, .imm = (i) })
 #define MLBL(l) ((MachineOperand){.type = MOPERAND_LABEL, .label = (l) })
 #define MINV  ((MachineOperand){.type = MOPERAND_INVALID})
@@ -51,6 +52,7 @@ const char *x86_op_to_str[] = {
   [X64_JG] = "jg",
   [X64_JLE] = "jle",
   [X64_JGE] = "jge",
+  [X64_LEA] = "lea",
   [X64_PUSH] = "push",
   [X64_POP] = "pop",
   [X64_LABEL] = "",
@@ -81,9 +83,15 @@ x64_Register registers[4][4] = {
   [3] = { x64_RAX, x64_RCX, x64_RDX, x64_RDI }
 };
 
-x64_Register arg_registers_32bit[4] = {
-  x64_EDI, x64_ESI, x64_EDX, x64_ECX
+x64_Register arg_registers[4][4] = {
+  [0] = { x64_DIL, x64_SIL, x64_DL, x64_DL },
+  [1] = { },
+  [2] = { x64_EDI, x64_ESI, x64_EDX, x64_ECX },
+  [3] = { x64_RDI, x64_RSI, x64_RDX, x64_RCX }
 };
+
+x64_Register arg_registers_32bit[4] = {
+ };
 
 
 const X64_Opcode jmpCC_from_ir[OPCODE_COUNT] = {
@@ -109,7 +117,10 @@ inline int regsize_from_bytes(int bytes) {
   else if (bytes <= 2) return 1;
   else if (bytes <= 4) return 2;
   else if (bytes <= 8) return 3;
-  UNREACHABLE("invalid bit size");
+  else {
+    printf("bytes too big %d\n", bytes);
+    return -1;
+  }
 }
 
 
@@ -121,9 +132,14 @@ bool fprint_machine_operand(FILE *out, MachineOperand operand, bool leading) {
     case MOPERAND_REG:
       fprintf(out, "%s", x86_reg_to_str[operand.reg]);
       break;
-    case MOPERAND_STACK:
-      fprintf(out, "[rbp - %d]", operand.stack);
+    case MOPERAND_STACK: {
+      const char *base = (operand.base == -1) ? x86_reg_to_str[x64_RBP] : x86_reg_to_str[operand.base];
+      if (operand.index != -1)
+        fprintf(out, "[%s + %d * %s - %d]", base, operand.size, x86_reg_to_str[operand.index], operand.stack);
+      else
+        fprintf(out, "[%s %s %d]", base, operand.stack < 0 ? "+" : "-", abs(operand.stack));
       break;
+    }
     case MOPERAND_LABEL:
       fprintf(out, "%s", operand.label);
       break;
@@ -201,14 +217,22 @@ X64_INSTRUCTION(load) {
 }
 
 X64_INSTRUCTION(load_index) {
-  EMIT(iface->output, X64_MOV, MREG(VIRT_TO_PHYS_REG(iface->vreg_info.items[instr.dest.vreg].size, instr.dest.vreg)), MSTK(instr.arg1.stack_offset), MREG( VIRT_TO_PHYS_REG(iface->vreg_info.items[instr.arg2.vreg].size, instr.arg2.vreg)));
+  EMIT(iface->output, X64_MOV,
+        MREG(VIRT_TO_PHYS_REG(iface->vreg_info.items[instr.dest.vreg].size, instr.dest.vreg)),
+        MSTK_IND(instr.arg1.stack_offset, VIRT_TO_PHYS_REG(8, instr.arg1.index), instr.arg1.size), MINV);
 }
 
+X64_INSTRUCTION(load_addr) {
+  EMIT(iface->output, X64_LEA, MREG(VIRT_TO_PHYS_REG(iface->vreg_info.items[instr.dest.vreg].size, instr.dest.vreg)), MSTK(instr.arg1.stack_offset), MINV);
+}
 
 X64_INSTRUCTION(store) {
-  EMIT(iface->output, X64_MOV, MSTK(instr.dest.stack_offset), MREG(VIRT_TO_PHYS_REG(iface->vreg_info.items[instr.arg1.vreg].size, instr.arg1.vreg)), MINV);
+  MachineOperand stack = MSTK(instr.dest.stack_offset);
+  stack.base = instr.dest.base == -1 ? -1 : VIRT_TO_PHYS_REG(8, instr.dest.base);
+  stack.index = instr.dest.index == -1 ? -1 : VIRT_TO_PHYS_REG(8, instr.dest.index);
+  stack.size = instr.dest.size;
+  EMIT(iface->output, X64_MOV, stack, MREG(VIRT_TO_PHYS_REG(iface->vreg_info.items[instr.arg1.vreg].size, instr.arg1.vreg)), MINV);
 }
-
 
 X64_INSTRUCTION(loadi) {
   EMIT(iface->output, X64_MOV, MREG(VIRT_TO_PHYS_REG(iface->vreg_info.items[instr.dest.vreg].size, instr.dest.vreg)), MIMM(instr.arg1.imm), MINV);
@@ -257,7 +281,8 @@ X64_INSTRUCTION(call) {
   }
 
   for (int j = 0; j < iface->ctx.arg_count; j++) {
-    EMIT(iface->output, X64_MOV, MREG(arg_registers_32bit[j]), MREG(VIRT_TO_PHYS_REG(iface->vreg_info.items[iface->ctx.args[j].vreg].size, iface->ctx.args[j].vreg)), MINV);
+    int size = iface->vreg_info.items[iface->ctx.args[j].vreg].size;
+    EMIT(iface->output, X64_MOV, MREG(arg_registers[regsize_from_bytes(size)][j]), MREG(VIRT_TO_PHYS_REG(iface->vreg_info.items[iface->ctx.args[j].vreg].size, iface->ctx.args[j].vreg)), MINV);
   }
   
   iface->ctx.arg_count = 0;
@@ -301,7 +326,7 @@ void emit_symbols(FILE *out, Program *program) {
     fprintf(out, "global\t" ENTRY_SYMBOL "\n");
     for (int i = 0; i < program->count; i++) {
       if (program->items[i].externed)
-        fprintf(out, "extern\t%s\n", program->items[i].name);
+        fprintf(out, "extern\t_%s\n", program->items[i].name);
     }
     fprintf(out, "\n");
 }
@@ -326,6 +351,7 @@ CodegenBackend LINUX_X86_64_BACKEND = (CodegenBackend) {
     [OPCODE_CMP_GEQ] = &emit_x64_from_ir_cmpCC,
     [OPCODE_LOAD] = &emit_x64_from_ir_load,
     [OPCODE_LOAD_INDEX] = &emit_x64_from_ir_load_index,//&emit_x64_from_ir_,
+    [OPCODE_LOAD_ADDR] = &emit_x64_from_ir_load_addr,
     [OPCODE_STORE] = &emit_x64_from_ir_store,
     [OPCODE_COPY] = &emit_x64_from_ir_copy,
     [OPCODE_LOADI] = &emit_x64_from_ir_loadi,

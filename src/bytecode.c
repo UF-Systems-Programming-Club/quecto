@@ -7,7 +7,9 @@
 
 #define VREG(info) (Operand) { .type = OPERAND_VREG, info }
 #define IMM(info) (Operand) { .type = OPERAND_IMM, info }
-#define STACK(info) (Operand) { .type = OPERAND_STACK, info }
+#define STACK(info) (Operand) { .type = OPERAND_STACK, .base = -1, .index = -1, .size = 4, info }
+#define STACK_IND(o, i, s) (Operand) { .type = OPERAND_STACK, .base = -1, .stack_offset = (o), .index = (i), .size = (s)}
+#define STACK_AT(b, o) (Operand) {.type = OPERAND_STACK, .base = (b), .stack_offset = (o), .index = -1, .size = 4}
 
 // NOTE: in the future these instructions will hold more information like
 // size of type, signed or unsigned, etc;
@@ -78,15 +80,22 @@ void gen_label(Bytecode *bytecode, Operand label) {
 }
 
 
+int allocate_vreg_explicit(EmitContext *context, VregInfo info) {
+    arena_array_append(context->arena, context->vreg_info, info);
+    printf("vreg allocated with %d size\n", info.size);
+    return context->vreg_count++;
+}
+
+
 int allocate_vreg(EmitContext *context, QuectoType *type) {
     assert(type != NULL && "quecto type not initialized or nulled");
     
     VregInfo info;
     info.size = quecto_type_size(type);
     info.sign = quecto_is_signed(type);
-    
-    arena_array_append(context->arena, context->vreg_info, info);
-    return context->vreg_count++;
+
+
+    return allocate_vreg_explicit(context, info);
 }
 
 
@@ -168,13 +177,18 @@ void emit_decl_bytecode(EmitContext *context, Bytecode *bytecode, AST *decl) {
     SymbolData *var = get_symbol(context->scope, decl->symbol->ident);
 
     if (decl->evaled_type->type == QUECTO_ARRAY) {
-        var->stack_offset = context->stack_offset + 4;
+        int offset = decl->evaled_type->array_size * quecto_type_size(decl->evaled_type->inner);
+        Operand at = gen_instr(bytecode, OPCODE_LOAD_ADDR, 2,
+                                VREG(.vreg=allocate_vreg_explicit(context, (VregInfo){.size = 8, .sign = false})),
+                                STACK(.stack_offset = context->stack_offset + offset )
+                            );
         for (int i = 0; i < decl->evaled_type->array_size; i++) {
-            context->stack_offset += quecto_type_size(decl->evaled_type->inner);
             Operand expr = emit_expr_bytecode(context, bytecode, decl->expr->items[i]);
-
-            gen_instr(bytecode, OPCODE_STORE, 2, STACK( .stack_offset = context->stack_offset ), VREG ( .vreg = expr.vreg ));
+            gen_instr(bytecode, OPCODE_STORE, 2, STACK_AT(at.vreg, -i * quecto_type_size(decl->evaled_type->inner)), VREG ( .vreg = expr.vreg ));
         }
+
+        context->stack_offset += offset;
+        var->stack_offset = context->stack_offset;
     } else {
         context->stack_offset += quecto_type_size(decl->evaled_type);
         var->stack_offset = context->stack_offset;
@@ -187,9 +201,26 @@ void emit_decl_bytecode(EmitContext *context, Bytecode *bytecode, AST *decl) {
 
 void emit_assign_bytecode(EmitContext *context, Bytecode *bytecode, AST *assignment) {
     Operand expr = emit_expr_bytecode(context, bytecode, assignment->expr);
-    SymbolData *var = get_symbol(context->scope, assignment->symbol->ident);
 
-    gen_instr(bytecode, OPCODE_STORE, 2, STACK( .stack_offset = var->stack_offset), VREG( .vreg = expr.vreg ));
+    switch (assignment->symbol->type) {
+        case AST_SYMBOL: {
+            SymbolData *var = get_symbol(context->scope, assignment->symbol->ident);
+            gen_instr(bytecode, OPCODE_STORE, 2, STACK( .stack_offset = var->stack_offset), VREG( .vreg = expr.vreg ));
+            break;    
+        }
+        case AST_INDEX: {
+            SymbolData *var = get_symbol(context->scope, get_underlying_symbol_from(assignment->symbol)->ident);
+            Operand index = emit_expr_bytecode(context, bytecode, assignment->symbol->index);
+            printf("%d", index.vreg);
+            gen_instr(bytecode, OPCODE_STORE, 2,
+                       STACK_IND(var->stack_offset, index.vreg, quecto_type_size(var->qtype->inner)),
+                       VREG( .vreg = expr.vreg));
+            break;
+        }
+        default: UNREACHABLE("invalid assign");
+    }
+     
+    
 }
 
 
@@ -264,19 +295,30 @@ void emit_return_bytecode(EmitContext *context, Bytecode *bytecode, AST *ret) {
 Operand emit_expr_bytecode(EmitContext *context, Bytecode *bytecode, AST *expr) {
     switch(expr->type) {
         case AST_INT_LIT: return gen_instr(bytecode, OPCODE_LOADI, 2, VREG(.vreg = allocate_vreg(context, expr->evaled_type)), IMM(.imm = expr->int_lit));
-        case AST_SYMBOL: {
-            SymbolData *var = get_symbol(context->scope, expr->ident);
-            return gen_instr(bytecode, OPCODE_LOAD, 2, VREG( .vreg = allocate_vreg(context, expr->evaled_type)), STACK( .stack_offset = var->stack_offset ));
-        }
+        case AST_SYMBOL: return emit_symbol_bytecode(context, bytecode, expr);
         case AST_INDEX: {
             SymbolData *arr = get_symbol(context->scope, expr->access->ident);
             Operand at = emit_expr_bytecode(context, bytecode, expr->index);
-            return gen_instr(bytecode, OPCODE_LOAD_INDEX, 2, VREG( .vreg = allocate_vreg(context, expr->evaled_type)), STACK( .stack_offset = arr->stack_offset ), VREG( .vreg = at.vreg ));
+            return gen_instr(bytecode, OPCODE_LOAD_INDEX, 2,
+                              VREG( .vreg = allocate_vreg(context, expr->evaled_type) ), STACK_IND(arr->stack_offset, at.vreg, quecto_type_size(arr->qtype->inner)));
         }
         case AST_CALL: return emit_call_bytecode(context, bytecode, expr, true);
         case AST_BINARY_OP: return emit_binary_op_bytecode(context, bytecode, expr);
         default: UNREACHABLE("invalid expr ast type");
     }
+}
+
+
+Operand emit_symbol_bytecode(EmitContext *context, Bytecode* bytecode, AST *symbol) {
+        SymbolData *var = get_symbol(context->scope, symbol->ident);
+
+        switch (var->qtype->type) {
+            case QUECTO_ARRAY: return gen_instr(bytecode, OPCODE_LOAD_ADDR, 2,
+                     VREG( .vreg = allocate_vreg_explicit(context, (VregInfo) {.sign = false, .size = 8})), STACK( .stack_offset = var->stack_offset ));
+            default: return gen_instr(bytecode, OPCODE_LOAD, 2,
+                     VREG( .vreg = allocate_vreg(context, symbol->evaled_type)), STACK( .stack_offset = var->stack_offset ));
+            case QUECTO_UNKNOWN: UNREACHABLE("cant emit type of unknown"); return (Operand) {0};
+        }
 }
 
 
@@ -290,7 +332,21 @@ Operand emit_call_bytecode(EmitContext *context, Bytecode *bytecode, AST *call, 
         array_append(*bytecode, param);
     }
 
-    return gen_instr(bytecode, OPCODE_CALL, 2, has_destination ? VREG(.vreg = allocate_vreg(context, call->evaled_type)) : (Operand) {0}, create_label_from(call->callee->ident));
+    SymbolData *procedure = get_symbol(context->scope, call->callee->ident);
+    if (procedure) {
+        Operand label;
+        if (!procedure->externed) label = create_label_from(call->callee->ident);
+        else {
+            char buf[128];
+            snprintf(buf, 128, "_%s", call->callee->ident);
+            label = create_label_from(buf);
+        }
+        
+        return gen_instr(bytecode, OPCODE_CALL, 2,
+                      has_destination ? VREG(.vreg = allocate_vreg(context, call->evaled_type)) : (Operand) {0}, label);
+    } else UNREACHABLE("should have been validate in analysis");
+
+    return (Operand) {0};
 }
 
 
@@ -341,6 +397,14 @@ IntervalArray create_live_intervals_from_bytecode(Bytecode bytecode, int vreg_co
                 break;
             }
             if (bytecode.items[i].arg2.type == OPERAND_VREG && bytecode.items[i].arg2.vreg == vreg) {
+                interval.end = i;
+                break;
+            }
+            if (bytecode.items[i].arg1.type == OPERAND_STACK && bytecode.items[i].arg1.base == vreg) {
+                interval.end = i;
+                break;
+            }
+            if (bytecode.items[i].dest.type == OPERAND_STACK && bytecode.items[i].dest.base == vreg) {
                 interval.end = i;
                 break;
             }
@@ -520,7 +584,7 @@ void pretty_print_bytecode(Bytecode bytecode) {
                 print_bytecode_branch("j.ge", instr.dest, instr.arg1, instr.arg2);
                 break;
             case OPCODE_LOAD_INDEX:
-                printf("\tr%d = [bp - %d + r%d]\n", instr.dest.vreg, instr.arg1.stack_offset, instr.arg2.vreg);
+                printf("\tr%d = [bp + r%d - %d]\n", instr.dest.vreg, instr.arg1.index,  instr.arg1.stack_offset);
                 break;
             case OPCODE_LOAD:
                 printf("\tr%d = [bp - %d]\n", instr.dest.vreg, instr.arg1.stack_offset);
@@ -568,3 +632,4 @@ void pretty_print_bytecode(Bytecode bytecode) {
         }
     }
 }
+

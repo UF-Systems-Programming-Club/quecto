@@ -14,9 +14,11 @@ typedef enum {
     OPCODE_CMP_GT,
     OPCODE_CMP_LEQ,
     OPCODE_CMP_GEQ,
+    
     OPCODE_LOAD, // TODO: currently load and store operate on the stack.
                // will need to seperate stack loads from regular loads
     OPCODE_LOAD_INDEX,
+    OPCODE_LOAD_ADDR,
 
     OPCODE_STORE,
     OPCODE_COPY,
@@ -52,7 +54,12 @@ typedef struct {
         int vreg;
         int reg;
         int imm;
-        int stack_offset;
+        struct {
+            int base;
+            int stack_offset;
+            int index; // vreg
+            int size;
+        };
         char *label_name;
     };
 } Operand;
@@ -158,6 +165,7 @@ typedef struct {
 Operand gen_instr(Bytecode *bytecode, Opcode opcode, size_t opcount, ...); // operands should be passed as struct
 Operand emit_expr_bytecode(EmitContext *context, Bytecode *bytecode, AST *expr);
 Operand emit_call_bytecode(EmitContext *context, Bytecode *bytecode, AST *call, bool has_destination);
+Operand emit_symbol_bytecode(EmitContext *context, Bytecode* bytecode, AST *symbol);
 Operand emit_binary_op_bytecode(EmitContext *context, Bytecode *bytecode, AST *op);
 void emit_if_bytecode(EmitContext *context, Bytecode *bytecode, AST *ifs);
 void emit_if_chain(EmitContext *context, Bytecode *bytecode, AST *ast, Operand end_label);

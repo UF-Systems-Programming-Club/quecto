@@ -111,6 +111,7 @@ Bytecode adhere_bytecode_to_machine_spec(Bytecode bytecode, PhysRegs *pregs) {
             }
             case OPCODE_LOAD:
             case OPCODE_LOAD_INDEX:
+            case OPCODE_LOAD_ADDR:
             case OPCODE_STORE:
             case OPCODE_COPY:
             case OPCODE_LOADI:

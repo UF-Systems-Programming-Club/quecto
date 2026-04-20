@@ -37,13 +37,14 @@ typedef struct {
         struct {
             int param_count;
             int return_count;
+            bool externed;
             QuectoType *param_types[MAX_PARAMS];
             QuectoType *return_types[MAX_PARAMS];
             int local_var_size;
         };
         struct {
             QuectoType *qtype;
-            int stack_offset;
+            int stack_offset; // from bp
         };
     };
 } SymbolData;

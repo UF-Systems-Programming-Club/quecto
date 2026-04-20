@@ -121,6 +121,7 @@ typedef struct AST {
     };
 } AST;
 
+AST *get_underlying_symbol_from(AST *index);
 void print_ast(AST *ast, int indent);
 bool op_is_conditional(BinaryOp op);
 bool op_is_arithmetic(BinaryOp op);
