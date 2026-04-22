@@ -310,9 +310,9 @@ AST *parse_assignment(ParserState *parser) {
 
     Token tok;
 
-    assignment->symbol = parse_expression(parser, 0);
+    assignment->lhs = parse_expression(parser, 0);
     expect_next_token(parser, &tok, TOKEN_EQUALS);
-    assignment->expr = parse_expression(parser, 0);
+    assignment->rhs = parse_expression(parser, 0);
 
     return assignment;
 }
@@ -325,7 +325,7 @@ AST *parse_return(ParserState *parser) {
     Token tok;
     
     expect_next_token(parser, &tok, TOKEN_RETURN);
-    _return->expr = parse_expression(parser, 0);
+    _return->rhs = parse_expression(parser, 0);
 
     return _return;
 }
@@ -337,12 +337,12 @@ AST *parse_stmt_declaration(ParserState *parser) {
 
     Token tok;
 
-    decl->symbol = parse_identifier(parser);
+    decl->lhs = parse_identifier(parser);
     expect_next_token(parser, &tok, TOKEN_COLON);
     decl->evaled_type = parse_type(parser);
 
     if (match_next_token(parser, &tok, TOKEN_EQUALS)) {
-    decl->expr = (peek_token_type(parser, 0) == TOKEN_OPEN_CURLY) ?
+    decl->rhs = (peek_token_type(parser, 0) == TOKEN_OPEN_CURLY) ?
                 parse_braced_initializer(parser) : parse_expression(parser, 0);
     };
 
@@ -427,7 +427,7 @@ AST *parse_call(ParserState *parser, AST *on) {
 AST *parse_index(ParserState *parser, AST *on) {
     AST *index = arena_alloc_type(parser->arena, AST);
     index->type = AST_INDEX;
-    index->access = on;
+    index->array = on;
 
     Token tok;
     expect_next_token(parser, &tok, TOKEN_OPEN_SQUARE);
@@ -503,7 +503,7 @@ AST *parse_param_declaration(ParserState *parser) {
     AST *decl = arena_alloc_type(parser->arena, AST);
     decl->type = AST_DECL;
 
-    decl->symbol = parse_identifier(parser);
+    decl->lhs = parse_identifier(parser);
     expect_next_token(parser, &tok, TOKEN_COLON);
     decl->evaled_type = parse_type(parser);
 

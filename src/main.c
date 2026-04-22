@@ -7,10 +7,11 @@
 #include "parser.h"
 #include "ast.h"
 #include "analysis.h"
-#include "bytecode.h"
-#include "codegen.h"
+//#include "bytecode.h"
+#include "ir.h"
+//#include "codegen.h"
 #include "error.h"
-#include "backends/linux_x64.h"
+//#include "backends/linux_x64.h"
 
 
 void help_prompt();
@@ -74,6 +75,8 @@ int compile(const char *filename) {
 
     AST *ast = parse_program(&parser);
 
+    print_ast(ast, 0);
+
     if (error) return -1;
 
     SymbolTable symbols = { 0 };
@@ -94,18 +97,18 @@ int compile(const char *filename) {
     };
 
     Program program = {0};
-    emit_program_bytecode(&emit_ctx, &program, ast);
+    emit_program(&emit_ctx, &program, ast);
 
-    pretty_print_program(program);
+    // pretty_print_program(program);
     
-    PhysRegs pregs = {0};
-    adhere_program(&program, &pregs);
-    analyze_program(&program, &pregs);
+    // PhysRegs pregs = {0};
+    // adhere_program(&program, &pregs);
+    // analyze_program(&program, &pregs);
 
-    FILE *out = fopen("out.S", "w");
-    compile_program_with(out, &LINUX_X86_64_BACKEND, &program);
+    // FILE *out = fopen("out.S", "w");
+    // compile_program_with(out, &LINUX_X86_64_BACKEND, &program);
 
-    fclose(out);
+    // fclose(out);
     
     arena_free(&backing);
     if (error) return -1;

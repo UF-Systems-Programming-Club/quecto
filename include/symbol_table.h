@@ -33,6 +33,7 @@ typedef enum {
 
 typedef struct {
     SymbolType type;
+    int id;
     union {
         struct {
             int param_count;

@@ -5,13 +5,15 @@
 #include "symbol_table.h"
 
 typedef struct {
+  int global_count;
+  
   Arena *arena;
   HashTable *type_intern_table;
   
   QuectoType **returns;
   size_t return_count;
-  
-  SymbolTable *symbol_table;
+
+    SymbolTable *symbol_table;
 } AnalysisContext;
 
 QuectoType *resolve_binary_type(QuectoType *left, QuectoType *right);
