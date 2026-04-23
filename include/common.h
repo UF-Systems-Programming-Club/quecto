@@ -66,11 +66,12 @@
 // NOTE: this hash table implementation does not support removal (yet?), as the symbol table
 // does not require removal
 
+
+
 #define FNV_PRIME 0x100000001b3
 #define FNV_BASIS 0xcbf29ce484222325
 
 uint64_t fnv1a_hash(const void *str, size_t n);
-
 
 typedef struct {
     size_t size;
@@ -117,6 +118,16 @@ typedef struct {
     size_t len;
     const char *str;
 } StringView;
+
+typedef struct {
+    bool *buckets;
+    size_t size;
+} Set;
+
+void set_create(Set *set, Arena *arena, size_t size);
+bool set_insert(Set *set, int val);
+void set_add(Set *a, Set *b); // stores into a
+bool set_has(Set *set, int val);
 
 #define sv_literal(str) (StringView){ sizeof(str) - 1, (str) }
 #define sv_fmt "%.*s"

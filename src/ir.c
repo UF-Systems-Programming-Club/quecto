@@ -16,6 +16,7 @@
 #define STK(o) (MemRef) { .base = AT_BP, .offset = (o), .size = (0), .index = (0) }
 #define INDEX(b, i, o, s) (MemRef) { .base = (b), .index = (i), .offset = (o), .stride = (s), .size = 0 }
 
+
 void emit_program(EmitContext *context, Program *into, AST *program) {
     assert(program->type == AST_PROGRAM);
 
@@ -23,7 +24,7 @@ void emit_program(EmitContext *context, Program *into, AST *program) {
         Procedure proc =  { 0 };
         switch ((*item)->type) {
             case AST_PROCEDURE: emit_procedure(context, &proc, *item); break;
-            case AST_EXTERN: break;
+            case AST_EXTERN: continue;
             default:
             UNREACHABLE("not valid program level decl");
             break;
@@ -33,7 +34,7 @@ void emit_program(EmitContext *context, Program *into, AST *program) {
     }
 }
 
-
+ 
 void emit_procedure(EmitContext *context, Procedure *into, AST *procedure) {
     assert(procedure->type == AST_PROCEDURE);
 
@@ -56,21 +57,21 @@ void emit_procedure(EmitContext *context, Procedure *into, AST *procedure) {
 
     context->scope = procedure->symbols->prev;
 
+    add_predecessor(&context->cfg, context->cfg.entry_block, -1);
+
+    dominance(context->arena, &context->cfg);
+
+    into->name = procedure->name->ident;
     into->cfg = context->cfg;
     into->vregs = context->vregs;
     into->slots = context->slots;
-    
-    print_procedure(*into);
 }
 
 
-int  emit_block(EmitContext *context, AST *block) {
-
+void emit_block(EmitContext *context, AST *block) {
     for (int i = 0; i < block->count; i++) {
         emit_statement(context, block->items[i]);
     }
-
-    return 0;
 }
 
 
@@ -304,12 +305,14 @@ Operand emit_expr(EmitContext *context, AST *expr) {
     }
 }
 
+
 void start_block(EmitContext *context, int block_id) {
     if (context->current_block != -1 && block_id != context->current_block) {
         emit_jmp(context, block_id);
     }
     context->current_block = block_id;
 }
+
 
 void fallthrough_to(EmitContext *context, int block) {
     if (context->current_block != -1) emit_jmp(context, block);
@@ -435,16 +438,24 @@ int allocate_block(EmitContext *context) {
 }
 
 
-// void terminate_block_with(EmitContext *context, Instr terminator) {
-//     if (context->current_block == -1) return;
-    
-//     arena_array_append(context->arena, context->cfg.items[context->current_block].bytecode, terminator);
-//     context->current_block = -1;
-// }
+void sweep_slots(Procedure *procedure) {
+    for (int i = 0; i < procedure->slots.count; i++) {
+        if (procedure->slots.items[i].address_taken) {
+            
+        }
+    }
+    for (int i = 0; i < procedure->cfg.count; i++) {
+        if (procedure->cfg.items[i].bytecode.count == 0) continue;
+
+        
+    }
+}
+
 
 const char *reg_str[PR_BP + 1] = {
     [PR_BP] = "bp",
 };
+
 
 void print_addr(Addr addr) {
     switch (addr.type) {
@@ -453,6 +464,7 @@ void print_addr(Addr addr) {
         case ADDR_NONE: break;
     }
 }
+
 
 void print_mem(MemRef mem) {
     printf("["); print_addr(mem.base);
@@ -464,6 +476,7 @@ void print_mem(MemRef mem) {
     else if (mem.offset < 0) printf(" + %d", abs(mem.offset));
     printf("]");
 }
+
 
 bool print_operand(Operand operand, bool leading) {
     if (operand.type != OPERAND_NONE && leading) printf(", ");
@@ -478,6 +491,7 @@ bool print_operand(Operand operand, bool leading) {
     }
     return true;
 }
+
 
 const char *op_str[OPCODE_COUNT] = {
     [OPCODE_ADD]     = "add",
@@ -536,20 +550,24 @@ void print_instruction(Instr instr) {
 void print_block(CFGraph graph, bool walked[], int block) {
     if (block == -1 || walked[block]) return;
 
+    
+    BasicBlock b =  graph.items[block];
+    
     printf("block #%d:\n", block);
-
-    BasicBlock b = graph.items[block];
     walked[block] = true;
 
     for (int i = 0; i < b.bytecode.count; i++) {
+        printf("\t");
         print_instruction(b.bytecode.items[i]);
     }
-    
+
+    printf("\t");
     print_terminator(b.terminator);
     
     print_block(graph, walked, b.terminator.successor[0]);
     print_block(graph, walked, b.terminator.successor[1]);
 }
+
 
 void print_cfg(CFGraph graph) {
     bool *walked = calloc(graph.count, sizeof(bool));
@@ -559,5 +577,14 @@ void print_cfg(CFGraph graph) {
 
 
 void print_procedure(Procedure procedure) {
+    printf("%s:\n", procedure.name);
     print_cfg(procedure.cfg);
+}
+
+
+void print_program(Program program) {
+    for (int i = 0; i < program.count; i++) {
+        print_procedure(program.items[i]);
+        puts("\n\n");
+    }
 }

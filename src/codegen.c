@@ -1,5 +1,6 @@
 // include "ast.h"
-#include "codegen.h"
+// #include "codegen.h"
+
 #include "common.h"
 #include "symbol_table.h"
 #include <stdio.h>

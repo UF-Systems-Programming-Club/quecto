@@ -153,3 +153,23 @@ void arena_free(Arena *a) {
     a->capacity = 0;
     a->size = 0;
 }
+
+
+void set_create(Set *set, Arena *arena, size_t size) {
+    set->size = size;
+    set->buckets = arena_alloc(arena, size);
+}
+
+void set_add(Set *a, Set *b) {
+    assert(a->size == b->size);
+    for (int i = 0; i < b->size; i++)
+        a->buckets[i] |= b->buckets[i];
+}
+
+bool set_insert(Set *set, int val) {
+    return set->buckets[val] ? false : (set->buckets[val] = true);
+}
+
+bool set_has(Set *set, int val) {
+    return set->buckets[val];
+}

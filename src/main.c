@@ -75,8 +75,6 @@ int compile(const char *filename) {
 
     AST *ast = parse_program(&parser);
 
-    print_ast(ast, 0);
-
     if (error) return -1;
 
     SymbolTable symbols = { 0 };
@@ -89,8 +87,6 @@ int compile(const char *filename) {
 
     analyze_ast(&analysis_ctx, ast);
 
-    print_ast(ast, 0);
-
     EmitContext emit_ctx = (EmitContext) {
         .scope = &symbols,
         .arena = &backing,
@@ -99,7 +95,8 @@ int compile(const char *filename) {
     Program program = {0};
     emit_program(&emit_ctx, &program, ast);
 
-    // pretty_print_program(program);
+    print_program(program);
+
     
     // PhysRegs pregs = {0};
     // adhere_program(&program, &pregs);
