@@ -9,6 +9,7 @@ typedef enum {
 } PhysicalReg;
 
 typedef enum {
+    OPCODE_NONE,
     OPCODE_ADD,
     OPCODE_SUB,
     OPCODE_MUL,
@@ -30,12 +31,12 @@ typedef enum {
     OPCODE_RET,
 
     OPCODE_JMP,
-    OPCODE_JMP_EQ,
-    OPCODE_JMP_LT,
-    OPCODE_JMP_GT,
-    OPCODE_JMP_GE,
-    OPCODE_JMP_LE,
-    OPCODE_JMP_NEQ,
+    OPCODE_BEQ,
+    OPCODE_BLT,
+    OPCODE_BGT,
+    OPCODE_BGE,
+    OPCODE_BLE,
+    OPCODE_BNE,
     OPCODE_CALL,
     OPCODE_PARAM,
 
@@ -73,7 +74,6 @@ typedef enum {
     OPERAND_REG,
     OPERAND_IMM,
     OPERAND_MEM,
-    OPERAND_LABEL, // label id now
     OPERAND_GLOBAL
 } OperandType;
 
@@ -85,7 +85,6 @@ typedef struct {
         PhysicalReg reg;
         int slot;
         int imm;
-        int label_id;
         int glbl;
     		MemRef mem;
     };
@@ -97,6 +96,7 @@ typedef struct {
     Operand dest;
     Operand arg1;
     Operand arg2;
+    int successor[2];
 } Instr;
 
 
@@ -118,12 +118,6 @@ typedef struct {
 } VregInfoTable;
 
 typedef struct {
-    int *items; // label to addr inside that bytecode
-    size_t count;
-    size_t capacity;
-} LabelTable;
-
-typedef struct {
     int size;
     bool sign;
     bool address_taken;
@@ -136,10 +130,22 @@ typedef struct {
 } SlotTable;
 
 typedef struct {
-    VregInfoTable vregs;
-    LabelTable labels;
-    SlotTable slots; // we want slots to stay as vregs but will get demoted to mem under certain rules
+    Bytecode bytecode;
+    Instr terminator;
+} BasicBlock;
 
+typedef struct {
+    BasicBlock *items;
+    size_t count, capacity;
+    size_t entry_block;
+} CFGraph;
+
+typedef struct {
+    VregInfoTable vregs;
+    SlotTable slots; // we want slots to stay as vregs but will get demoted to mem under certain rules
+    CFGraph cfg;
+    int current_block;
+    
     Arena *arena;
     SymbolTable *scope;
     HashTable slot_from_symbol;
@@ -148,9 +154,8 @@ typedef struct {
 
 
 typedef struct {
-    Bytecode bytecode;
+    CFGraph cfg;
     VregInfoTable vregs;
-    LabelTable labels;
     SlotTable slots;
 } Procedure;
 
@@ -162,40 +167,39 @@ typedef struct {
 } Program;
 
 
-Operand allocate_label(EmitContext *context, Bytecode *bytecode);
+// Operand allocate_label(EmitContext *context, Bytecode *bytecode);
 Operand allocate_vreg_explicit(EmitContext *context, VregInfo info);
 Operand allocate_vreg_type(EmitContext *context, QuectoType *type);
+int allocate_block(EmitContext *context);
+void start_block(EmitContext *context, int block_id);
+void fallthrough_to(EmitContext *context, int block);
+// void terminate_block_with(EmitContext *context, Instr terminator);
 //Operand allocate_slot(EmitContext *context, SymbolData *sym);
 Operand slot_for(EmitContext *context, SymbolData *sym);
 Operand global_for(EmitContext *context, const char *ident);
-Operand gen_instr(Bytecode *bytecode, Opcode opcode, size_t opcount, ...);
-void force_label_here(EmitContext *context, Bytecode *bytecode, Operand label);
+// void force_label_here(EmitContext *context, Bytecode *bytecode, Operand label);
 
 void emit_program(EmitContext *context, Program *into, AST *program);
 void emit_procedure(EmitContext *context, Procedure *into, AST *procedure);
-void emit_statement(EmitContext *context, Bytecode *bytecode, AST *statement);
+void emit_statement(EmitContext *context, AST *statement);
 
-void emit_block(EmitContext *context, Bytecode *bytecode, AST *block);
-void emit_if(EmitContext *context, Bytecode *bytecode, AST *_if);
-void emit_if_chain(EmitContext *context, Bytecode *bytecode, AST *_if, Operand end_label);
-void emit_while(EmitContext *context, Bytecode *bytecode, AST *_while);
-void emit_return(EmitContext *context, Bytecode *bytecode, AST *ret);
+int emit_block(EmitContext *context, AST *block);
+void emit_if(EmitContext *context, AST *_if);
+void emit_if_chain(EmitContext *context, AST *_if, int end);
+void emit_while(EmitContext *context, AST *_while);
+void emit_return(EmitContext *context, AST *ret);
 
-Operand emit_call(EmitContext *context, Bytecode *bytecode, AST *call, bool has_dest);
-Operand emit_lhs(EmitContext *context, Bytecode *bytecode, AST *lhs);
-Operand emit_expr(EmitContext *context, Bytecode *bytecode, AST *expr);
-void emit_assign(EmitContext *context, Bytecode *bytecode, AST *assign);
-void emit_decl(EmitContext *context, Bytecode *bytecode, AST *decl);
+Operand emit_call(EmitContext *context, AST *call, bool has_dest);
+Operand emit_lhs(EmitContext *context, AST *lhs);
+Operand emit_expr(EmitContext *context, AST *expr);
+void emit_assign(EmitContext *context, AST *assign);
+void emit_decl(EmitContext *context,  AST *decl);
+
+Operand emit_instr(EmitContext *context, Opcode opcode, size_t opcount, ...);
+void emit_jmp(EmitContext *context, int target);
+void emit_branch(EmitContext *context, int true_block, int false_block, AST *condition);
+void emit_ret(EmitContext *context, Operand with);
 
 void print_procedure(Procedure proc);
-
-
-
-
-
-
-
-
-
 
 #endif

@@ -35,68 +35,75 @@ void emit_program(EmitContext *context, Program *into, AST *program) {
 
 
 void emit_procedure(EmitContext *context, Procedure *into, AST *procedure) {
-  assert(procedure->type == AST_PROCEDURE);
+    assert(procedure->type == AST_PROCEDURE);
 
-  SymbolData *info = get_symbol(context->scope, procedure->name->ident);
+    SymbolData *info = get_symbol(context->scope, procedure->name->ident);
 
-  context->vregs = (VregInfoTable) { 0 };
-  context->labels = (LabelTable) { 0 };
-  context->slots = (SlotTable) { 0 };
+    context->vregs = (VregInfoTable) { 0 };
+    context->slots = (SlotTable) { 0 };
+    context->cfg = (CFGraph) { 0 };
 
-  context->scope = procedure->symbols;
+    context->scope = procedure->symbols;
 
-  for (int i = 0; i < info->param_count; i++) {
-    (void)slot_for(context, get_symbol(context->scope, procedure->params[i]->lhs->ident));
-  }
+    for (int i = 0; i < info->param_count; i++) {
+        (void)slot_for(context, get_symbol(context->scope, procedure->params[i]->lhs->ident));
+    }
 
-  emit_block(context, &into->bytecode, procedure->body);
+    context->cfg.entry_block = allocate_block(context);
+    start_block(context, context->cfg.entry_block);
+    emit_block(context, procedure->body);
+    if (context->current_block != -1) emit_ret(context, (Operand) { 0 });
 
-  context->scope = procedure->symbols->prev;
+    context->scope = procedure->symbols->prev;
 
-  print_procedure(*into);
-
-  into->vregs = context->vregs;
-  into->labels = context->labels;
-  into->slots = context->slots;
+    into->cfg = context->cfg;
+    into->vregs = context->vregs;
+    into->slots = context->slots;
+    
+    print_procedure(*into);
 }
 
 
-void emit_block(EmitContext *context, Bytecode *bytecode, AST *block) {
-  for (int i = 0; i < block->count; i++)
-    emit_statement(context, bytecode, block->items[i]);
+int  emit_block(EmitContext *context, AST *block) {
+
+    for (int i = 0; i < block->count; i++) {
+        emit_statement(context, block->items[i]);
+    }
+
+    return 0;
 }
 
 
-void emit_statement(EmitContext *context, Bytecode *bytecode, AST *statement) {
+void emit_statement(EmitContext *context, AST *statement) {
     switch (statement->type) {
-        case AST_CALL:       (void)emit_call(context, bytecode, statement, false);   break;
-        case AST_BINARY_OP:  (void)emit_expr(context, bytecode, statement);   break;
-        case AST_BLOCK:      emit_block(context, bytecode, statement);  break;
-        case AST_DECL:       emit_decl(context, bytecode, statement);   break;
-        case AST_ASSIGNMENT: emit_assign(context, bytecode, statement); break;
-        case AST_RETURN:     emit_return(context, bytecode, statement); break;
-        case AST_IF:         emit_if(context, bytecode, statement);     break;
-        case AST_WHILE:      emit_while(context, bytecode, statement);  break;
+        case AST_CALL:       (void)emit_call(context, statement, false);   break;
+        case AST_BINARY_OP:  (void)emit_expr(context, statement);   break;
+        case AST_BLOCK:      emit_block(context, statement);  break;
+        case AST_DECL:       emit_decl(context, statement);   break;
+        case AST_ASSIGNMENT: emit_assign(context, statement); break;
+        case AST_RETURN:     emit_return(context, statement); break;
+        case AST_IF:         emit_if(context, statement);     break;
+        case AST_WHILE:      emit_while(context, statement);  break;
         default:  UNREACHABLE("ASTType");
     }
 }
 
 
-Operand emit_addr(EmitContext *context, Bytecode *bytecode, AST *lvalue) {
+Operand emit_addr(EmitContext *context, AST *lvalue) {
     Operand out = allocate_vreg_explicit(context, (VregInfo) {.size = 8, .sign = 0});
 
     switch (lvalue->type) {
         case AST_SYMBOL: {
             Operand slot = slot_for(context, get_symbol(context->scope, lvalue->ident));
             context->slots.items[slot.slot].address_taken = true;
-            gen_instr(bytecode, OPCODE_ADDR, 2, out, slot);
+            emit_instr(context, OPCODE_ADDR, 2, out, slot);
             break;
         }
         case AST_INDEX: {
-            Operand base = emit_addr(context, bytecode, lvalue->array);
-            Operand index = emit_expr(context, bytecode, lvalue->index);
+            Operand base = emit_addr(context, lvalue->array);
+            Operand index = emit_expr(context, lvalue->index);
             int size = quecto_type_size(lvalue->evaled_type);
-            gen_instr(bytecode, OPCODE_ADDR, 2,
+            emit_instr(context, OPCODE_ADDR, 2,
                        out, MEM(INDEX(AT_VR(base.vreg), AT_VR(index.vreg), 0, size)));
             break;
         }
@@ -107,15 +114,15 @@ Operand emit_addr(EmitContext *context, Bytecode *bytecode, AST *lvalue) {
 }
 
 
-Operand emit_lhs(EmitContext *context, Bytecode *bytecode, AST *lhs) {
+Operand emit_lhs(EmitContext *context, AST *lhs) {
     switch (lhs->type) {
         case AST_SYMBOL: {
             SymbolData *var = get_symbol(context->scope, lhs->ident);
             return slot_for(context, var);
         }
         case AST_INDEX: {
-            Operand base = emit_addr(context, bytecode, lhs->array);
-            Operand index = emit_expr(context, bytecode, lhs->index);
+            Operand base = emit_addr(context, lhs->array);
+            Operand index = emit_expr(context, lhs->index);
             int size = quecto_type_size(lhs->evaled_type);
             return MEM(INDEX(AT_VR(base.vreg), AT_VR(index.vreg), 0 , size));
         }
@@ -124,131 +131,142 @@ Operand emit_lhs(EmitContext *context, Bytecode *bytecode, AST *lhs) {
 }
 
 
-void emit_list(EmitContext *context, Bytecode *bytecode, AST *list, Operand *into) {
+void emit_list(EmitContext *context, AST *list, Operand *into) {
     for (int i = 0; i < list->count; i++) {
-        Operand arg = emit_expr(context, bytecode, list->items[i]);
+        Operand arg = emit_expr(context, list->items[i]);
         
-        gen_instr(bytecode, OPCODE_STORE, 2,
+        emit_instr(context, OPCODE_STORE, 2,
                    MEM(INDEX(AT_VR(into->vreg), 0, -i * quecto_type_size(list->evaled_type->inner), 0)), arg);
     }
 }
 
 
-void emit_decl(EmitContext *context, Bytecode *bytecode, AST *decl) {
+void emit_decl(EmitContext *context, AST *decl) {
     if (decl->evaled_type->type == QUECTO_ARRAY) {
-        Operand lhs = emit_addr(context, bytecode, decl->lhs);
-        emit_list(context, bytecode, decl->rhs, &lhs);
+        Operand lhs = emit_addr(context, decl->lhs);
+        emit_list(context, decl->rhs, &lhs);
     } else {
-        Operand lhs = emit_lhs(context, bytecode, decl->lhs);
-        Operand rhs = emit_expr(context, bytecode, decl->rhs);
-        gen_instr(bytecode, OPCODE_STORE, 2, lhs, rhs);
+        Operand lhs = emit_lhs(context, decl->lhs);
+        Operand rhs = emit_expr(context, decl->rhs);
+        emit_instr(context, OPCODE_STORE, 2, lhs, rhs);
     } 
 }
 
 
-void emit_assign(EmitContext *context, Bytecode *bytecode, AST *assign) {
-    Operand lhs = emit_lhs(context, bytecode, assign->lhs);
-    Operand rhs = emit_expr(context, bytecode, assign->rhs);
-    gen_instr(bytecode, OPCODE_STORE, 2, lhs, rhs);    
+void emit_assign(EmitContext *context, AST *assign) {
+    Operand lhs = emit_lhs(context, assign->lhs);
+    Operand rhs = emit_expr(context, assign->rhs);
+    emit_instr(context, OPCODE_STORE, 2, lhs, rhs);    
 }
 
 
 const Opcode jump_condition_opcode_table[OP_COUNT] = {
-    [OP_EQUALS] = OPCODE_JMP_EQ,
-    [OP_LESS_THAN] = OPCODE_JMP_LT,
-    [OP_GREATER_THAN] = OPCODE_JMP_GT,
-    [OP_LESS_EQUALS] = OPCODE_JMP_LE,
-    [OP_GREATER_EQUALS] = OPCODE_JMP_GE,
+    [OP_EQUALS] = OPCODE_BEQ,
+    [OP_NEQUALS] = OPCODE_BNE,
+    [OP_LESS_THAN] = OPCODE_BLT,
+    [OP_GREATER_THAN] = OPCODE_BGT,
+    [OP_LESS_EQUALS] = OPCODE_BLE,
+    [OP_GREATER_EQUALS] = OPCODE_BGE,
 };
 
 
-void emit_branch_comp(EmitContext *context, Bytecode *bytecode, Operand label, AST *expr) {
-    assert(expr->type == AST_BINARY_OP && op_is_conditional(expr->op));
+void emit_if(EmitContext *context, AST *_if) {
+    assert(_if->type == AST_IF);
+
+    int end = allocate_block(context);
+    int btrue = allocate_block(context);
+    int bfalse = _if->otherwise ? allocate_block(context) : end;
+    emit_branch(context, btrue, bfalse, _if->condition);
     
-    Operand left = emit_expr(context, bytecode, expr->left);
-    Operand right = emit_expr(context, bytecode, expr->right);
-    gen_instr(bytecode, jump_condition_opcode_table[op_opposite(expr->op)], 3, label, left, right);
+    start_block(context, btrue);
+    emit_statement(context, _if->then);
+    fallthrough_to(context, end);
+
+    if (_if->otherwise) {
+        start_block(context, bfalse);
+        emit_if_chain(context, _if->otherwise, end);
+    }
+    start_block(context, end);
 }
 
 
-void emit_if(EmitContext *context, Bytecode *bytecode, AST *_if) {
-    Operand end_label = allocate_label(context, bytecode);
-
-    emit_branch_comp(context, bytecode, end_label, _if->condition);
-    emit_statement(context, bytecode, _if->then);
-
-    gen_instr(bytecode, OPCODE_JMP, 1, end_label);
-
-    if (_if->otherwise)
-        emit_if_chain(context, bytecode, _if->otherwise, end_label);
-
-    force_label_here(context, bytecode, end_label);
-}
-
-
-void emit_if_chain(EmitContext *context, Bytecode *bytecode, AST *_if, Operand end_label) {
+void emit_if_chain(EmitContext *context, AST *_if, int end) {
     if (_if->type == AST_ELIF) {
-        Operand label = allocate_label(context, bytecode);
+        int btrue = allocate_block(context);
+        int bfalse = allocate_block(context);
 
-        emit_branch_comp(context, bytecode, label, _if->condition);
-        emit_statement(context, bytecode, _if->then);
+        emit_branch(context, btrue, bfalse, _if->condition);
 
-        gen_instr(bytecode, OPCODE_JMP, 1, end_label);
-        force_label_here(context, bytecode, label);
+        start_block(context, btrue);
+        emit_statement(context, _if->then);
+        fallthrough_to(context, end);
 
-        if (_if->otherwise)
-            emit_if_chain(context, bytecode, _if->otherwise, end_label);
+        if (_if->otherwise) {
+            start_block(context, bfalse);
+            emit_if_chain(context, _if->otherwise, end);
+        }
     } else if (_if->type == AST_ELSE) {
-        emit_statement(context, bytecode, _if->then);
+        emit_statement(context, _if->then);
+        emit_jmp(context, end);
     } else {
         assert(0 && "only elif and else should be chained in 'statement->otherwise' ");
     }
 }
 
 
-void emit_while(EmitContext *context, Bytecode *bytecode, AST *_while) {
-    Operand begin_label = allocate_label(context, bytecode);
-    Operand end_label = allocate_label(context, bytecode);
+void emit_while(EmitContext *context, AST *_while) {
+    assert(_while->type == AST_WHILE);
 
-    emit_branch_comp(context, bytecode, end_label, _while->condition);    
-    emit_statement(context, bytecode, _while->then);
+    int condition = allocate_block(context);
+    int loop = allocate_block(context);
+    int end = allocate_block(context);
 
-    gen_instr(bytecode, OPCODE_JMP, 1, begin_label);
-    force_label_here(context, bytecode, end_label);
+    start_block(context, condition);
+    emit_branch(context, loop, end, _while->condition);
+    start_block(context, loop);
+    emit_statement(context, _while->then);
+    emit_jmp(context, condition);
+    start_block(context, end);
 }
 
 
-void emit_return(EmitContext *context, Bytecode *bytecode, AST *ret) {
+void emit_return(EmitContext *context, AST *ret) {
+    assert(ret->type == AST_RETURN);
+    
     if (ret->rhs)
-        gen_instr(bytecode, OPCODE_RET, 2, (Operand) {.type = OPERAND_NONE}, emit_expr(context, bytecode, ret->rhs));
+        emit_ret(context, emit_expr(context, ret->rhs));
     else
-        gen_instr(bytecode, OPCODE_RET, 0);
+        emit_ret(context, (Operand) {0});
 }
 
 
-Operand emit_symbol(EmitContext *context, Bytecode *bytecode, AST *sym) {
+Operand emit_symbol(EmitContext *context, AST *sym) {
     Operand slot = slot_for(context, get_symbol(context->scope, sym->ident));
     switch (sym->evaled_type->type) {
-        case QUECTO_ARRAY: return emit_addr(context, bytecode, sym);
-        default: return gen_instr(bytecode, OPCODE_LOAD, 2,
+        case QUECTO_ARRAY: return emit_addr(context, sym);
+        default: return emit_instr(context, OPCODE_LOAD, 2,
                 allocate_vreg_type(context, sym->evaled_type), slot);
     }
 }
 
 
-Operand emit_call(EmitContext *context, Bytecode *bytecode, AST *call, bool has_dest) {
+Operand emit_call(EmitContext *context, AST *call, bool has_dest) {
+    assert(call->type == AST_CALL);
+    
     for (int i = 0; i < call->arg_count; i++) {
-        gen_instr(bytecode, OPCODE_PARAM, 2, (Operand) {.type = OPERAND_NONE},
-                   emit_expr(context, bytecode, call->args[i]));
+        emit_instr(context, OPCODE_PARAM, 2, (Operand) {.type = OPERAND_NONE},
+                   emit_expr(context, call->args[i]));
     }
-    return gen_instr(bytecode, OPCODE_CALL, 2, has_dest ?
+    return emit_instr(context, OPCODE_CALL, 2, has_dest ?
                         allocate_vreg_type(context, call->evaled_type) : (Operand) {0},
                         global_for(context, call->callee->ident)
                     );
 }
 
 
-Operand emit_binary_op(EmitContext *context, Bytecode *bytecode, AST *op) {
+Operand emit_binary_op(EmitContext *context, AST *op) {
+    assert(op->type == AST_BINARY_OP);
+    
     Opcode opcode;
     switch (op->op) {
         case OP_PLUS:           opcode = OPCODE_ADD; break;
@@ -262,37 +280,83 @@ Operand emit_binary_op(EmitContext *context, Bytecode *bytecode, AST *op) {
         case OP_GREATER_EQUALS: opcode = OPCODE_CMP_GEQ; break;
         default: UNREACHABLE("invalid operation");
     }
-    return gen_instr(bytecode, opcode, 3,
+    return emit_instr(context, opcode, 3,
                       allocate_vreg_type(context, op->evaled_type),
-                      emit_expr(context, bytecode, op->left),
-                      emit_expr(context, bytecode, op->right)
+                      emit_expr(context, op->left),
+                      emit_expr(context, op->right)
                     );
 }
 
 
-Operand emit_expr(EmitContext *context, Bytecode *bytecode, AST *expr) {
+Operand emit_expr(EmitContext *context, AST *expr) {
     switch (expr->type) {
-        case AST_INT_LIT: return gen_instr(bytecode, OPCODE_IMM, 2, allocate_vreg_type(context, expr->evaled_type), IMM(expr->int_lit));
-        case AST_SYMBOL: return emit_symbol(context, bytecode, expr);
+        case AST_INT_LIT: return emit_instr(context, OPCODE_IMM, 2, allocate_vreg_type(context, expr->evaled_type), IMM(expr->int_lit));
+        case AST_SYMBOL: return emit_symbol(context, expr);
         case AST_INDEX: {
-            Operand base = emit_addr(context, bytecode, expr->array);
-            Operand index = emit_expr(context, bytecode, expr->index);
+            Operand base = emit_addr(context, expr->array);
+            Operand index = emit_expr(context, expr->index);
             Operand ref = MEM(INDEX(AT_VR(base.vreg), AT_VR(index.vreg), 0, quecto_type_size(expr->evaled_type)));
-            return gen_instr(bytecode, OPCODE_INDEX, 2, allocate_vreg_type(context, expr->evaled_type), ref);
+            return emit_instr(context, OPCODE_INDEX, 2, allocate_vreg_type(context, expr->evaled_type), ref);
         }
-        case AST_CALL: return emit_call(context, bytecode, expr, true);
-        case AST_BINARY_OP: return emit_binary_op(context, bytecode, expr);
+        case AST_CALL: return emit_call(context, expr, true);
+        case AST_BINARY_OP: return emit_binary_op(context, expr);
         default: UNREACHABLE("invalid expr ast type");
     }
 }
 
+void start_block(EmitContext *context, int block_id) {
+    if (context->current_block != -1 && block_id != context->current_block) {
+        emit_jmp(context, block_id);
+    }
+    context->current_block = block_id;
+}
 
-Operand gen_instr(Bytecode *bytecode, Opcode opcode, size_t opcount, ...) {
+void fallthrough_to(EmitContext *context, int block) {
+    if (context->current_block != -1) emit_jmp(context, block);
+}
+
+
+void emit_branch(EmitContext *context, int true_target, int false_target, AST *expr) {
+    assert(context->current_block != -1 && expr->type == AST_BINARY_OP && op_is_conditional(expr->op));
+    
+    Instr terminator = { .opcode = jump_condition_opcode_table[expr->op], .successor = { true_target, false_target} };
+    terminator.arg1 = emit_expr(context, expr->left);
+    terminator.arg2 = emit_expr(context, expr->right);
+
+    context->cfg.items[context->current_block].terminator = terminator;
+    context->current_block = -1;
+}
+
+
+void emit_jmp(EmitContext *context, int target) {
+    assert(context->current_block != -1);
+    
+    Instr terminator = { .opcode = OPCODE_JMP, .successor = { target, -1} };
+
+    context->cfg.items[context->current_block].terminator = terminator;
+    context->current_block = -1;
+}
+
+
+void emit_ret(EmitContext *context, Operand with) {
+    assert(context->current_block != -1);
+    
+    Instr terminator = { .opcode = OPCODE_RET, .arg1 = with , .successor = { -1, -1} };
+
+    context->cfg.items[context->current_block].terminator = terminator;
+    context->current_block = -1;
+}
+
+
+Operand emit_instr(EmitContext *context, Opcode opcode, size_t opcount, ...) {
   assert(opcount <= 3 && "only up to 3 operands are supported currently");
+  assert(context->current_block != -1);
+
   va_list args;
   Instr instr;
   
   instr.opcode = opcode;
+  instr.successor[0] = -1; instr.successor[1] = -1;
   instr.dest = (Operand) { 0 };
   instr.arg1 = (Operand) { 0 };
   instr.arg2 = (Operand) { 0 };
@@ -310,19 +374,8 @@ Operand gen_instr(Bytecode *bytecode, Opcode opcode, size_t opcount, ...) {
 
   va_end(args);
 
-  array_append(*bytecode, instr);
+  arena_array_append(context->arena, context->cfg.items[context->current_block].bytecode, instr);
   return instr.dest;
-}
-
-
-Operand allocate_label(EmitContext *context, Bytecode *bytecode) {
-  arena_array_append(context->arena, context->labels, bytecode->count);
-  return LOCAL(context->labels.count - 1);
-}
-
-
-void force_label_here(EmitContext *context, Bytecode *bytecode, Operand label) {
-    context->labels.items[label.label_id] = bytecode->count;
 }
 
 
@@ -347,6 +400,9 @@ Operand global_for(EmitContext *context, const char *ident) {
     SymbolTable *globals = context->scope;
     for (;globals->prev != NULL; globals = globals->prev);
     SymbolData *sym = get_symbol(globals, ident);
+
+    assert(sym != NULL); // not in globals;
+    
     return GLOBAL(sym->id);
 }
 
@@ -372,6 +428,20 @@ Operand slot_for(EmitContext *context, SymbolData *sym) {
     return SLOT(*slot);
 }
 
+
+int allocate_block(EmitContext *context) {
+    arena_array_append(context->arena, context->cfg, (BasicBlock){ 0 });
+    return context->cfg.count - 1;
+}
+
+
+// void terminate_block_with(EmitContext *context, Instr terminator) {
+//     if (context->current_block == -1) return;
+    
+//     arena_array_append(context->arena, context->cfg.items[context->current_block].bytecode, terminator);
+//     context->current_block = -1;
+// }
+
 const char *reg_str[PR_BP + 1] = {
     [PR_BP] = "bp",
 };
@@ -395,17 +465,18 @@ void print_mem(MemRef mem) {
     printf("]");
 }
 
-void print_operand(Operand operand) {
+bool print_operand(Operand operand, bool leading) {
+    if (operand.type != OPERAND_NONE && leading) printf(", ");
     switch (operand.type) {
         case OPERAND_VREG: printf("r%d", operand.vreg); break;
         case OPERAND_REG: printf("%s", reg_str[operand.reg]); break;
         case OPERAND_MEM: print_mem(operand.mem); break;
         case OPERAND_IMM: printf("%d", operand.imm); break;
         case OPERAND_SLOT: printf("s%d", operand.slot); break;
-        case OPERAND_LABEL: printf("LBL%d", operand.label_id); break;
         case OPERAND_GLOBAL: printf("GBL%d", operand.glbl); break;
-        case OPERAND_NONE: break;
+        default: return false;
     }
+    return true;
 }
 
 const char *op_str[OPCODE_COUNT] = {
@@ -426,33 +497,67 @@ const char *op_str[OPCODE_COUNT] = {
     [OPCODE_COPY]    = "copy",
     [OPCODE_RET]     = "ret",
     [OPCODE_JMP]     = "jmp",
-    [OPCODE_JMP_EQ]  = "jeq",
-    [OPCODE_JMP_LT]  = "jlt",
-    [OPCODE_JMP_GT]  = "jgt",
-    [OPCODE_JMP_GE]  = "jge",
-    [OPCODE_JMP_LE]  = "jle",
-    [OPCODE_JMP_NEQ] = "jne",
+    [OPCODE_BEQ]  = "beq",
+    [OPCODE_BLT]  = "blt",
+    [OPCODE_BGT]  = "bgt",
+    [OPCODE_BGE]  = "bge",
+    [OPCODE_BLE]  = "ble",
+    [OPCODE_BNE] = "bne",
     [OPCODE_CALL]    = "call",
     [OPCODE_PARAM]   = "param",
 };
 
+
+void print_terminator(Instr instr) {
+    printf("\t%s ", op_str[instr.opcode]);
+    if (instr.opcode == OPCODE_JMP) printf("#%d ", instr.successor[0]);
+    else if (instr.opcode != OPCODE_RET)
+printf("(t: #%d, f: #%d) ", instr.successor[0], instr.successor[1]);
+    print_operand(instr.arg2, print_operand(instr.arg1, print_operand(instr.dest, false)));;
+    printf("\n");
+}
+
+
 void print_instruction(Instr instr) {
     if (OPCODE_COPY <= instr.opcode && instr.opcode <= OPCODE_PARAM) {
-        printf("%s ", op_str[instr.opcode]);
-        print_operand(instr.dest); printf(", ");
-        print_operand(instr.arg1); printf(", ");
-        print_operand(instr.arg2); printf("\n");
+        printf("\t%s ", op_str[instr.opcode]);
+        print_operand(instr.arg2, print_operand(instr.arg1, print_operand(instr.dest, false)));;
+        printf("\n");
     } else {
-        print_operand(instr.dest);
+        printf("\t");
+        print_operand(instr.dest, false);
         printf(" = %s ", op_str[instr.opcode]);
-        print_operand(instr.arg1); printf(", ");
-        print_operand(instr.arg2); printf("\n");
+        print_operand(instr.arg2, print_operand(instr.arg1, false));
+        printf("\n");
     }
 }
 
 
-void print_procedure(Procedure procedure) {
-    for (int i = 0; i < procedure.bytecode.count; i++) {
-        print_instruction(procedure.bytecode.items[i]);
+void print_block(CFGraph graph, bool walked[], int block) {
+    if (block == -1 || walked[block]) return;
+
+    printf("block #%d:\n", block);
+
+    BasicBlock b = graph.items[block];
+    walked[block] = true;
+
+    for (int i = 0; i < b.bytecode.count; i++) {
+        print_instruction(b.bytecode.items[i]);
     }
+    
+    print_terminator(b.terminator);
+    
+    print_block(graph, walked, b.terminator.successor[0]);
+    print_block(graph, walked, b.terminator.successor[1]);
+}
+
+void print_cfg(CFGraph graph) {
+    bool *walked = calloc(graph.count, sizeof(bool));
+    print_block(graph, walked, graph.entry_block);
+    free(walked);
+}
+
+
+void print_procedure(Procedure procedure) {
+    print_cfg(procedure.cfg);
 }
