@@ -3,6 +3,7 @@ extern proc puts(str : i8[5]) => ()
 
 proc main() => () {
 	list : u32[5] = {4, 4, 5, 6, 9};
+	list[4] = 0;
 	sum : u32 = 0;
 	index : u32 = 0;
 	while (index < 5) {

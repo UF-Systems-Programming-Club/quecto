@@ -29,7 +29,10 @@ typedef enum {
 
     OPCODE_STORE,
     OPCODE_COPY,
-    OPCODE_RET,
+
+    OPCODE_CALL,
+    OPCODE_ARG, // defines args for call
+    OPCODE_PARAM, // defines entry for vregs
 
     OPCODE_JMP,
     OPCODE_BEQ,
@@ -38,8 +41,7 @@ typedef enum {
     OPCODE_BGE,
     OPCODE_BLE,
     OPCODE_BNE,
-    OPCODE_CALL,
-    OPCODE_PARAM,
+    OPCODE_RET,
 
     OPCODE_COUNT,
 } Opcode;
@@ -126,6 +128,7 @@ typedef struct {
 typedef struct {
     int size;
     bool sign;
+    bool param;
     bool address_taken;
 } SlotInfo;
 
@@ -137,12 +140,18 @@ typedef struct {
 } SlotTable;
 
 typedef struct {
+    int slot;
     Operand dest;
+    Operand *args;
 } Phi;
 
 
 typedef struct {
-
+    struct {
+        Phi *items;
+        size_t count;
+        size_t capacity;
+    } phis;
     Bytecode bytecode;
     Instr terminator;
 
@@ -190,16 +199,23 @@ typedef struct {
 } Program;
 
 
+DEFINE_STACK(Operand);
+
+bool opcode_is_branch(Opcode opcode);
+
 Operand allocate_vreg_explicit(EmitContext *context, VregInfo info);
 Operand allocate_vreg_type(EmitContext *context, QuectoType *type);
 int allocate_block(EmitContext *context);
 void start_block(EmitContext *context, int block_id);
 void fallthrough_to(EmitContext *context, int block);
-Operand slot_for(EmitContext *context, SymbolData *sym);
+Operand slot_for(EmitContext *context, SymbolData *sym, bool param);
 Operand global_for(EmitContext *context, const char *ident);
 
 void add_predecessor(CFGraph *cfg, int block, int with);
 void dominance(Arena *arena, CFGraph *cfg);
+void insert_phis(Arena *arena, Procedure *procedure);
+void rename_block(EmitContext *context, Procedure *procedure, int block, OperandStack stacks[procedure->slots.count]);
+void remove_copies(Procedure *procedure);
 
 void emit_program(EmitContext *context, Program *into, AST *program);
 void emit_procedure(EmitContext *context, Procedure *into, AST *procedure);

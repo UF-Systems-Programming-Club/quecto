@@ -10,7 +10,6 @@
 #define MEM(m) (Operand) { .type = OPERAND_MEM, .mem = (m) }
 #define SLOT(s) (Operand) { .type = OPERAND_SLOT, .slot = (s) }
 #define GLOBAL(g) (Operand) { .type = OPERAND_GLOBAL, .glbl = (g) }
-#define LOCAL(l) (Operand) { .type = OPERAND_LABEL, .label_id = (l) }
 #define AT_BP (Addr) { .type = ADDR_REG, .reg = PR_BP }
 #define AT_VR(v) (Addr) { .type = ADDR_VREG, .vreg = v }
 #define STK(o) (MemRef) { .base = AT_BP, .offset = (o), .size = (0), .index = (0) }
@@ -46,12 +45,14 @@ void emit_procedure(EmitContext *context, Procedure *into, AST *procedure) {
 
     context->scope = procedure->symbols;
 
-    for (int i = 0; i < info->param_count; i++) {
-        (void)slot_for(context, get_symbol(context->scope, procedure->params[i]->lhs->ident));
-    }
-
     context->cfg.entry_block = allocate_block(context);
     start_block(context, context->cfg.entry_block);
+
+    for (int i = 0; i < info->param_count; i++) {
+        Operand slot = slot_for(context, get_symbol(context->scope, procedure->params[i]->lhs->ident), true);
+        emit_instr(context, OPCODE_PARAM, 1, slot);
+    }
+
     emit_block(context, procedure->body);
     if (context->current_block != -1) emit_ret(context, (Operand) { 0 });
 
@@ -65,6 +66,19 @@ void emit_procedure(EmitContext *context, Procedure *into, AST *procedure) {
     into->cfg = context->cfg;
     into->vregs = context->vregs;
     into->slots = context->slots;
+
+    OperandStack *stacks = arena_alloc(context->arena, sizeof(OperandStack) * into->slots.count);
+    for (int i = 0; i < into->slots.count; i++) {
+        OperandStack_set_backing(&stacks[i], context->arena);
+        if (into->slots.items[i].param) {
+            Operand vreg = allocate_vreg_explicit(context, (VregInfo) {.sign = into->slots.items[i].sign, .size = into->slots.items[i].size});
+            OperandStack_push(&stacks[i], vreg);
+        }
+    }
+
+    insert_phis(context->arena, into);
+    rename_block(context, into, context->cfg.entry_block, stacks);
+    remove_copies(into);
 }
 
 
@@ -95,7 +109,7 @@ Operand emit_addr(EmitContext *context, AST *lvalue) {
 
     switch (lvalue->type) {
         case AST_SYMBOL: {
-            Operand slot = slot_for(context, get_symbol(context->scope, lvalue->ident));
+            Operand slot = slot_for(context, get_symbol(context->scope, lvalue->ident), false);
             context->slots.items[slot.slot].address_taken = true;
             emit_instr(context, OPCODE_ADDR, 2, out, slot);
             break;
@@ -119,7 +133,7 @@ Operand emit_lhs(EmitContext *context, AST *lhs) {
     switch (lhs->type) {
         case AST_SYMBOL: {
             SymbolData *var = get_symbol(context->scope, lhs->ident);
-            return slot_for(context, var);
+            return slot_for(context, var, false);
         }
         case AST_INDEX: {
             Operand base = emit_addr(context, lhs->array);
@@ -242,7 +256,7 @@ void emit_return(EmitContext *context, AST *ret) {
 
 
 Operand emit_symbol(EmitContext *context, AST *sym) {
-    Operand slot = slot_for(context, get_symbol(context->scope, sym->ident));
+    Operand slot = slot_for(context, get_symbol(context->scope, sym->ident), false);
     switch (sym->evaled_type->type) {
         case QUECTO_ARRAY: return emit_addr(context, sym);
         default: return emit_instr(context, OPCODE_LOAD, 2,
@@ -255,7 +269,7 @@ Operand emit_call(EmitContext *context, AST *call, bool has_dest) {
     assert(call->type == AST_CALL);
     
     for (int i = 0; i < call->arg_count; i++) {
-        emit_instr(context, OPCODE_PARAM, 2, (Operand) {.type = OPERAND_NONE},
+        emit_instr(context, OPCODE_ARG, 2, (Operand) {.type = OPERAND_NONE},
                    emit_expr(context, call->args[i]));
     }
     return emit_instr(context, OPCODE_CALL, 2, has_dest ?
@@ -410,7 +424,7 @@ Operand global_for(EmitContext *context, const char *ident) {
 }
 
 
-Operand slot_for(EmitContext *context, SymbolData *sym) {
+Operand slot_for(EmitContext *context, SymbolData *sym, bool param) {
     int *slot = ht_nsearch(&context->slot_from_symbol, &sym, sizeof(SymbolData*)); // pass by pointer cause pointers shud be unique alr
     if (slot != NULL) {
         return SLOT(*slot);
@@ -419,6 +433,7 @@ Operand slot_for(EmitContext *context, SymbolData *sym) {
     SlotInfo info = (SlotInfo) {
         .size = quecto_type_size(sym->qtype),
         .sign = quecto_is_signed(sym->qtype),
+        .param = param,
         .address_taken = false,
     };
 
@@ -449,6 +464,11 @@ void sweep_slots(Procedure *procedure) {
 
         
     }
+}
+
+
+bool opcode_is_branch(Opcode opcode) {
+    return OPCODE_JMP <=opcode && opcode <= OPCODE_RET;
 }
 
 
@@ -519,6 +539,7 @@ const char *op_str[OPCODE_COUNT] = {
     [OPCODE_BNE] = "bne",
     [OPCODE_CALL]    = "call",
     [OPCODE_PARAM]   = "param",
+    [OPCODE_ARG] = "arg",
 };
 
 
@@ -533,17 +554,28 @@ printf("(t: #%d, f: #%d) ", instr.successor[0], instr.successor[1]);
 
 
 void print_instruction(Instr instr) {
-    if (OPCODE_COPY <= instr.opcode && instr.opcode <= OPCODE_PARAM) {
+    if (instr.opcode == OPCODE_NONE) {
+        return;
+    } else if (opcode_is_branch(instr.opcode)) {
         printf("\t%s ", op_str[instr.opcode]);
-        print_operand(instr.arg2, print_operand(instr.arg1, print_operand(instr.dest, false)));;
-        printf("\n");
-    } else {
-        printf("\t");
-        print_operand(instr.dest, false);
-        printf(" = %s ", op_str[instr.opcode]);
+        if (instr.opcode == OPCODE_JMP) {
+            printf("#%d", instr.successor[0]);
+        } else if (instr.opcode == OPCODE_RET) {
+            
+        } else {
+            printf("(#%d|#%d)", instr.successor[0], instr.successor[1]);
+        }
         print_operand(instr.arg2, print_operand(instr.arg1, false));
-        printf("\n");
+    } else  {
+        printf("\t");
+        if (instr.dest.type != OPERAND_NONE) {
+            print_operand(instr.dest, false);
+            printf(" = ");
+        }
+        printf("%s ", op_str[instr.opcode]);
+        print_operand(instr.arg2, print_operand(instr.arg1, false));
     }
+    printf("\n");
 }
 
 
@@ -556,12 +588,19 @@ void print_block(CFGraph graph, bool walked[], int block) {
     printf("block #%d:\n", block);
     walked[block] = true;
 
+    for (int i = 0; i < b.phis.count; i ++) {
+        printf("\tr%d = phi(", b.phis.items[i].dest.vreg);
+        for (int j = 0; j < b.predecessors.count; j++) {
+            if (b.phis.items[i].args[j].type == OPERAND_VREG) printf("r%d", b.phis.items[i].args[j].vreg);
+            if (j != b.predecessors.count - 1) printf(", ");
+        }
+        printf(")\n");
+    }
+
     for (int i = 0; i < b.bytecode.count; i++) {
-        printf("\t");
         print_instruction(b.bytecode.items[i]);
     }
 
-    printf("\t");
     print_terminator(b.terminator);
     
     print_block(graph, walked, b.terminator.successor[0]);

@@ -126,8 +126,38 @@ typedef struct {
 
 void set_create(Set *set, Arena *arena, size_t size);
 bool set_insert(Set *set, int val);
+void set_remove(Set *set, int val);
+int set_pop(Set *set);
+bool set_empty(Set *set);
 void set_add(Set *a, Set *b); // stores into a
 bool set_has(Set *set, int val);
+
+
+#define DEFINE_STACK(type) \
+    typedef struct { \
+        Arena *arena; \
+        type *stack; \
+        size_t capacity; \
+        size_t cursor; \
+     } type##Stack; \
+     static inline void type##Stack_set_backing(type##Stack *stack, Arena *arena) {\
+         stack->arena = arena;\
+     }\
+     static inline type type##Stack_pop(type##Stack *stack) { \
+         return stack->stack[--stack->cursor];\
+     } \
+     static inline type type##Stack_peek(type##Stack *stack, int dist) { \
+        return stack->stack[stack->cursor - dist]; \
+     } \
+     static inline void type##Stack_push(type##Stack *stack, type val) { \
+        if (stack->cursor + 1 > stack->capacity) { \
+            size_t old = stack->capacity; \
+            size_t new = old == 0 ? 16 : old * 2; \
+            stack->stack = arena_realloc(stack->arena, stack->stack, old, new); \
+            stack->capacity = new;\
+        }\
+        stack->stack[stack->cursor++] = val; \
+     } \
 
 #define sv_literal(str) (StringView){ sizeof(str) - 1, (str) }
 #define sv_fmt "%.*s"

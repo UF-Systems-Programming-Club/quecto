@@ -122,13 +122,7 @@ void *arena_alloc(Arena *a, size_t size) {
 
 void *arena_realloc(Arena *a, void *ptr, size_t old_size, size_t new_size) {
     uint8_t *res = (uint8_t *)arena_alloc(a, new_size);
-    for (size_t i = 0; i < old_size; i++) {
-        uint8_t *it = (uint8_t *)ptr;
-        *res = *it;
-        it++;
-        res++;
-    }
-
+    memcpy(res, ptr, old_size);
     return res;
 }
 
@@ -170,6 +164,27 @@ bool set_insert(Set *set, int val) {
     return set->buckets[val] ? false : (set->buckets[val] = true);
 }
 
+int set_pop(Set *set) {
+    for (int i = set->size - 1; i >= 0; i--) {
+        if (set->buckets[i]) {
+            set->buckets[i] = false;
+            return i;
+        }
+    }
+    return -1;
+}
+
 bool set_has(Set *set, int val) {
     return set->buckets[val];
+}
+
+void set_remove(Set *set, int val) {
+    set->buckets[val] = false;
+}
+
+bool set_empty(Set *set) {
+    for (int i = 0; i < set->size; i++) {
+        if (set->buckets[i]) return false;
+    }
+    return true;
 }

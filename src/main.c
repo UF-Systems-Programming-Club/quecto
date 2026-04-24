@@ -65,7 +65,7 @@ int compile(const char *filename) {
     Arena backing = {0};
     HashTable types = {0}; // intern table
 
-    arena_create(&backing, 1024 * 1024);
+    arena_create(&backing, 1024 * 2048);
 
     ParserState parser = {
         .tokens = tokens,
