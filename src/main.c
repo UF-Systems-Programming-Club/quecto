@@ -9,9 +9,9 @@
 #include "analysis.h"
 //#include "bytecode.h"
 #include "ir.h"
-//#include "codegen.h"
+#include "codegen.h"
 #include "error.h"
-//#include "backends/linux_x64.h"
+#include "backends/linux_x64.h"
 
 
 void help_prompt();
@@ -105,10 +105,10 @@ int compile(const char *filename) {
     // adhere_program(&program, &pregs);
     // analyze_program(&program, &pregs);
 
-    // FILE *out = fopen("out.S", "w");
-    // compile_program_with(out, &LINUX_X86_64_BACKEND, &program);
+    FILE *out = fopen("out.S", "w");
+    compile_program_with(out, &LINUX_X86_64_BACKEND, &program);
 
-    // fclose(out);
+    fclose(out);
     
     arena_free(&backing);
     if (error) return -1;

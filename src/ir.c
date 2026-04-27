@@ -53,7 +53,7 @@ void emit_procedure(EmitContext *context, Procedure *into, AST *procedure) {
 
     for (int i = 0; i < info->param_count; i++) {
         Operand slot = slot_for(context, get_symbol(context->scope, procedure->params[i]->lhs->ident), true);
-        emit_instr(context, OPCODE_PARAM, 1, slot);
+        emit_instr(context, OPCODE_PARAM, 2, slot, IMM(i));
     }
 
     emit_block(context, procedure->body);
@@ -61,10 +61,15 @@ void emit_procedure(EmitContext *context, Procedure *into, AST *procedure) {
 
     context->scope = procedure->symbols->prev;
 
+    print_procedure(*context->procedure);
+
     passes_preparation(context);
     pass_insert_phis(context);
     pass_rename(context);
+    pass_kill_slots(context);
     pass_remove_copies(context);
+
+    pass_three_op_to_two(context);
 
     fill_liveness(context); // needs recompute after phis inserted
     pass_compute_liveness(context);

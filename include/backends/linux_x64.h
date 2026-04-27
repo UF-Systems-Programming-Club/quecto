@@ -28,7 +28,7 @@ typedef enum {
     X64_PUSH,
     X64_POP,
 
-    X64_LABEL, // aimed to be removed
+    X64_LABEL = 50, // aimed to be removed
 } X64_Opcode;
 
 typedef enum {
@@ -36,18 +36,30 @@ typedef enum {
     x64_ECX,
     x64_EDX,
     x64_EDI,
+    x64_R8D,
+    x64_R9D,
+    x64_R10D,
+    x64_R11D,
     x64_ESI,
 
     x64_AL,
     x64_CL,
     x64_DL,
     x64_DIL,
+    x64_R8B,
+    x64_R9B,
+    x64_R10B,
+    x64_R11B,
     x64_SIL,
 
     x64_RAX,
     x64_RCX,
     x64_RDX,
     x64_RDI,
+    x64_R8,
+    x64_R9,
+    x64_R10,
+    x64_R11,
     x64_RSI,
 
     x64_RBP,
@@ -55,6 +67,8 @@ typedef enum {
 } x64_Register;
 
 int regsize_from_bytes(int bits);
+x64_Register select_register(VregInfo info);
+MachineOperand select_stack(CodegenInterface *iface, int slot);
 
 extern CodegenBackend LINUX_X86_64_BACKEND;
 

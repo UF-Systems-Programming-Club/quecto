@@ -6,6 +6,8 @@
 
 typedef enum {
     PR_BP,
+    PR_GP,
+    PR_PARAM,
 } PhysicalReg;
 
 
@@ -123,6 +125,7 @@ typedef struct {
     bool sign;
     Interval interval;
     int color;
+    bool killed; // marked for death
 } VregInfo;
 
 
@@ -138,6 +141,7 @@ typedef struct {
     bool sign;
     bool param;
     bool address_taken;
+    bool killed; // marked for death
 } SlotInfo;
 
 
@@ -245,6 +249,8 @@ void pass_color_cfg(EmitContext *context);
 void pass_color_cfg_recurs(EmitContext *context, int block, Set *live, ColorStack *free);
 void pass_sweep_nops(EmitContext *context);
 void pass_phis_into_copies(EmitContext *context);
+void pass_three_op_to_two(EmitContext* context);
+void pass_kill_slots(EmitContext *context);
 Bytecode pass_flatten(EmitContext *context);
 
 void emit_program(EmitContext *context, Program *into, AST *program);

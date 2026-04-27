@@ -2,6 +2,7 @@
 // 
 #include "codegen.h"
 #include "common.h"
+#include "ir.h"
 #include "symbol_table.h"
 #include <stdio.h>
 
@@ -37,21 +38,34 @@
 //         procedure->locations = linear_scan_register_allocation(&procedure->intervals, procedure->vreg_count, pregs);
 //     }
 // }
+// 
+#define MLBL(l) ((MachineOperand){.type = MOPERAND_LABEL, .label = (l) })
 
 
 MachineCode emit_procedure_with(CodegenBackend *backend, Procedure procedure) {
     CodegenInterface iface = {
         .output = {0},
-        .ctx = {
-            .procedure_name = procedure.name,
-        }
+        .vregs = &procedure.vregs,
+        .slots = &procedure.slots,
     };
 
+    backend->calculate_offsets(&iface);
     backend->emit_prologue(&iface, &procedure);
 
-    for (int i = 0; i < procedure.flattened.count; i++, iface.ctx.current_instruction++) {
+    for (int i = 0; i < procedure.flattened.count; i++) {
         Instr instr = procedure.flattened.items[i];
+
+        for (int j = 0; j < procedure.cfg.count; j++) {
+            if (procedure.cfg.global_pos[j] == i) {
+                char *buf = malloc(16);
+                snprintf(buf, 16, "\t.L_BLK%d", j);
+                MachineInstr instr = (MachineInstr) { .instruction = 50, .dest = MLBL(buf)};
+                array_append(iface.output, instr);
+            }
+        }
+        
         EmitFn fn = backend->emit_machine_code_from[instr.opcode];
+        print_instruction(instr);
         assert(fn != NULL && "no emit handler for opcode");
         fn(&iface, instr);
     }
@@ -71,7 +85,7 @@ void compile_program_with(FILE *out, CodegenBackend *backend, Program *program) 
         // if (program->items[i].externed) continue;
         fprintf(out, "%s:\n", program->items[i].name);
         MachineCode code = emit_procedure_with(backend, program->items[i]);
-        backend->print_machine_code(out, &code);
+        backend->print_machine_code(out, &code, program->items[i].cfg.count, program->items[i].cfg.global_pos);
     }
 }
 

@@ -33,13 +33,13 @@ typedef struct {
   MachineOperand arg2;
 } MachineInstr;
 
-typedef struct {
-  const char *procedure_name;
-  Operand args[MAX_PARAMS];
-  size_t arg_count;
-  size_t current_instruction;
-  size_t stack_offset;
-} CodegenContext;
+// typedef struct {
+//   const char *procedure_name;
+//   Operand args[MAX_PARAMS];
+//   size_t arg_count;
+//   size_t current_instruction;
+//   size_t stack_offset;
+// } CodegenContext;
 
 typedef struct {
   MachineInstr *items;
@@ -48,19 +48,30 @@ typedef struct {
 } MachineCode;
 
 typedef struct {
+  Arena *scratch;
   MachineCode output;
-  VregInfoTable vreg_info;
-  CodegenContext ctx;
+  VregInfoTable *vregs;
+  SlotTable *slots;
+  int *labels;
+
+  int *args;
+  int arg_count;
+
+  size_t stackframe;
+  size_t *stack_from_slot;
+  // CodegenContext ctx;
 } CodegenInterface;
 
 typedef void (*EmitFn)(CodegenInterface *iface, Instr instr);
+typedef void (*CalculateFn)(CodegenInterface *iface);
 typedef void (*EmitProcFn)(CodegenInterface *face, Procedure *procedure);
 typedef Bytecode (*AdhereFn)(Bytecode bytecode);
-typedef void (*FPrintFn)(FILE *out, MachineCode *code);
+typedef void (*FPrintFn)(FILE *out, MachineCode *code, size_t bsize, int block_pos[bsize]);
 typedef void (*EmitProgramDataFn)(FILE *out, Program *program);
 
 typedef struct {
   AdhereFn adhere_bytecode_to_spec;
+  CalculateFn calculate_offsets;
   EmitProgramDataFn emit_symbols;
   EmitProgramDataFn emit_entry;
   AdhereFn adhere_bytecode;

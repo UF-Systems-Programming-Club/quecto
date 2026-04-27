@@ -234,7 +234,7 @@ void fill_liveness(EmitContext *context) {
                 if (succ == -1) continue;
                 set_add(&tmp, &cfg->live_in[succ]);
                 
-                BasicBlock *successor = &cfg->items[s];
+                BasicBlock *successor = &cfg->items[succ];
                 int idx = -1;
                 for (int i = 0; i < successor->predecessors.count; i++) {
                     if (b == successor->predecessors.items[i]) idx = i;
@@ -246,8 +246,6 @@ void fill_liveness(EmitContext *context) {
                 }
                 
             }
-
-            
 
             for (int i = 0; i < vregs->count; i++)
                 if (cfg->live_out[b].buckets[i] != tmp.buckets[i]) {
@@ -354,13 +352,38 @@ void pass_rename(EmitContext *context) {
 }
 
 
+void pass_kill_slots(EmitContext *context) {
+    CFGraph *cfg = &context->procedure->cfg;
+    for (int s = 0; s < context->procedure->slots.count; s++) {
+        context->procedure->slots.items[s].killed = true;
+    }
+    for (int k = 0; k < cfg->count; k++) {
+        int b = cfg->rpo_list[k];
+
+        for (int i = 0; i < cfg->items[b].bytecode.count; i++) {
+            Instr instr = cfg->items[b].bytecode.items[i];
+
+            if (instr.dest.type == OPERAND_SLOT) {
+                context->procedure->slots.items[instr.dest.slot].killed = false;
+            }
+            if (instr.arg1.type == OPERAND_SLOT) {
+                context->procedure->slots.items[instr.arg1.slot].killed = false;
+            }
+            if (instr.arg2.type == OPERAND_SLOT) {
+                context->procedure->slots.items[instr.arg2.slot].killed = false;
+            }
+            
+        }
+    }
+}
+
 
 // if arg is -1, matches anything
 inline bool instr_match(Instr *instr, Opcode opcode, OperandType dest, OperandType arg1, OperandType arg2) {
     return (instr->opcode == opcode &&
                 (dest == -1 || instr->dest.type == dest) &&
                 (arg1 == -1 || instr->arg1.type == arg1) &&
-                (arg1 == -1 || instr->arg2.type == arg2));
+                (arg2 == -1 || instr->arg2.type == arg2));
 }
 
 
@@ -536,7 +559,7 @@ void pass_color_cfg(EmitContext *context) {
     ColorStack stack = { 0 };
     ColorStack_set_backing(&stack, context->scratch);
     
-    for (int i = 16; i > 1; i--) {
+    for (int i = 8; i >= 0; i--) {
         ColorStack_push(&stack, i);
     }
 
@@ -634,6 +657,41 @@ const Opcode op_cond_opcode_table[OPCODE_COUNT] = {
     [OPCODE_BGT] = OPCODE_BLE,
     [OPCODE_BLT] = OPCODE_BGE,
 };
+
+
+void pass_three_op_to_two(EmitContext* context) {
+    CFGraph *cfg = &context->procedure->cfg;
+
+    for (int b = 0; b < cfg->count; b++) {
+        int estimated_size = cfg->items[b].bytecode.count * 2;
+        Bytecode bc = { 0 };
+        bc.capacity = estimated_size;
+        bc.items = arena_alloc(context->arena, estimated_size * sizeof(Instr));
+
+        for (int i = 0; i < cfg->items[b].bytecode.count; i++) {
+            Instr instr = cfg->items[b].bytecode.items[i];
+            switch (instr.opcode) {
+                case OPCODE_ADD:
+                case OPCODE_SUB:
+                case OPCODE_MUL: {
+                    Instr copy = { 0 };
+                    copy.opcode = OPCODE_COPY;
+                    copy.dest = allocate_vreg_explicit(context, context->procedure->vregs.items[instr.arg1.vreg]);
+                    copy.arg1 = instr.arg1;
+                    instr.arg1 = copy.dest;
+                    bc.items[bc.count++] = copy;
+                    bc.items[bc.count++] = instr;
+                    break;
+                }
+                default:
+                    bc.items[bc.count++] = instr;
+                    break;
+            }
+        }
+        cfg->items[b].bytecode = bc;
+    }
+}
+
 
 Bytecode pass_flatten(EmitContext* context) {
     CFGraph *cfg = &context->procedure->cfg;
