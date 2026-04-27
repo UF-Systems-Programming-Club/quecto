@@ -34,7 +34,7 @@ void ht_resize(HashTable *ht) {
         }
 
         new_keys[index] = key;
-        new_items[index] = item;
+        // new_items[index] = item;
     }
 
     ht->keys = new_keys;
@@ -141,6 +141,14 @@ void arena_reset(Arena *a) {
     a->size = 0;
 }
 
+size_t arena_mark(Arena *a) {
+    return a->size;
+}
+
+void arena_restore(Arena *a, size_t mark) {
+    a->size = mark;
+}
+
 void arena_free(Arena *a) {
     free(a->data);
     a->data = NULL;
@@ -158,6 +166,12 @@ void set_add(Set *a, Set *b) {
     assert(a->size == b->size);
     for (int i = 0; i < b->size; i++)
         a->buckets[i] |= b->buckets[i];
+}
+
+void set_subtract(Set *a, Set *b) {
+    assert(a->size == b->size);
+    for (int i = 0; i < b->size; i++)
+        if(a->buckets[i] == b->buckets[i]) a->buckets[i] = false;
 }
 
 bool set_insert(Set *set, int val) {
@@ -182,9 +196,24 @@ void set_remove(Set *set, int val) {
     set->buckets[val] = false;
 }
 
+void set_clear(Set *set) {
+    memset(set->buckets, false, set->size);
+}
+
+void set_copy(Set *dst, Set *src) {
+    assert(dst->size == src->size);
+    memcpy(dst->buckets, src->buckets, src->size);
+}
+
 bool set_empty(Set *set) {
     for (int i = 0; i < set->size; i++) {
         if (set->buckets[i]) return false;
     }
     return true;
+}
+
+void set_complement(Set *set) {
+    for (int i = 0; i < set->size; i++) {
+        set->buckets[i] = !set->buckets[i];
+    }
 }

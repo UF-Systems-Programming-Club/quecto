@@ -1,6 +1,6 @@
 // include "ast.h"
-// #include "codegen.h"
-
+// 
+#include "codegen.h"
 #include "common.h"
 #include "symbol_table.h"
 #include <stdio.h>
@@ -39,45 +39,41 @@
 // }
 
 
-// MachineCode emit_procedure_with(CodegenBackend *backend, Procedure procedure) {
-//     CodegenInterface iface = {
-//         .interval = procedure.intervals,
-//         .location = procedure.locations,
-//         .vreg_info = procedure.vreg_info,
-//         .output = {0},
-//         .ctx = {
-//             .procedure_name = procedure.name,
-//         }
-//     };
+MachineCode emit_procedure_with(CodegenBackend *backend, Procedure procedure) {
+    CodegenInterface iface = {
+        .output = {0},
+        .ctx = {
+            .procedure_name = procedure.name,
+        }
+    };
 
-//     backend->emit_prologue(&iface, &procedure);
+    backend->emit_prologue(&iface, &procedure);
 
-//     for (int i = 0; i < procedure.bytecode.count; i++, iface.ctx.current_instruction++) {
-//         Instr instr = procedure.bytecode.items[i];
-//         EmitFn fn = backend->emit_machine_code_from[instr.opcode];
-//         assert(fn != NULL && "no emit handler for opcode");
-//         fn(&iface, instr);
-//     }
+    for (int i = 0; i < procedure.flattened.count; i++, iface.ctx.current_instruction++) {
+        Instr instr = procedure.flattened.items[i];
+        EmitFn fn = backend->emit_machine_code_from[instr.opcode];
+        assert(fn != NULL && "no emit handler for opcode");
+        fn(&iface, instr);
+    }
 
-//     backend->emit_epilogue(&iface, &procedure);
+    backend->emit_epilogue(&iface, &procedure);
 
-//     return iface.output;
-// }
+    return iface.output;
+}
 
 
-// void compile_program_with(FILE *out, CodegenBackend *backend, Program *program) {
+void compile_program_with(FILE *out, CodegenBackend *backend, Program *program) {
 
-//     backend->emit_symbols(out, program);
-//     backend->emit_entry(out, program);
+    backend->emit_symbols(out, program);
+    backend->emit_entry(out, program);
 
-//     for (int i = 0; i < program->count; i++) {
-//         if (program->items[i].externed) continue;
-        
-//         fprintf(out, "%s:\n", program->items[i].name);
-//         MachineCode code = emit_procedure_with(backend, program->items[i]);
-//         backend->print_machine_code(out, &code);
-//     }
-// }
+    for (int i = 0; i < program->count; i++) {
+        // if (program->items[i].externed) continue;
+        fprintf(out, "%s:\n", program->items[i].name);
+        MachineCode code = emit_procedure_with(backend, program->items[i]);
+        backend->print_machine_code(out, &code);
+    }
+}
 
 
 // Bytecode adhere_bytecode_to_machine_spec(Bytecode bytecode, PhysRegs *pregs) {

@@ -77,6 +77,7 @@ typedef enum {
     OPERAND_NONE = 0,
     OPERAND_VREG,
     OPERAND_SLOT,
+    OPERAND_BLOCK, // for jumps and stuff
     OPERAND_REG,
     OPERAND_IMM,
     OPERAND_MEM,
@@ -90,6 +91,7 @@ typedef struct {
         int vreg;
         PhysicalReg reg;
         int slot;
+        int block;
         int imm;
         int glbl;
     		MemRef mem;
@@ -113,8 +115,14 @@ typedef struct {
 } Bytecode;
 
 typedef struct {
+    int bstart, istart, bend, iend; // NOTE: this bend, iend is a simplication for linear scans in the future may be replaced with a set of end based on cfg
+} Interval;
+
+typedef struct {
     int size;
     bool sign;
+    Interval interval;
+    int color;
 } VregInfo;
 
 
@@ -164,32 +172,34 @@ typedef struct {
 
 typedef struct {
     BasicBlock *items;
-    int *rpo; // indexed by item id
-    int *dominance; // indexed by item id
-    size_t count, capacity;
-    size_t entry_block;
+    int *rpo, *rpo_list, *idom, *global_pos; // indexed by item id
+    Set *df, *live_in, *live_out, *uses, *defines; // live_in -> defines are vreg liveness related
+    size_t count, capacity, entry_block;
 } CFGraph;
+
+typedef struct {
+    CFGraph cfg;
+    Bytecode flattened;
+    VregInfoTable vregs;
+    int *labels;
+    SlotTable slots;
+    const char *name;
+} Procedure;
 
 
 typedef struct {
-    VregInfoTable vregs;
-    SlotTable slots; // we want slots to stay as vregs but will get demoted to mem under certain rules
-    CFGraph cfg;
+    Procedure *procedure;
+    // VregInfoTable vregs;
+    // SlotTable slots; // we want slots to stay as vregs but will get demoted to mem under certain rules
+    // CFGraph cfg;
     int current_block;
     
     Arena *arena;
+    Arena *scratch;
     SymbolTable *scope;
     HashTable slot_from_symbol;
     HashTable global_from_symbol;
 } EmitContext;
-
-
-typedef struct {
-    CFGraph cfg;
-    VregInfoTable vregs;
-    SlotTable slots;
-    const char *name;
-} Procedure;
 
 
 typedef struct {
@@ -200,6 +210,8 @@ typedef struct {
 
 
 DEFINE_STACK(Operand);
+typedef int Color;
+DEFINE_STACK(Color);
 
 bool opcode_is_branch(Opcode opcode);
 
@@ -211,11 +223,29 @@ void fallthrough_to(EmitContext *context, int block);
 Operand slot_for(EmitContext *context, SymbolData *sym, bool param);
 Operand global_for(EmitContext *context, const char *ident);
 
-void add_predecessor(CFGraph *cfg, int block, int with);
-void dominance(Arena *arena, CFGraph *cfg);
-void insert_phis(Arena *arena, Procedure *procedure);
-void rename_block(EmitContext *context, Procedure *procedure, int block, OperandStack stacks[procedure->slots.count]);
-void remove_copies(Procedure *procedure);
+
+void fill_rpo(CFGraph *cfg, int *index, int block);
+void fill_idom(CFGraph *cfg);
+void fill_predecessors(CFGraph *cfg);
+void fill_df(CFGraph *cfg);
+void fill_liveness(EmitContext *context);
+void add_predecessor(CFGraph *cfg, int, int);
+
+int vreg_if_use(Instr instr, int *vregs);
+VregInfo vregi_from_sloti(SlotInfo slot);
+bool instr_match(Instr *instr, Opcode opcode, OperandType dest, OperandType arg1, OperandType arg2);
+
+void passes_preparation(EmitContext *context);
+void pass_insert_phis(EmitContext *context);
+void pass_rename(EmitContext *context);
+void pass_rename_recurs(EmitContext *context, OperandStack stacks[], int bid);
+void pass_compute_liveness(EmitContext *context);
+void pass_remove_copies(EmitContext *context);
+void pass_color_cfg(EmitContext *context);
+void pass_color_cfg_recurs(EmitContext *context, int block, Set *live, ColorStack *free);
+void pass_sweep_nops(EmitContext *context);
+void pass_phis_into_copies(EmitContext *context);
+Bytecode pass_flatten(EmitContext *context);
 
 void emit_program(EmitContext *context, Program *into, AST *program);
 void emit_procedure(EmitContext *context, Procedure *into, AST *procedure);
@@ -238,5 +268,8 @@ void emit_ret(EmitContext *context, Operand with);
 
 void print_procedure(Procedure proc);
 void print_program(Program program);
+void print_instruction(Instr instr);
+void print_vregs(Procedure procedure);
+void print_bytecode(Bytecode bytecode, size_t bsize, int blocks[bsize]);
 
 #endif

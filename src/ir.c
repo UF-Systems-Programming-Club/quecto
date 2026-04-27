@@ -39,14 +39,17 @@ void emit_procedure(EmitContext *context, Procedure *into, AST *procedure) {
 
     SymbolData *info = get_symbol(context->scope, procedure->name->ident);
 
-    context->vregs = (VregInfoTable) { 0 };
-    context->slots = (SlotTable) { 0 };
-    context->cfg = (CFGraph) { 0 };
+    context->procedure = into;
+
+    context->procedure->name = procedure->name->ident;
+    context->procedure->vregs = (VregInfoTable) { 0 };
+    context->procedure->slots = (SlotTable) { 0 };
+    context->procedure->cfg = (CFGraph) { 0 };
 
     context->scope = procedure->symbols;
 
-    context->cfg.entry_block = allocate_block(context);
-    start_block(context, context->cfg.entry_block);
+    context->procedure->cfg.entry_block = allocate_block(context);
+    start_block(context, context->procedure->cfg.entry_block);
 
     for (int i = 0; i < info->param_count; i++) {
         Operand slot = slot_for(context, get_symbol(context->scope, procedure->params[i]->lhs->ident), true);
@@ -58,27 +61,22 @@ void emit_procedure(EmitContext *context, Procedure *into, AST *procedure) {
 
     context->scope = procedure->symbols->prev;
 
-    add_predecessor(&context->cfg, context->cfg.entry_block, -1);
+    passes_preparation(context);
+    pass_insert_phis(context);
+    pass_rename(context);
+    pass_remove_copies(context);
 
-    dominance(context->arena, &context->cfg);
-
-    into->name = procedure->name->ident;
-    into->cfg = context->cfg;
-    into->vregs = context->vregs;
-    into->slots = context->slots;
-
-    OperandStack *stacks = arena_alloc(context->arena, sizeof(OperandStack) * into->slots.count);
-    for (int i = 0; i < into->slots.count; i++) {
-        OperandStack_set_backing(&stacks[i], context->arena);
-        if (into->slots.items[i].param) {
-            Operand vreg = allocate_vreg_explicit(context, (VregInfo) {.sign = into->slots.items[i].sign, .size = into->slots.items[i].size});
-            OperandStack_push(&stacks[i], vreg);
-        }
-    }
-
-    insert_phis(context->arena, into);
-    rename_block(context, into, context->cfg.entry_block, stacks);
-    remove_copies(into);
+    fill_liveness(context); // needs recompute after phis inserted
+    pass_compute_liveness(context);
+    pass_color_cfg(context);
+    pass_phis_into_copies(context);
+    pass_sweep_nops(context);
+    context->procedure->flattened = pass_flatten(context);
+    
+    // remove_copies(into);
+    // phis_into_copies(context, into);
+    // sweep_nops(context, into);
+    // into->flattened = flatten_cfg(context->arena, &into->cfg);
 }
 
 
@@ -110,7 +108,7 @@ Operand emit_addr(EmitContext *context, AST *lvalue) {
     switch (lvalue->type) {
         case AST_SYMBOL: {
             Operand slot = slot_for(context, get_symbol(context->scope, lvalue->ident), false);
-            context->slots.items[slot.slot].address_taken = true;
+            context->procedure->slots.items[slot.slot].address_taken = true;
             emit_instr(context, OPCODE_ADDR, 2, out, slot);
             break;
         }
@@ -340,7 +338,7 @@ void emit_branch(EmitContext *context, int true_target, int false_target, AST *e
     terminator.arg1 = emit_expr(context, expr->left);
     terminator.arg2 = emit_expr(context, expr->right);
 
-    context->cfg.items[context->current_block].terminator = terminator;
+    context->procedure->cfg.items[context->current_block].terminator = terminator;
     context->current_block = -1;
 }
 
@@ -350,7 +348,7 @@ void emit_jmp(EmitContext *context, int target) {
     
     Instr terminator = { .opcode = OPCODE_JMP, .successor = { target, -1} };
 
-    context->cfg.items[context->current_block].terminator = terminator;
+    context->procedure->cfg.items[context->current_block].terminator = terminator;
     context->current_block = -1;
 }
 
@@ -360,7 +358,7 @@ void emit_ret(EmitContext *context, Operand with) {
     
     Instr terminator = { .opcode = OPCODE_RET, .arg1 = with , .successor = { -1, -1} };
 
-    context->cfg.items[context->current_block].terminator = terminator;
+    context->procedure->cfg.items[context->current_block].terminator = terminator;
     context->current_block = -1;
 }
 
@@ -391,14 +389,19 @@ Operand emit_instr(EmitContext *context, Opcode opcode, size_t opcount, ...) {
 
   va_end(args);
 
-  arena_array_append(context->arena, context->cfg.items[context->current_block].bytecode, instr);
+  arena_array_append(context->arena, context->procedure->cfg.items[context->current_block].bytecode, instr);
   return instr.dest;
 }
 
 
 Operand allocate_vreg_explicit(EmitContext *context, VregInfo info) {
-  arena_array_append(context->arena, context->vregs, info);
-  return VREG(context->vregs.count - 1);
+  info.interval.iend = -1;
+  info.interval.bend = -1;
+  info.interval.istart = -1;
+  info.interval.bstart = -1;
+  info.color = -1;
+  arena_array_append(context->arena, context->procedure->vregs, info);
+  return VREG(context->procedure->vregs.count - 1);
 }
 
 
@@ -408,6 +411,9 @@ Operand allocate_vreg_type(EmitContext *context, QuectoType *type) {
   VregInfo info;
   info.size = quecto_type_size(type);
   info.sign = quecto_is_signed(type);
+  info.interval.bend = -1;
+  info.interval.iend = -1;
+  info.color = -1;
 
   return allocate_vreg_explicit(context, info);
 }
@@ -438,8 +444,8 @@ Operand slot_for(EmitContext *context, SymbolData *sym, bool param) {
     };
 
     slot = arena_alloc(context->arena, sizeof(int));
-    *slot = context->slots.count;
-    arena_array_append(context->arena, context->slots, info);
+    *slot = context->procedure->slots.count;
+    arena_array_append(context->arena, context->procedure->slots, info);
 
     ht_ninsert(&context->slot_from_symbol, &sym, sizeof(SymbolData*), slot);
 
@@ -448,8 +454,8 @@ Operand slot_for(EmitContext *context, SymbolData *sym, bool param) {
 
 
 int allocate_block(EmitContext *context) {
-    arena_array_append(context->arena, context->cfg, (BasicBlock){ 0 });
-    return context->cfg.count - 1;
+    arena_array_append(context->arena, context->procedure->cfg, (BasicBlock){ 0 });
+    return context->procedure->cfg.count - 1;
 }
 
 
@@ -501,6 +507,7 @@ void print_mem(MemRef mem) {
 bool print_operand(Operand operand, bool leading) {
     if (operand.type != OPERAND_NONE && leading) printf(", ");
     switch (operand.type) {
+        case OPERAND_BLOCK: printf("b%d", operand.vreg); break;
         case OPERAND_VREG: printf("r%d", operand.vreg); break;
         case OPERAND_REG: printf("%s", reg_str[operand.reg]); break;
         case OPERAND_MEM: print_mem(operand.mem); break;
@@ -558,6 +565,7 @@ void print_instruction(Instr instr) {
         return;
     } else if (opcode_is_branch(instr.opcode)) {
         printf("\t%s ", op_str[instr.opcode]);
+        print_operand(instr.dest, false);
         if (instr.opcode == OPCODE_JMP) {
             printf("#%d", instr.successor[0]);
         } else if (instr.opcode == OPCODE_RET) {
@@ -608,6 +616,15 @@ void print_block(CFGraph graph, bool walked[], int block) {
 }
 
 
+void print_bytecode(Bytecode bytecode, size_t bsize, int blocks[bsize]) {
+    for (int i = 0; i < bytecode.count; i++) {
+        for (int j = 0; j < bsize; j++)
+            if (blocks[j] == i) printf("b%d: ", j);
+        print_instruction(bytecode.items[i]);
+    }
+}
+
+
 void print_cfg(CFGraph graph) {
     bool *walked = calloc(graph.count, sizeof(bool));
     print_block(graph, walked, graph.entry_block);
@@ -617,7 +634,10 @@ void print_cfg(CFGraph graph) {
 
 void print_procedure(Procedure procedure) {
     printf("%s:\n", procedure.name);
+    print_vregs(procedure);
     print_cfg(procedure.cfg);
+    printf("%s.flat:\n", procedure.name);
+    print_bytecode(procedure.flattened, procedure.cfg.count, procedure.cfg.global_pos);
 }
 
 
@@ -625,5 +645,14 @@ void print_program(Program program) {
     for (int i = 0; i < program.count; i++) {
         print_procedure(program.items[i]);
         puts("\n\n");
+    }
+}
+
+void print_vregs(Procedure procedure) {
+    for (int v = 0; v < procedure.vregs.count; v++) {
+        VregInfo entry = procedure.vregs.items[v];
+        // if (entry.interval.bstart == -1 || entry.interval.bend == -1) continue;
+        if (entry.color == -1) continue;
+        printf("{ r%d | color: %d, size: %d, signed: %d }\n", v, entry.color, entry.size, entry.sign);
     }
 }

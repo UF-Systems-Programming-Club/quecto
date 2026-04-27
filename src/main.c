@@ -63,9 +63,11 @@ int compile(const char *filename) {
     if (error) return -1;
 
     Arena backing = {0};
+    Arena scratch = {0};
     HashTable types = {0}; // intern table
 
     arena_create(&backing, 1024 * 2048);
+    arena_create(&scratch, 1024 * 1024);
 
     ParserState parser = {
         .tokens = tokens,
@@ -90,6 +92,7 @@ int compile(const char *filename) {
     EmitContext emit_ctx = (EmitContext) {
         .scope = &symbols,
         .arena = &backing,
+        .scratch = &scratch,
     };
 
     Program program = {0};

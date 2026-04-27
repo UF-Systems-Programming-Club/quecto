@@ -43,6 +43,19 @@
 //     return intervals;
 // }
 
+// void reg_alloc(Procedure *procedure, int vreg_count) { // 4 max active
+//     int inactive_count = 4;
+//     int inactive[4] = { 1, 2, 3, 4 };
+//     for (int i = 0; i < procedure->cfg.count; i++) {
+//         int b = procedure->cfg.rpo_list[i];
+
+//         for (int j = 0; j < procedure->cfg.items[b].bytecode.count; j++) {
+//             for (int v = 0; )
+//         }
+//     }c
+// }c
+
+
 // // NOTE: assumes intervals is already sorted
 // LocationArray linear_scan_register_allocation(IntervalArray *intervals, int vreg_count, PhysRegs *pregs) {
 //     LocationArray locations = {0};

@@ -111,6 +111,10 @@ void *arena_realloc(Arena *a, void *ptr, size_t old_size, size_t new_size);
 void *arena_intern(Arena *a, HashTable *intern_table, const void *value, size_t size);
 void arena_clear(Arena *a);
 void arena_free(Arena *a);
+
+size_t arena_mark(Arena *a);
+void arena_restore(Arena *a, size_t cursor);
+
 #define arena_alloc_type(arena_ptr, type) \
     (type *)arena_alloc((arena_ptr), sizeof(type))
 
@@ -130,8 +134,11 @@ void set_remove(Set *set, int val);
 int set_pop(Set *set);
 bool set_empty(Set *set);
 void set_add(Set *a, Set *b); // stores into a
+void set_subtract(Set *a, Set *b);
 bool set_has(Set *set, int val);
-
+void set_complement(Set *set);
+void set_clear(Set *set);
+void set_copy(Set *dst, Set* src);
 
 #define DEFINE_STACK(type) \
     typedef struct { \
@@ -144,6 +151,7 @@ bool set_has(Set *set, int val);
          stack->arena = arena;\
      }\
      static inline type type##Stack_pop(type##Stack *stack) { \
+         if (stack->cursor <= 0) return (type) { 0 };\
          return stack->stack[--stack->cursor];\
      } \
      static inline type type##Stack_peek(type##Stack *stack, int dist) { \
@@ -153,7 +161,7 @@ bool set_has(Set *set, int val);
         if (stack->cursor + 1 > stack->capacity) { \
             size_t old = stack->capacity; \
             size_t new = old == 0 ? 16 : old * 2; \
-            stack->stack = arena_realloc(stack->arena, stack->stack, old, new); \
+            stack->stack = arena_realloc(stack->arena, stack->stack, old * sizeof(type), new * sizeof(type)); \
             stack->capacity = new;\
         }\
         stack->stack[stack->cursor++] = val; \
