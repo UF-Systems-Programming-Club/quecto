@@ -95,7 +95,7 @@ int compile(const char *filename) {
         .scratch = &scratch,
     };
 
-    Program program = {0};
+    Program program = { .symbols = &symbols };
     emit_program(&emit_ctx, &program, ast);
 
     print_program(program);

@@ -549,20 +549,98 @@ void pass_compute_liveness(EmitContext *context) {
     }
 }
 
+void ColorStack_set_backing(ColorStack *stack, Arena *arena) {
+    stack->arena = arena;
+}
+
+void ColorStack_push(ColorStack *stack, Color value) {
+    if (stack->cursor + 1 > stack->capacity) {
+        size_t old = stack->capacity;
+        size_t new = old == 0 ? 16 : old * 2;
+        stack->stack = arena_realloc(stack->arena, stack->stack, old * sizeof(Color), new * sizeof(Color)); 
+        stack->capacity = new;
+    }
+    stack->stack[stack->cursor++] = value;
+}
+
+Color ColorStack_pop(ColorStack *stack, PhysRegFlags filter) {
+    bool found = false;
+    Color popped;
+    for (int start = stack->cursor - 1; start >= 0; start--) {
+        if ((stack->stack[start].flags & filter) == filter) {
+            popped = stack->stack[start];
+            found = true;
+
+            for (size_t move = start + 1; move < stack->cursor; move++) {
+                stack->stack[move - 1] = stack->stack[move];
+            }
+            stack->cursor--;
+            
+            break;
+        }
+    }
+    
+    return found ? popped : (Color) { .index = -1 };
+}
+
+
+void pass_crosses_call(EmitContext *context) {
+    CFGraph *cfg = &context->procedure->cfg;
+    Set live;
+    set_create(&live, context->scratch, context->procedure->vregs.count);
+    
+    for (int v = 0; v < context->procedure->vregs.count; v++) {
+        context->procedure->vregs.items[v].crosses_call = false;
+    }
+    
+    for (int k = 0; k < cfg->count; k++) {
+        int b = cfg->rpo_list[k];
+
+        set_copy(&live, &cfg->live_out[b]);
+
+        for (int i = cfg->items[b].bytecode.count - 1; i >= 0; i--) {
+            Instr instr = cfg->items[b].bytecode.items[i];
+            if (instr.opcode == OPCODE_CALL) {
+                for (int v = 0; v < context->procedure->vregs.count; v++) {
+                    if (set_has(&live, v) && !(instr.dest.type == OPERAND_VREG && instr.dest.vreg == v)) {
+                        context->procedure->vregs.items[v].crosses_call = true;
+                    }
+                }
+            }
+
+            
+            if (instr.dest.type == OPERAND_VREG) {
+                set_remove(&live, instr.dest.vreg);
+            }
+
+            int in_use[16];
+            int count = vreg_if_use(instr, in_use);
+            for (int i = 0; i < count; i++) {
+                set_insert(&live, in_use[i]);   
+            }
+        }
+    }
+}
+
 
 void pass_color_cfg(EmitContext *context) {
     size_t mark = arena_mark(context->scratch);
     
     Set live;
     set_create(&live, context->scratch, context->procedure->vregs.count);
+    set_create(&context->procedure->saved_colors, context->arena, 16);
 
     ColorStack stack = { 0 };
     ColorStack_set_backing(&stack, context->scratch);
-    
-    for (int i = 8; i >= 0; i--) {
-        ColorStack_push(&stack, i);
-    }
 
+    for (int i = 11; i > 7; i--) {
+        ColorStack_push(&stack, (Color) { .index = i, .flags = PR_GENERAL_PURPOSE | PR_CALLEE_SAVED });
+    }    
+    for (int i = 7; i >= 0; i--) {
+        ColorStack_push(&stack, (Color) { .index = i, .flags = PR_GENERAL_PURPOSE});
+    }
+    
+    pass_crosses_call(context);
     pass_color_cfg_recurs(context, context->procedure->cfg.entry_block, &live, &stack);
     arena_restore(context->scratch, mark);
 }
@@ -583,7 +661,10 @@ void pass_color_cfg_recurs(EmitContext *context, int block, Set *live, ColorStac
         Phi phi = blk->phis.items[p];
         set_insert(live, phi.dest.vreg);
 
-        if (free->cursor > 0) vregs->items[phi.dest.vreg].color = ColorStack_pop(free);
+        PhysRegFlags filter = context->procedure->vregs.items[phi.dest.vreg].crosses_call ?
+                (PR_GENERAL_PURPOSE | PR_CALLEE_SAVED) : PR_GENERAL_PURPOSE;
+            
+        if (free->cursor > 0) vregs->items[phi.dest.vreg].color = ColorStack_pop(free, filter);
         else assert(0 && "no spills yet...");
     }
 
@@ -602,8 +683,21 @@ void pass_color_cfg_recurs(EmitContext *context, int block, Set *live, ColorStac
         Instr instr = blk->bytecode.items[i];
         if (instr.dest.type == OPERAND_VREG) {
             set_insert(live, instr.dest.vreg);
-            if (free->cursor > 0) vregs->items[instr.dest.vreg].color = ColorStack_pop(free);
+
+
+            PhysRegFlags filter = PR_GENERAL_PURPOSE;
+            if (vregs->items[instr.dest.vreg].crosses_call) {
+                filter |= PR_CALLEE_SAVED;
+            }
+
+            if (free->cursor > 0) vregs->items[instr.dest.vreg].color = ColorStack_pop(free, filter);
             else assert(0 && "no spills yet...");            
+
+
+            if ((vregs->items[instr.dest.vreg].color.flags & PR_CALLEE_SAVED) == PR_CALLEE_SAVED) {
+                set_insert(&context->procedure->saved_colors, vregs->items[instr.dest.vreg].color.index);
+            }
+            
         }
     }
 

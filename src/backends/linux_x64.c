@@ -1,5 +1,7 @@
 #include "backends/linux_x64.h"
 #include "codegen.h"
+#include "common.h"
+#include "ir.h"
   
 #ifdef __MACH__
 #define EXIT_STATUS "0x2000001"
@@ -78,21 +80,32 @@ const char *x86_reg_to_str[] = {
   [x64_R9] = "r9",
   [x64_R10] = "r10",
   [x64_R11] = "r11",
+  [x64_R12] = "r12",
+  [x64_R13] = "r13",
+  [x64_R14] = "r14",
+  [x64_R15] = "r15",
   [x64_R8D] = "r8d",
   [x64_R9D] = "r9d",
   [x64_R10D] = "r10d",
   [x64_R11D] = "r11d",
+  [x64_R12D] = "r12d",
+  [x64_R13D] = "r13d",
+  [x64_R14D] = "r14d",
+  [x64_R15D] = "r15d",
   [x64_R8B] = "r8b",
   [x64_R9B] = "r9b",
   [x64_R10B] = "r10b",
   [x64_R11B] = "r11b",
-};
+  [x64_R12B] = "r12b",
+  [x64_R13B] = "r13b",
+  [x64_R14B] = "r14b",
+  [x64_R15B] = "r15b",};
 
-x64_Register registers[4][8] = {
-  [0] = { x64_AL, x64_CL, x64_DL, x64_DIL, x64_R8B, x64_R9B, x64_R10B, x64_R11B },
+x64_Register registers[4][16] = {
+  [0] = { x64_AL, x64_CL, x64_DL, x64_DIL, x64_R8B, x64_R9B, x64_R10B, x64_R11, x64_R12B, x64_R13B, x64_R14B, x64_R15B },
   [1] = { },
-  [2] = { x64_EAX, x64_ECX, x64_EDX, x64_EDI, x64_R8D, x64_R9D, x64_R10D, x64_R11D },
-  [3] = { x64_RAX, x64_RCX, x64_RDX, x64_RDI, x64_R8, x64_R9, x64_R10, x64_R11 }
+  [2] = { x64_EAX, x64_ECX, x64_EDX, x64_EDI, x64_R8D, x64_R9D, x64_R10D, x64_R11D, x64_R12D, x64_R13D, x64_R14D, x64_R15D },
+  [3] = { x64_RAX, x64_RCX, x64_RDX, x64_RDI, x64_R8, x64_R9, x64_R10, x64_R11, x64_R12, x64_R13, x64_R14, x64_R15 }
 };
 
 x64_Register arg_registers[4][4] = {
@@ -179,8 +192,8 @@ void fprint_x64_machine_code(FILE *out, MachineCode *code, size_t bsize, int blo
 }
 
 inline x64_Register select_register(VregInfo info) { // from 0-7
-  assert(info.color < 8);
-  return registers[regsize_from_bytes(info.size)][info.color];
+  assert(info.color.index < 16);
+  return registers[regsize_from_bytes(info.size)][info.color.index];
 }
 
 inline MachineOperand select_stack(CodegenInterface *iface, int slot) {
@@ -189,15 +202,16 @@ inline MachineOperand select_stack(CodegenInterface *iface, int slot) {
 
 void emit_x64_prologue(CodegenInterface *iface, Procedure *procedure) {
   EMIT(iface->output, X64_PUSH, MINV, MREG(x64_RBP), MINV);
+
+  for (int i = 0; i < procedure->saved_colors.size; i++) {
+    if (procedure->saved_colors.buckets[i]) EMIT(iface->output, X64_PUSH, MINV, MREG(registers[3][i]), MINV);
+  }
+
   EMIT(iface->output, X64_MOV, MREG(x64_RBP), MREG(x64_RSP), MINV);
 
   if (iface->stackframe > 0) {
     EMIT(iface->output, X64_SUB, MREG(x64_RSP), MIMM(((iface->stackframe / 16 + 1) * 16)), MINV);
   }
-
-  // for (int i = 0; i < procedure->param_count; i++) {
-    // EMIT(iface->output, X64_MOV, MSTK(((i + 1 ) * 4)), MREG(arg_registers_32bit[i]), MINV);
-  // }
 }
 
 
@@ -210,6 +224,12 @@ void emit_x64_epilogue(CodegenInterface *iface, Procedure *procedure) {
   if (iface->stackframe > 0) {
     EMIT(iface->output, X64_ADD, MREG(x64_RSP), MIMM(((iface->stackframe / 16 + 1) * 16)), MINV);
   }
+
+  for (int i = 0; i < procedure->saved_colors.size; i++) {
+    if (procedure->saved_colors.buckets[i]) EMIT(iface->output, X64_POP, MINV, MREG(registers[3][i]), MINV);
+  }
+
+
   EMIT(iface->output, X64_POP, MINV, MREG(x64_RBP), MINV);
   EMIT(iface->output, X64_RET, MINV, MINV, MINV);
 }
@@ -340,17 +360,35 @@ X64_INSTRUCTION(call) {
   //     }
   // }
 
-  // for (int j = 0; j < iface->ctx.arg_count; j++) {
-  //   int size = iface->vreg_info.items[iface->ctx.args[j].vreg].size;
-  //   EMIT(iface->output, X64_MOV, MREG(arg_registers[regsize_from_bytes(size)][j]), MREG(VIRT_TO_PHYS_REG(iface->vreg_info.items[iface->ctx.args[j].vreg].size, iface->ctx.args[j].vreg)), MINV);
-  // }
+  for (int j = 0; j < iface->arg_count; j++) {
+    int size = iface->vregs->items[iface->args[j]].size;
+
+    EMIT(iface->output, X64_MOV,
+            MREG(arg_registers[regsize_from_bytes(size)][j]),
+            MREG(select_register(iface->vregs->items[iface->args[j]])),
+            MINV);
+  }
+
+  const char *name = NULL;
+  for (int i = 0; i < iface->globals->table.capacity; i++) {
+    SymbolData *sym = iface->globals->table.items[i];
+    if (sym != NULL && sym->id == instr.arg1.glbl) {
+      name = iface->globals->table.keys[i].data;
+      break;
+    }
+  }
   
-  // iface->ctx.arg_count = 0;
-  // EMIT(iface->output, X64_CALL, MLBL(instr.arg1.label_name), MINV, MINV);
   
-  // if (instr.dest.type == OPERAND_VREG) {
-  //   EMIT(iface->output, X64_MOV, MREG(VIRT_TO_PHYS_REG(iface->vreg_info.items[instr.dest.vreg].size, instr.dest.vreg)), MREG(x64_EAX), MINV);
-  // }
+  iface->arg_count = 0;
+  EMIT(iface->output, X64_CALL, MLBL(name), MINV, MINV);
+  
+  if (instr.dest.type == OPERAND_VREG) {
+    EMIT(iface->output, X64_MOV,
+         MREG(select_register(iface->vregs->items[instr.dest.vreg])),
+         MREG(x64_EAX),
+         MINV);
+  }
+
   // spill_offset = 0;
   // for (int j = 0; j < iface->interval.count; j++) {
   //     Interval span = iface->interval.items[j];
@@ -371,7 +409,7 @@ X64_INSTRUCTION(param) {
 
 
 X64_INSTRUCTION(arg) {
-    iface->args[iface->arg_count++] = instr.arg1.vreg;
+  iface->args[iface->arg_count++] = instr.arg1.vreg;
 // EMIT(iface->output, X64_MOV,
 //       MREG(select_register(iface->vregs->items[instr.dest.vreg])),
 //       MREG(arg_registers[iface->vregs->items[instr.dest.vreg].size][instr.arg1.imm]),

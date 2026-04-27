@@ -42,11 +42,13 @@
 #define MLBL(l) ((MachineOperand){.type = MOPERAND_LABEL, .label = (l) })
 
 
-MachineCode emit_procedure_with(CodegenBackend *backend, Procedure procedure) {
+MachineCode emit_procedure_with(CodegenBackend *backend, Procedure procedure, SymbolTable *globals) {
     CodegenInterface iface = {
         .output = {0},
         .vregs = &procedure.vregs,
         .slots = &procedure.slots,
+        .globals = globals,
+        .arg_count = 0,
     };
 
     backend->calculate_offsets(&iface);
@@ -77,14 +79,14 @@ MachineCode emit_procedure_with(CodegenBackend *backend, Procedure procedure) {
 
 
 void compile_program_with(FILE *out, CodegenBackend *backend, Program *program) {
-
+    
     backend->emit_symbols(out, program);
     backend->emit_entry(out, program);
 
     for (int i = 0; i < program->count; i++) {
         // if (program->items[i].externed) continue;
         fprintf(out, "%s:\n", program->items[i].name);
-        MachineCode code = emit_procedure_with(backend, program->items[i]);
+        MachineCode code = emit_procedure_with(backend, program->items[i], program->symbols);
         backend->print_machine_code(out, &code, program->items[i].cfg.count, program->items[i].cfg.global_pos);
     }
 }

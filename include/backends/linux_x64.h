@@ -40,6 +40,10 @@ typedef enum {
     x64_R9D,
     x64_R10D,
     x64_R11D,
+    x64_R12D,
+    x64_R13D,
+    x64_R14D,
+    x64_R15D,
     x64_ESI,
 
     x64_AL,
@@ -50,6 +54,10 @@ typedef enum {
     x64_R9B,
     x64_R10B,
     x64_R11B,
+    x64_R12B,
+    x64_R13B,
+    x64_R14B,
+    x64_R15B,
     x64_SIL,
 
     x64_RAX,
@@ -60,6 +68,10 @@ typedef enum {
     x64_R9,
     x64_R10,
     x64_R11,
+    x64_R12,
+    x64_R13,
+    x64_R14,
+    x64_R15,
     x64_RSI,
 
     x64_RBP,

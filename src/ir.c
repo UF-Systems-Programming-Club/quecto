@@ -404,7 +404,7 @@ Operand allocate_vreg_explicit(EmitContext *context, VregInfo info) {
   info.interval.bend = -1;
   info.interval.istart = -1;
   info.interval.bstart = -1;
-  info.color = -1;
+  info.color.index = -1;
   arena_array_append(context->arena, context->procedure->vregs, info);
   return VREG(context->procedure->vregs.count - 1);
 }
@@ -418,7 +418,7 @@ Operand allocate_vreg_type(EmitContext *context, QuectoType *type) {
   info.sign = quecto_is_signed(type);
   info.interval.bend = -1;
   info.interval.iend = -1;
-  info.color = -1;
+  info.color.index = -1;
 
   return allocate_vreg_explicit(context, info);
 }
@@ -483,15 +483,15 @@ bool opcode_is_branch(Opcode opcode) {
 }
 
 
-const char *reg_str[PR_BP + 1] = {
-    [PR_BP] = "bp",
-};
+// const char *reg_str[PR_BP + 1] = {
+//     [0] = "bp",
+// };
 
 
 void print_addr(Addr addr) {
     switch (addr.type) {
         case ADDR_VREG: printf("r%d", addr.vreg); break;
-        case ADDR_REG: printf("%s", reg_str[addr.reg]); break;
+        case ADDR_REG: /*printf("%s", reg_str[addr.reg]);*/ break;
         case ADDR_NONE: break;
     }
 }
@@ -514,7 +514,7 @@ bool print_operand(Operand operand, bool leading) {
     switch (operand.type) {
         case OPERAND_BLOCK: printf("b%d", operand.vreg); break;
         case OPERAND_VREG: printf("r%d", operand.vreg); break;
-        case OPERAND_REG: printf("%s", reg_str[operand.reg]); break;
+        case OPERAND_REG: /*printf("%s", reg_str[operand.reg]);*/ break;
         case OPERAND_MEM: print_mem(operand.mem); break;
         case OPERAND_IMM: printf("%d", operand.imm); break;
         case OPERAND_SLOT: printf("s%d", operand.slot); break;
@@ -653,11 +653,12 @@ void print_program(Program program) {
     }
 }
 
+
 void print_vregs(Procedure procedure) {
     for (int v = 0; v < procedure.vregs.count; v++) {
         VregInfo entry = procedure.vregs.items[v];
         // if (entry.interval.bstart == -1 || entry.interval.bend == -1) continue;
-        if (entry.color == -1) continue;
-        printf("{ r%d | color: %d, size: %d, signed: %d }\n", v, entry.color, entry.size, entry.sign);
+        if (entry.color.index == -1) continue;
+        printf("{ r%d | color: %d, size: %d, signed: %d }\n", v, entry.color.index, entry.size, entry.sign);
     }
 }

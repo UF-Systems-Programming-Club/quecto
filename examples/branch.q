@@ -19,5 +19,5 @@ proc main() => () {
         ex = 0;
     }
 
-    return a;
+    return ex;
 }

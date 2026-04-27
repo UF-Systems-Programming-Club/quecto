@@ -52,9 +52,10 @@ typedef struct {
   MachineCode output;
   VregInfoTable *vregs;
   SlotTable *slots;
+  SymbolTable *globals;
   int *labels;
 
-  int *args;
+  int args[4];
   int arg_count;
 
   size_t stackframe;

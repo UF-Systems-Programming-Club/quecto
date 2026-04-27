@@ -141,23 +141,25 @@ void set_clear(Set *set);
 void set_copy(Set *dst, Set* src);
 
 #define DEFINE_STACK(type) \
-    typedef struct { \
-        Arena *arena; \
-        type *stack; \
-        size_t capacity; \
-        size_t cursor; \
-     } type##Stack; \
-     static inline void type##Stack_set_backing(type##Stack *stack, Arena *arena) {\
+struct { \
+    Arena *arena; \
+    type *stack; \
+    size_t capacity; \
+    size_t cursor; \
+} \
+
+#define DEFINE_STACK_DEF(name, type) \
+     static inline void name##_set_backing(name *stack, Arena *arena) {\
          stack->arena = arena;\
      }\
-     static inline type type##Stack_pop(type##Stack *stack) { \
+     static inline type name##_pop(name *stack) { \
          if (stack->cursor <= 0) return (type) { 0 };\
          return stack->stack[--stack->cursor];\
      } \
-     static inline type type##Stack_peek(type##Stack *stack, int dist) { \
+     static inline type name##_peek(name *stack, int dist) { \
         return stack->stack[stack->cursor - dist]; \
      } \
-     static inline void type##Stack_push(type##Stack *stack, type val) { \
+     static inline void name##_push(name *stack, type val) { \
         if (stack->cursor + 1 > stack->capacity) { \
             size_t old = stack->capacity; \
             size_t new = old == 0 ? 16 : old * 2; \

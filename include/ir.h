@@ -2,14 +2,21 @@
 #define IR_H
 
 #include "ast.h"
+#include "common.h"
 #include "symbol_table.h"
 
 typedef enum {
-    PR_BP,
-    PR_GP,
-    PR_PARAM,
-} PhysicalReg;
+    PR_BASE_POINTER = 1,
+    PR_STACK_POINTER = 2,
+    PR_GENERAL_PURPOSE = 4,
+    PR_CALLEE_SAVED = 8,
+    PR_CALLER_SAVED = 16,
+} PhysRegFlags;
 
+typedef struct {
+    int index;
+    PhysRegFlags flags;
+} Color;
 
 typedef enum {
     OPCODE_NONE,
@@ -61,7 +68,7 @@ typedef struct {
     AddrType type;
     union {
         int vreg;
-        PhysicalReg reg;
+        int reg;
     };
 } Addr;
 
@@ -91,7 +98,7 @@ typedef struct {
     OperandType type;
     union {
         int vreg;
-        PhysicalReg reg;
+        int reg;
         int slot;
         int block;
         int imm;
@@ -124,7 +131,8 @@ typedef struct {
     int size;
     bool sign;
     Interval interval;
-    int color;
+    Color color;
+    bool crosses_call;
     bool killed; // marked for death
 } VregInfo;
 
@@ -187,6 +195,11 @@ typedef struct {
     VregInfoTable vregs;
     int *labels;
     SlotTable slots;
+    // struct {
+    //     Color *items;
+    //     size_t count, capacity;
+    // } saved_colors;
+    Set saved_colors;
     const char *name;
 } Procedure;
 
@@ -207,15 +220,24 @@ typedef struct {
 
 
 typedef struct {
+    SymbolTable *symbols;
     Procedure *items;
     size_t count;
     size_t capacity;
 } Program;
 
 
-DEFINE_STACK(Operand);
-typedef int Color;
-DEFINE_STACK(Color);
+
+
+typedef DEFINE_STACK(Operand) OperandStack;
+DEFINE_STACK_DEF(OperandStack, Operand);
+typedef DEFINE_STACK(Color) ColorStack;
+void ColorStack_set_backing(ColorStack *stack, Arena *arena);
+void ColorStack_peek(ColorStack *stack);
+void ColorStack_push(ColorStack *stack, Color value);
+Color ColorStack_pop(ColorStack *stack, PhysRegFlags filter);
+
+// DEFINE_STACK(Color);
 
 bool opcode_is_branch(Opcode opcode);
 
