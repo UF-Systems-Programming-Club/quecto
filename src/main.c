@@ -7,9 +7,9 @@
 #include "parser.h"
 #include "ast.h"
 #include "analysis.h"
-//#include "bytecode.h"
-#include "ir.h"
+#include "emission.h"
 #include "codegen.h"
+#include "passes.h"
 #include "error.h"
 #include "backends/linux_x64.h"
 
@@ -92,18 +92,28 @@ int compile(const char *filename) {
     EmitContext emit_ctx = (EmitContext) {
         .scope = &symbols,
         .arena = &backing,
-        .scratch = &scratch,
+    };
+
+    Passes passes = (PassFn[11]) {
+            pass_insert_phis,
+            pass_rename,
+            pass_kill_slots,
+            pass_remove_copies,
+            pass_three_op_to_two,
+            pass_liveness,
+            pass_compute_liveness,
+            pass_color_cfg,
+            pass_phis_into_copies,
+            pass_sweep_nops,
+            NULL,
     };
 
     Program program = { .symbols = &symbols };
     emit_program(&emit_ctx, &program, ast);
 
+    // print_program(program);
+    passes_run(&program, passes, (Arenas) { .scratch = &scratch, .persistent = &backing});
     print_program(program);
-
-    
-    // PhysRegs pregs = {0};
-    // adhere_program(&program, &pregs);
-    // analyze_program(&program, &pregs);
 
     FILE *out = fopen("out.S", "w");
     compile_program_with(out, &LINUX_X86_64_BACKEND, &program);

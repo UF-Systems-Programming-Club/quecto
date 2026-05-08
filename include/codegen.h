@@ -6,21 +6,23 @@
 typedef enum {
   MOPERAND_INVALID = 0,
   MOPERAND_REG,
-  MOPERAND_STACK,
+  MOPERAND_MEM,
   MOPERAND_IMM,
   MOPERAND_LABEL, 
 } MachineOperandType;
 
 typedef struct {
+  int base;
+  int offset;
+  int index;
+  int stride;
+} MemAccess;
+
+typedef struct {
   MachineOperandType type;
   union {
     int reg;
-    struct {
-      int base; // defaults to rbp if bytecode operand doesnt specify
-      int stack;
-      int index;
-      int size;
-    };
+    MemAccess mem;
     int imm;
     const char *label;
   };
@@ -32,14 +34,6 @@ typedef struct {
   MachineOperand arg1;
   MachineOperand arg2;
 } MachineInstr;
-
-// typedef struct {
-//   const char *procedure_name;
-//   Operand args[MAX_PARAMS];
-//   size_t arg_count;
-//   size_t current_instruction;
-//   size_t stack_offset;
-// } CodegenContext;
 
 typedef struct {
   MachineInstr *items;
@@ -60,14 +54,13 @@ typedef struct {
 
   size_t stackframe;
   size_t *stack_from_slot;
-  // CodegenContext ctx;
 } CodegenInterface;
 
 typedef void (*EmitFn)(CodegenInterface *iface, Instr instr);
 typedef void (*CalculateFn)(CodegenInterface *iface);
 typedef void (*EmitProcFn)(CodegenInterface *face, Procedure *procedure);
 typedef Bytecode (*AdhereFn)(Bytecode bytecode);
-typedef void (*FPrintFn)(FILE *out, MachineCode *code, size_t bsize, int block_pos[bsize]);
+typedef void (*FPrintFn)(FILE *out, MachineCode *code);
 typedef void (*EmitProgramDataFn)(FILE *out, Program *program);
 
 typedef struct {

@@ -1,7 +1,6 @@
 #include <stdio.h>
 
 #include "ast.h"
-#include "bytecode.h"
 #include "common.h"
 #include "error.h"
 #include "symbol_table.h"

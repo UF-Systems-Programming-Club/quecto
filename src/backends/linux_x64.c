@@ -23,8 +23,9 @@
 #define X64_INSTRUCTION(name) void emit_x64_from_ir_##name(CodegenInterface *iface, Instr instr)
 
 #define MREG(x) ((MachineOperand){.type = MOPERAND_REG, .reg = (x) })
-#define MSTK(o) ((MachineOperand){.type = MOPERAND_STACK, .stack = (o), .base = -1, .index = -1, .size = 4 })
-#define MSTK_IND(o, i, s) ((MachineOperand){.type = MOPERAND_STACK, .base = -1, .stack = (o), .index = (i), .size = (s) })
+#define MMEM(m) ((MachineOperand){.type = MOPERAND_MEM, .mem = (m) })
+#define ASTK(o) ((MemAccess) { .base = x64_RBP, .offset = (o) })
+#define AALL(b, s, i, o) ((MemAccess) { .base = (b), .stride = (s), .index = (i), .offset = (o) })
 #define MIMM(i) ((MachineOperand){.type = MOPERAND_IMM, .imm = (i) })
 #define MLBL(l) ((MachineOperand){.type = MOPERAND_LABEL, .label = (l) })
 #define MINV  ((MachineOperand){.type = MOPERAND_INVALID})
@@ -150,33 +151,37 @@ inline int regsize_from_bytes(int bytes) {
 
 
 bool fprint_machine_operand(FILE *out, MachineOperand operand, bool leading) {
-  switch (operand.type) {
+    switch (operand.type) {
     case MOPERAND_IMM:
-      fprintf(out, "%d", operand.imm);
-      break;
+        fprintf(out, "%d", operand.imm);
+        break;
     case MOPERAND_REG:
-      fprintf(out, "%s", x86_reg_to_str[operand.reg]);
-      break;
-    case MOPERAND_STACK: {
-      const char *base = (operand.base == -1) ? x86_reg_to_str[x64_RBP] : x86_reg_to_str[operand.base];
-      if (operand.index != -1)
-        fprintf(out, "[%s + %d * %s - %d]", base, operand.size, x86_reg_to_str[operand.index], operand.stack);
-      else
-        fprintf(out, "[%s %s %d]", base, operand.stack < 0 ? "+" : "-", abs(operand.stack));
-      break;
-    }
+        fprintf(out, "%s", x86_reg_to_str[operand.reg]);
+        break;
+    case MOPERAND_MEM:
+        if (operand.mem.stride == 0)
+            fprintf(out, "[%s + %d]", x86_reg_to_str[operand.mem.base], abs(operand.mem.offset));
+        else
+            fprintf(out, "[%s + %d * %s + %d]",
+                    x86_reg_to_str[operand.mem.base],
+                    operand.mem.stride,
+                    x86_reg_to_str[operand.mem.index],
+                    operand.mem.offset);
+        break;
     case MOPERAND_LABEL:
-      fprintf(out, "%s", operand.label);
-      break;
+          fprintf(out, "%s", operand.label);
+        break;
     case MOPERAND_INVALID:
-      return false;
+        return false;
   }
+  
   if (leading) fprintf(out, ", ");
+  
   return true;
 }
 
 
-void fprint_x64_machine_code(FILE *out, MachineCode *code, size_t bsize, int block_pos[bsize]) {
+void fprint_x64_machine_code(FILE *out, MachineCode *code) {
     for (int i = 0; i < code->count; i++) {
         MachineInstr instr = code->items[i];
         if (instr.instruction == X64_LABEL) {
@@ -197,18 +202,19 @@ inline x64_Register select_register(VregInfo info) { // from 0-7
 }
 
 inline MachineOperand select_stack(CodegenInterface *iface, int slot) {
-    return MSTK(iface->stack_from_slot[slot]);
+    return MMEM(ASTK(iface->stack_from_slot[slot]));
 }
 
 void emit_x64_prologue(CodegenInterface *iface, Procedure *procedure) {
   EMIT(iface->output, X64_PUSH, MINV, MREG(x64_RBP), MINV);
 
+
+  EMIT(iface->output, X64_MOV, MREG(x64_RBP), MREG(x64_RSP), MINV);
+  
   for (int i = 0; i < procedure->saved_colors.size; i++) {
     if (procedure->saved_colors.buckets[i]) EMIT(iface->output, X64_PUSH, MINV, MREG(registers[3][i]), MINV);
   }
-
-  EMIT(iface->output, X64_MOV, MREG(x64_RBP), MREG(x64_RSP), MINV);
-
+  
   if (iface->stackframe > 0) {
     EMIT(iface->output, X64_SUB, MREG(x64_RSP), MIMM(((iface->stackframe / 16 + 1) * 16)), MINV);
   }
@@ -221,12 +227,13 @@ void emit_x64_epilogue(CodegenInterface *iface, Procedure *procedure) {
   
   EMIT(iface->output, X64_LABEL, MLBL(strdup(name_end)), MINV, MINV);
 
-  if (iface->stackframe > 0) {
-    EMIT(iface->output, X64_ADD, MREG(x64_RSP), MIMM(((iface->stackframe / 16 + 1) * 16)), MINV);
-  }
-
   for (int i = 0; i < procedure->saved_colors.size; i++) {
     if (procedure->saved_colors.buckets[i]) EMIT(iface->output, X64_POP, MINV, MREG(registers[3][i]), MINV);
+  }
+
+
+  if (iface->stackframe > 0) {
+    EMIT(iface->output, X64_ADD, MREG(x64_RSP), MIMM(((iface->stackframe / 16 + 1) * 16)), MINV);
   }
 
 
@@ -273,15 +280,25 @@ X64_INSTRUCTION(load_index) {
 }
 
 X64_INSTRUCTION(load_addr) {
-  // EMIT(iface->output, X64_LEA, MREG(VIRT_TO_PHYS_REG(iface->vreg_info.items[instr.dest.vreg].size, instr.dest.vreg)), MSTK(instr.arg1.stack_offset), MINV);
+  EMIT(iface->output, X64_LEA,
+       MREG(select_register(iface->vregs->items[instr.dest.vreg])),
+       select_stack(iface, instr.arg1.slot),
+       MINV);
 }
 
 X64_INSTRUCTION(store) {
-  // MachineOperand stack = MSTK(instr.dest.stack_offset);
+  // MachineOperand stack = MSTK(instr.dest.slot);
   // stack.base = instr.dest.base == -1 ? -1 : VIRT_TO_PHYS_REG(8, instr.dest.base);
   // stack.index = instr.dest.index == -1 ? -1 : VIRT_TO_PHYS_REG(8, instr.dest.index);
   // stack.size = instr.dest.size;
   // EMIT(iface->output, X64_MOV, stack, MREG(VIRT_TO_PHYS_REG(iface->vreg_info.items[instr.arg1.vreg].size, instr.arg1.vreg)), MINV);
+    if (instr.dest.type == OPERAND_MEM) {
+        EMIT(iface->output, X64_MOV,
+                MMEM(AALL(select_register(iface->vregs->items[instr.dest.mem.base.vreg]), 0, 0, instr.dest.mem.offset)),
+                MREG(select_register(iface->vregs->items[instr.arg1.vreg])),
+                MINV
+            );
+    }
 }
 
 X64_INSTRUCTION(loadi) {
@@ -442,8 +459,8 @@ void calculate_offsets(CodegenInterface *iface) {
     for (int i = 0; i < iface->slots->count; i++) {
         SlotInfo slot = iface->slots->items[i];
         if (!slot.killed && !slot.param) {
-            iface->stack_from_slot[i] = iface->stackframe;
             iface->stackframe += slot.size;
+            iface->stack_from_slot[i] = iface->stackframe;
         }
     } 
 }

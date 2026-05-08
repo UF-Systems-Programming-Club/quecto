@@ -11,6 +11,11 @@
 
 #define MAX_PARAMS 4
 
+#define DYN_ARR(type) struct { \
+    type *items; \
+    size_t count, capacity; \
+}
+
 #define UNREACHABLE(err)\
     do {\
         fprintf(stderr, "UNREACHABLE reached at %s:%d in %s(): %s\n", __FILE__, __LINE__, __func__, (err));\
@@ -104,6 +109,11 @@ typedef struct {
     size_t size;
     size_t capacity;
 } Arena;
+
+typedef struct {
+    Arena *persistent;
+    Arena *scratch;
+} Arenas;
 
 void arena_create(Arena *a, size_t capacity);
 void *arena_alloc(Arena *a, size_t size);
