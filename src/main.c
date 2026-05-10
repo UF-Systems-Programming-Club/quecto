@@ -98,17 +98,13 @@ int compile(const char *filename) {
             pass_insert_phis,
             pass_rename,
             pass_kill_slots,
-            debug_pass_print,
             pass_remove_copies,
-            debug_pass_print,
             pass_liveness,
             pass_compute_liveness,
             pass_crosses_call,
             pass_precoloring,
             pass_color_cfg,
-            debug_pass_print_colored,
             pass_phis_into_copies,
-            // pass_three_op_to_two,
             pass_sweep_nops,
             NULL,
     };
@@ -117,7 +113,7 @@ int compile(const char *filename) {
     emit_program(&emit_ctx, &program, ast);
 
     passes_run(&program, passes, (Arenas) { .scratch = &scratch, .persistent = &backing});
-    print_program(program, true);
+    // print_program(program, true);
 
     FILE *out = fopen("out.S", "w");
     compile_program_with(out, &LINUX_X86_64_BACKEND, &program);

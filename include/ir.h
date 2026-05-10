@@ -89,7 +89,6 @@ typedef struct {
     OperandType type;
     union {
         int vreg;
-        int reg;
         int slot;
         int block;
         int imm;
@@ -213,18 +212,15 @@ extern const char *opcode_to_string[OPCODE_COUNT];
 extern const Opcode opposite_opcode_table[OPCODE_COUNT];
 
 Operand allocate_vreg_explicit(Arena *arena, Procedure *procedure, VregInfo info);
-// bool vreg_defined(Instr instr, int vreg);
-// bool vreg_in_use(Instr instr, int vreg);
-// int vreg_if_use(Instr instr, int *vregs);
 VregInfo vregi_from_sloti(SlotInfo slot);
-bool instr_match(Instr *instr, Opcode opcode, OperandType dest, OperandType arg1, OperandType arg2); // if arg is -1, matches anything
+
+bool operand_has_vreg(Operand operand, int vreg);
 int operand_collect_vregs(Operand opnd, int *out, int offset);
+
+bool instr_match(Instr *instr, Opcode opcode, OperandType dest, OperandType arg1, OperandType arg2); // if arg is -1, matches anything
 int instr_collect_used_vregs(Instr instr, int *out);
 bool instr_uses_vreg(Instr instr, int vreg);
 bool instr_defines_vreg(Instr instr, int vreg);
-bool operand_has_vreg(Operand operand, int vreg);
-int instr_collect_used_slots(Instr instr, Operand *out[]);
-int instr_collect_def_slots(Instr instr, Operand *out[]);
 void instr_replace_vreg(Instr *instr, int find, int replace);
 
 

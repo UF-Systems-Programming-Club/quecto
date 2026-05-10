@@ -283,10 +283,6 @@ void pass_remove_copies(Arenas *arenas, Procedure *procedure) {
                 for (int k = j + 1; k < cfg->items[i].bytecode.count; k++) {
                     Instr *marked = &cfg->items[i].bytecode.items[k];
                     instr_replace_vreg(marked, instr->dest.vreg, instr->arg1.vreg);
-                    // if (marked->arg1.type == instr->dest.type && marked->arg1.vreg == instr->dest.vreg)
-                    //     marked->arg1 = instr->arg1;
-                    // if (marked->arg2.type == instr->dest.type && marked->arg2.vreg == instr->dest.vreg)
-                    //     marked->arg2 = instr->arg1;
                 }
                 *instr = (Instr) { 0 };
             }
@@ -309,7 +305,7 @@ void pass_compute_liveness(Arenas *arenas, Procedure *procedure) {
             if (!alive) continue;
             
             if (!set_has(&cfg->live_out[b], i)) { // dies in this block
-                int iend = cfg->items[b].bytecode.count; // if for doesnt for must be in terminator
+                int iend = 0;  
                 for (int k = cfg->items[b].bytecode.count - 1; k >= 0; k--) {
                     Instr instr = cfg->items[b].bytecode.items[k];
                     if (instr_uses_vreg(instr, i)) {
@@ -453,7 +449,7 @@ void color_pool_push(ColorPool *pool, Color color) {
 PhysRegFlags lift(PhysRegFlags filter) {
     if ((filter & PR_RETURN) == PR_RETURN) return filter & ~PR_RETURN;
     if ((filter & PR_ARG) == PR_ARG) return filter & ~PR_ARG;
-    if ((filter & PR_CALLEE_SAVED) == PR_CALLEE_SAVED) return filter & ~PR_ARG;
+    if ((filter & PR_CALLEE_SAVED) == PR_CALLEE_SAVED) return filter & ~PR_CALLEE_SAVED;
     return filter;
 }
 
@@ -526,7 +522,6 @@ void pass_color_cfg_recurs(Arenas *arenas, Procedure *procedure, int block, Set 
     BasicBlock *blk = &cfg->items[block];
 
     size_t mark = arena_mark(arenas->scratch);
-    // size_t free_mark = free->cursor;
     Set tmp, last_pool;
     set_create(&last_pool, arenas->scratch, pool->enabled.bit_count);
     set_copy(&last_pool, &pool->enabled);
@@ -600,7 +595,6 @@ void pass_color_cfg_recurs(Arenas *arenas, Procedure *procedure, int block, Set 
     set_copy(live, &tmp);
     set_copy(&pool->enabled, &last_pool);
     arena_restore(arenas->scratch, mark);
-    // free->cursor = free_mark;
 }
 
 
@@ -681,39 +675,4 @@ void debug_pass_print(Arenas *_, Procedure *procedure) {
 
 void debug_pass_print_colored(Arenas *_, Procedure *procedure) {
     print_procedure_colored(procedure);
-}
-
-
-void pass_three_op_to_two(Arenas *arenas, Procedure *procedure) {
-    CFGraph *cfg = &procedure->cfg;
-
-    for (int b = 0; b < cfg->count; b++) {
-        int estimated_size = cfg->items[b].bytecode.count * 2;
-        Bytecode bc = { 0 };
-        bc.capacity = estimated_size;
-        bc.items = arena_alloc(arenas->persistent, estimated_size * sizeof(Instr));
-
-        for (int i = 0; i < cfg->items[b].bytecode.count; i++) {
-            Instr instr = cfg->items[b].bytecode.items[i];
-            switch (instr.opcode) {
-                case OPCODE_ADD:
-                case OPCODE_SUB:
-                case OPCODE_MUL: {
-                    Instr copy = { 0 };
-                    copy.opcode = OPCODE_COPY;
-                    copy.dest = allocate_vreg_explicit(arenas->persistent, procedure, procedure->vregs.items[instr.arg1.vreg]);
-                    copy.arg1 = instr.arg1;
-                    // instr.dest = copy.dest;
-                    instr.arg1 = copy.dest;
-                    bc.items[bc.count++] = copy;
-                    bc.items[bc.count++] = instr;
-                    break;
-                }
-                default:
-                    bc.items[bc.count++] = instr;
-                    break;
-            }
-        }
-        cfg->items[b].bytecode = bc;
-    }
 }

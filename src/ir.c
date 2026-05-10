@@ -320,29 +320,6 @@ int instr_collect_used_vregs(Instr instr, int *out) {
     return size;
 }
 
-int instr_collect_used_slots(Instr instr, Operand *out[]) {
-    int size = 0;
-    OpcodeDesc roles = opcode_description_table[instr.opcode];
-
-    if (roles.dest == OPDR_USE && instr.dest.type == OPERAND_SLOT ) out[size++] = &instr.dest;
-    if (roles.arg1 == OPDR_USE && instr.arg1.type == OPERAND_SLOT ) out[size++] = &instr.arg1;
-    if (roles.arg2 == OPDR_USE && instr.arg2.type == OPERAND_SLOT ) out[size++] = &instr.arg2;
-
-    return size;
-}
-
-int instr_collect_def_slots(Instr instr, Operand *out[]) {
-    int size = 0;
-    OpcodeDesc roles = opcode_description_table[instr.opcode];
-
-    if (roles.dest == OPDR_DEF && instr.dest.type == OPERAND_SLOT ) out[size++] = &instr.dest;
-    if (roles.arg1 == OPDR_DEF && instr.arg1.type == OPERAND_SLOT ) out[size++] = &instr.arg1;
-    if (roles.arg2 == OPDR_DEF && instr.arg2.type == OPERAND_SLOT ) out[size++] = &instr.arg2;
-
-    return size;
-}
-
-
 // bool vreg_in_use(Instr instr, int vreg) {
 //     return (instr.arg1.type == OPERAND_VREG && instr.arg1.vreg == vreg)
 //            || (instr.arg2.type == OPERAND_VREG && instr.arg2.vreg == vreg)
