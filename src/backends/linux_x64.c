@@ -1,7 +1,7 @@
 #include "backends/linux_x64.h"
 #include "codegen.h"
-#include "common.h"
 #include "ir.h"
+#include "symbol_table.h"
   
 #ifdef __MACH__
 #define EXIT_STATUS "0x2000001"
@@ -31,110 +31,132 @@
 #define MINV  ((MachineOperand){.type = MOPERAND_INVALID})
 
 #define EMIT(out, op, d, a1, a2) \
-  array_append( (out), ((MachineInstr) {.instruction = (op), .dest = (d), .arg1 = (a1), .arg2 = (a2)}) )
+    array_append( (out), ((MachineInstr) {.instruction = (op), .dest = (d), .arg1 = (a1), .arg2 = (a2)}) )
+
+#ifdef __MACH__
+const char *mangled_format = "_%s";
+#else
+const char *mangled_format = "%s";
+#endif
+
 
 const char *x86_op_to_str[] = {
-  [X64_ADD] = "add",
-  [X64_SUB] = "sub",
-  [X64_IMUL] = "imul",
-  [X64_DIV] = "div",
-  [X64_CMP] = "cmp",
-  [X64_MOV] = "mov",
-  [X64_RET] = "ret",
-  [X64_JMP] = "jmp",
-  [X64_JNE] = "jne",
-  [X64_CALL] = "call",
-  [X64_SETE] = "sete",
-  [X64_SETL] = "setl",
-  [X64_SETG] = "setg",
-  [X64_SETLE] = "setle",
-  [X64_SETGE] = "setge",
-  [X64_JE] = "je",
-  [X64_JL] = "jl",
-  [X64_JG] = "jg",
-  [X64_JLE] = "jle",
-  [X64_JGE] = "jge",
-  [X64_LEA] = "lea",
-  [X64_PUSH] = "push",
-  [X64_POP] = "pop",
-  [X64_LABEL] = "",
+    [X64_ADD] = "add",
+    [X64_SUB] = "sub",
+    [X64_IMUL] = "imul",
+    [X64_DIV] = "div",
+    [X64_CMP] = "cmp",
+    [X64_MOV] = "mov",
+    [X64_RET] = "ret",
+    [X64_JMP] = "jmp",
+    [X64_JNE] = "jne",
+    [X64_CALL] = "call",
+    [X64_SETE] = "sete",
+    [X64_SETL] = "setl",
+    [X64_SETG] = "setg",
+    [X64_SETLE] = "setle",
+    [X64_SETGE] = "setge",
+    [X64_JE] = "je",
+    [X64_JL] = "jl",
+    [X64_JG] = "jg",
+    [X64_JLE] = "jle",
+    [X64_JGE] = "jge",
+    [X64_LEA] = "lea",
+    [X64_PUSH] = "push",
+    [X64_POP] = "pop",
+    [X64_LABEL] = "",
 };
 
 const char *x86_reg_to_str[] = {
-  [x64_EAX] = "eax",
-  [x64_ECX] = "ecx",
-  [x64_EDX] = "edx",
-  [x64_EDI] = "edi",
-  [x64_ESI] = "esi",
-  [x64_AL] = "al",
-  [x64_CL] = "cl",
-  [x64_DL] = "dl",
-  [x64_DIL] = "dil",
-  [x64_RAX] = "rax",
-  [x64_RCX] = "rcx",
-  [x64_RDX] = "rdx",
-  [x64_RDI] = "rdi",
-  [x64_RSP] = "rsp",
-  [x64_RBP] = "rbp",
-
-  [x64_R8] = "r8",
-  [x64_R9] = "r9",
-  [x64_R10] = "r10",
-  [x64_R11] = "r11",
-  [x64_R12] = "r12",
-  [x64_R13] = "r13",
-  [x64_R14] = "r14",
-  [x64_R15] = "r15",
-  [x64_R8D] = "r8d",
-  [x64_R9D] = "r9d",
-  [x64_R10D] = "r10d",
-  [x64_R11D] = "r11d",
-  [x64_R12D] = "r12d",
-  [x64_R13D] = "r13d",
-  [x64_R14D] = "r14d",
-  [x64_R15D] = "r15d",
-  [x64_R8B] = "r8b",
-  [x64_R9B] = "r9b",
-  [x64_R10B] = "r10b",
-  [x64_R11B] = "r11b",
-  [x64_R12B] = "r12b",
-  [x64_R13B] = "r13b",
-  [x64_R14B] = "r14b",
-  [x64_R15B] = "r15b",};
+    [x64_AL] = "al",
+    [x64_BL] = "bl",
+    [x64_CL] = "cl",
+    [x64_DL] = "dl",
+    [x64_SIL] = "sil",
+    [x64_DIL] = "dil",
+    [x64_BPL] = "bpl",
+    [x64_SPL] = "spl",
+    [x64_R8B] = "r8b",
+    [x64_R9B] = "r9b",
+    [x64_R10B] = "r10b",
+    [x64_R11B] = "r11b",
+    [x64_R12B] = "r12b",
+    [x64_R13B] = "r13b",
+    [x64_R14B] = "r14b",
+    [x64_R15B] = "r15b",
+  
+    [x64_EAX] = "eax",
+    [x64_EBX] = "ebx",
+    [x64_ECX] = "ecx",
+    [x64_EDX] = "edx",
+    [x64_ESI] = "esi",
+    [x64_EDI] = "edi",
+    [x64_EBP] = "ebp",
+    [x64_ESP] = "esp",
+    [x64_R8D] = "r8d",
+    [x64_R9D] = "r9d",
+    [x64_R10D] = "r10d",
+    [x64_R11D] = "r11d",
+    [x64_R12D] = "r12d",
+    [x64_R13D] = "r13d",
+    [x64_R14D] = "r14d",
+    [x64_R15D] = "r15d",
+  
+    [x64_RAX] = "rax",
+    [x64_RBX] = "rbx",
+    [x64_RCX] = "rcx",
+    [x64_RDX] = "rdx",
+    [x64_RSI] = "rsi",
+    [x64_RDI] = "rdi",
+    [x64_RBP] = "rbp",
+    [x64_RSP] = "rsp",
+    [x64_R8] = "r8",
+    [x64_R9] = "r9",
+    [x64_R10] = "r10",
+    [x64_R11] = "r11",
+    [x64_R12] = "r12",
+    [x64_R13] = "r13",
+    [x64_R14] = "r14",
+    [x64_R15] = "r15",
+};
 
 x64_Register registers[4][16] = {
-  [0] = { x64_AL, x64_CL, x64_DL, x64_DIL, x64_R8B, x64_R9B, x64_R10B, x64_R11, x64_R12B, x64_R13B, x64_R14B, x64_R15B },
-  [1] = { },
-  [2] = { x64_EAX, x64_ECX, x64_EDX, x64_EDI, x64_R8D, x64_R9D, x64_R10D, x64_R11D, x64_R12D, x64_R13D, x64_R14D, x64_R15D },
-  [3] = { x64_RAX, x64_RCX, x64_RDX, x64_RDI, x64_R8, x64_R9, x64_R10, x64_R11, x64_R12, x64_R13, x64_R14, x64_R15 }
+    [0] = { x64_AL, x64_BL, x64_CL, x64_DL, x64_SIL, x64_DIL, x64_BPL, x64_SPL, x64_R8B, x64_R9B, x64_R10B, x64_R11, x64_R12B, x64_R13B, x64_R14B, x64_R15B },
+    [1] = { },
+    [2] = { x64_EAX, x64_EBX, x64_ECX, x64_EDX, x64_ESI, x64_EDI, x64_EBP, x64_ESP, x64_R8D, x64_R9D, x64_R10D, x64_R11D, x64_R12D, x64_R13D, x64_R14D, x64_R15D },
+    [3] = { x64_RAX, x64_RBX, x64_RCX, x64_RDX, x64_RSI, x64_RDI, x64_RBP, x64_RSP, x64_R8, x64_R9, x64_R10, x64_R11, x64_R12, x64_R13, x64_R14, x64_R15 }
 };
 
 x64_Register arg_registers[4][4] = {
-  [0] = { x64_DIL, x64_SIL, x64_DL, x64_DL },
-  [1] = { },
-  [2] = { x64_EDI, x64_ESI, x64_EDX, x64_ECX },
-  [3] = { x64_RDI, x64_RSI, x64_RDX, x64_RCX }
+    [0] = { x64_DIL, x64_SIL, x64_DL, x64_DL },
+    [1] = { },
+    [2] = { x64_EDI, x64_ESI, x64_EDX, x64_ECX },
+    [3] = { x64_RDI, x64_RSI, x64_RDX, x64_RCX }
 };
 
-x64_Register arg_registers_32bit[4] = {
- };
+x64_Register ret_registers[4][1] = {
+    [0] = { x64_AL },
+    [1] = { },
+    [2] = { x64_EAX },
+    [3] = { x64_RAX },
+};
 
 
 const X64_Opcode jmpCC_from_ir[OPCODE_COUNT] = {
-  [OPCODE_BNE] = X64_JNE,
-  [OPCODE_BEQ] = X64_JE,
-  [OPCODE_BLT] = X64_JL,
-  [OPCODE_BGT] = X64_JG,
-  [OPCODE_BLE] = X64_JLE,
-  [OPCODE_BGE] = X64_JGE,
+    [OPCODE_BNE] = X64_JNE,
+    [OPCODE_BEQ] = X64_JE,
+    [OPCODE_BLT] = X64_JL,
+    [OPCODE_BGT] = X64_JG,
+    [OPCODE_BLE] = X64_JLE,
+    [OPCODE_BGE] = X64_JGE,
 };
 
 const X64_Opcode setCC_from_ir[OPCODE_COUNT] = {
-  [OPCODE_CMP_EQ] = X64_SETE,
-  [OPCODE_CMP_LT] = X64_SETL,
-  [OPCODE_CMP_GT] = X64_SETG,
-  [OPCODE_CMP_LEQ] = X64_SETLE,
-  [OPCODE_CMP_GEQ] = X64_SETGE,
+    [OPCODE_CMP_EQ] = X64_SETE,
+    [OPCODE_CMP_LT] = X64_SETL,
+    [OPCODE_CMP_GT] = X64_SETG,
+    [OPCODE_CMP_LEQ] = X64_SETLE,
+    [OPCODE_CMP_GEQ] = X64_SETGE,
 };
 
 
@@ -159,14 +181,15 @@ bool fprint_machine_operand(FILE *out, MachineOperand operand, bool leading) {
         fprintf(out, "%s", x86_reg_to_str[operand.reg]);
         break;
     case MOPERAND_MEM:
-        if (operand.mem.stride == 0)
-            fprintf(out, "[%s + %d]", x86_reg_to_str[operand.mem.base], abs(operand.mem.offset));
-        else
-            fprintf(out, "[%s + %d * %s + %d]",
-                    x86_reg_to_str[operand.mem.base],
-                    operand.mem.stride,
-                    x86_reg_to_str[operand.mem.index],
-                    operand.mem.offset);
+        fprintf(out, "[");
+        fprintf(out, "%s", x86_reg_to_str[operand.mem.base]);
+        if (operand.mem.stride != 0)
+            fprintf(out, " + %d * %s", operand.mem.stride, x86_reg_to_str[operand.mem.index]);
+        if (operand.mem.offset < 0) fprintf(out, " + ");
+        else if (operand.mem.offset > 0) fprintf(out, " - ");
+        if (operand.mem.offset != 0)
+            fprintf(out, "%d", abs(operand.mem.offset));
+        fprintf(out, "]");
         break;
     case MOPERAND_LABEL:
           fprintf(out, "%s", operand.label);
@@ -197,8 +220,12 @@ void fprint_x64_machine_code(FILE *out, MachineCode *code) {
 }
 
 inline x64_Register select_register(VregInfo info) { // from 0-7
-  assert(info.color.index < 16);
-  return registers[regsize_from_bytes(info.size)][info.color.index];
+    assert(info.color.index < 16);
+    return registers[regsize_from_bytes(info.size)][info.color.index];
+}
+
+inline x64_Register addr_register(VregInfo info) {
+    return registers[3][info.color.index];
 }
 
 inline MachineOperand select_stack(CodegenInterface *iface, int slot) {
@@ -211,8 +238,8 @@ void emit_x64_prologue(CodegenInterface *iface, Procedure *procedure) {
 
   EMIT(iface->output, X64_MOV, MREG(x64_RBP), MREG(x64_RSP), MINV);
   
-  for (int i = 0; i < procedure->saved_colors.size; i++) {
-    if (procedure->saved_colors.buckets[i]) EMIT(iface->output, X64_PUSH, MINV, MREG(registers[3][i]), MINV);
+  for (int i = 0; i < procedure->saved_colors.bit_count; i++) {
+    if (set_has(&procedure->saved_colors, i)) EMIT(iface->output, X64_PUSH, MINV, MREG(registers[3][i]), MINV);
   }
   
   if (iface->stackframe > 0) {
@@ -222,47 +249,122 @@ void emit_x64_prologue(CodegenInterface *iface, Procedure *procedure) {
 
 
 void emit_x64_epilogue(CodegenInterface *iface, Procedure *procedure) {
-  char name_end[256];
-  snprintf(name_end, 256, ".end");
-  
-  EMIT(iface->output, X64_LABEL, MLBL(strdup(name_end)), MINV, MINV);
+    char name_end[256];
+    snprintf(name_end, 256, ".end");
 
-  for (int i = 0; i < procedure->saved_colors.size; i++) {
-    if (procedure->saved_colors.buckets[i]) EMIT(iface->output, X64_POP, MINV, MREG(registers[3][i]), MINV);
-  }
+    EMIT(iface->output, X64_LABEL, MLBL(strdup(name_end)), MINV, MINV);
 
-
-  if (iface->stackframe > 0) {
-    EMIT(iface->output, X64_ADD, MREG(x64_RSP), MIMM(((iface->stackframe / 16 + 1) * 16)), MINV);
-  }
+    for (int i = 0; i < procedure->saved_colors.bit_count; i++) {
+        if (set_has(&procedure->saved_colors, i))
+            EMIT(iface->output, X64_POP, MINV, MREG(registers[3][i]), MINV);
+    }
 
 
-  EMIT(iface->output, X64_POP, MINV, MREG(x64_RBP), MINV);
-  EMIT(iface->output, X64_RET, MINV, MINV, MINV);
+    if (iface->stackframe > 0) {
+        EMIT(iface->output, X64_ADD, MREG(x64_RSP), MIMM(((iface->stackframe / 16 + 1) * 16)), MINV);
+    }
+
+
+    EMIT(iface->output, X64_POP, MINV, MREG(x64_RBP), MINV);
+    EMIT(iface->output, X64_RET, MINV, MINV, MINV);
 }
 
 
 X64_INSTRUCTION(add) {
-  EMIT(iface->output, X64_ADD,
-        MREG(select_register(iface->vregs->items[instr.arg1.vreg])),
-        MREG(select_register(iface->vregs->items[instr.arg2.vreg])),
-        MINV);
+    x64_Register dest = select_register(iface->vregs->items[instr.dest.vreg]);
+    x64_Register arg1 = select_register(iface->vregs->items[instr.arg1.vreg]);
+    x64_Register arg2 = select_register(iface->vregs->items[instr.arg2.vreg]);
+
+    if (dest == arg1) {
+        EMIT(iface->output, X64_ADD,
+            MREG(arg1),
+            MREG(arg2),
+            MINV
+        );
+    } else if (dest == arg2) {
+        EMIT(iface->output, X64_ADD,
+            MREG(arg2),
+            MREG(arg1),
+            MINV
+        );
+    } else {
+        EMIT(iface->output, X64_MOV,
+            MREG(dest),
+            MREG(arg1),
+            MINV
+        );
+        EMIT(iface->output, X64_ADD,
+            MREG(dest),
+            MREG(arg2),
+            MINV
+        );
+    }
 }
 
 
 X64_INSTRUCTION(sub) {
-  EMIT(iface->output, X64_SUB,
-        MREG(select_register(iface->vregs->items[instr.arg1.vreg])),
-        MREG(select_register(iface->vregs->items[instr.arg2.vreg])),
-        MINV);
+    x64_Register dest = select_register(iface->vregs->items[instr.dest.vreg]);
+    x64_Register arg1 = select_register(iface->vregs->items[instr.arg1.vreg]);
+    x64_Register arg2 = select_register(iface->vregs->items[instr.arg2.vreg]);
+
+    if (dest == arg1) {
+        EMIT(iface->output, X64_SUB,
+            MREG(arg1),
+            MREG(arg2),
+            MINV
+        );
+    } else if (dest == arg2) {
+        EMIT(iface->output, X64_SUB,
+            MREG(arg2),
+            MREG(arg1),
+            MINV
+        );
+    } else {
+        EMIT(iface->output, X64_MOV,
+            MREG(dest),
+            MREG(arg1),
+            MINV
+        );
+        EMIT(iface->output, X64_SUB,
+            MREG(dest),
+            MREG(arg2),
+            MINV
+        );
+    }
+
 }
 
 
 X64_INSTRUCTION(mul) {
-  EMIT(iface->output, X64_IMUL,
-        MREG(select_register(iface->vregs->items[instr.arg1.vreg])),
-        MREG(select_register(iface->vregs->items[instr.arg2.vreg])),
-        MINV);
+    x64_Register dest = select_register(iface->vregs->items[instr.dest.vreg]);
+    x64_Register arg1 = select_register(iface->vregs->items[instr.arg1.vreg]);
+    x64_Register arg2 = select_register(iface->vregs->items[instr.arg2.vreg]);
+
+        if (dest == arg1) {
+        EMIT(iface->output, X64_IMUL,
+            MREG(arg1),
+            MREG(arg2),
+            MINV
+        );
+    } else if (dest == arg2) {
+        EMIT(iface->output, X64_IMUL,
+            MREG(arg2),
+            MREG(arg1),
+            MINV
+        );
+    } else {
+        EMIT(iface->output, X64_MOV,
+            MREG(dest),
+            MREG(arg1),
+            MINV
+        );
+        EMIT(iface->output, X64_IMUL,
+            MREG(dest),
+            MREG(arg2),
+            MINV
+        );
+    }
+
 }
 
 
@@ -277,6 +379,14 @@ X64_INSTRUCTION(load_index) {
   // EMIT(iface->output, X64_MOV,
         // MREG(VIRT_TO_PHYS_REG(iface->vreg_info.items[instr.dest.vreg].size, instr.dest.vreg)),
         // MSTK_IND(instr.arg1.stack_offset, VIRT_TO_PHYS_REG(8, instr.arg1.index), instr.arg1.size), MINV);
+    EMIT(iface->output, X64_MOV,
+        MREG(select_register(iface->vregs->items[instr.dest.vreg])),
+        MMEM(AALL(addr_register(iface->vregs->items[instr.arg1.mem.base]),
+                  instr.arg1.mem.stride,
+                  addr_register(iface->vregs->items[instr.arg1.mem.index]),
+                  instr.arg2.mem.offset)),
+        MINV
+    );
 }
 
 X64_INSTRUCTION(load_addr) {
@@ -287,17 +397,25 @@ X64_INSTRUCTION(load_addr) {
 }
 
 X64_INSTRUCTION(store) {
-  // MachineOperand stack = MSTK(instr.dest.slot);
-  // stack.base = instr.dest.base == -1 ? -1 : VIRT_TO_PHYS_REG(8, instr.dest.base);
-  // stack.index = instr.dest.index == -1 ? -1 : VIRT_TO_PHYS_REG(8, instr.dest.index);
-  // stack.size = instr.dest.size;
-  // EMIT(iface->output, X64_MOV, stack, MREG(VIRT_TO_PHYS_REG(iface->vreg_info.items[instr.arg1.vreg].size, instr.arg1.vreg)), MINV);
-    if (instr.dest.type == OPERAND_MEM) {
+    if (instr.dest.type == OPERAND_SLOT) {
         EMIT(iface->output, X64_MOV,
-                MMEM(AALL(select_register(iface->vregs->items[instr.dest.mem.base.vreg]), 0, 0, instr.dest.mem.offset)),
+                select_stack(iface, instr.dest.slot),//MMEM(AALL(select_register(iface->vregs->items[instr.dest.mem.base]), 0, 0, instr.dest.mem.offset)),
                 MREG(select_register(iface->vregs->items[instr.arg1.vreg])),
                 MINV
             );
+    }
+}
+
+X64_INSTRUCTION(store_index) {
+    if (instr.dest.type == OPERAND_MEM) {
+        EMIT(iface->output, X64_MOV,
+                MMEM(AALL(addr_register(iface->vregs->items[instr.dest.mem.base]),
+                        instr.dest.mem.stride,
+                        addr_register(iface->vregs->items[instr.dest.mem.index]),
+                        instr.dest.mem.offset)),
+                MREG(select_register(iface->vregs->items[instr.arg1.vreg])),
+                MINV
+             );
     }
 }
 
@@ -306,6 +424,18 @@ X64_INSTRUCTION(loadi) {
         MREG(select_register(iface->vregs->items[instr.dest.vreg])),
         MIMM(instr.arg1.imm),
         MINV);
+}
+
+
+void emit_copy_if_not_same(CodegenInterface *iface, x64_Register dest, x64_Register arg) {
+    if (dest == arg)
+        return;
+    
+    EMIT(iface->output, X64_MOV,
+         MREG(dest),
+         MREG(arg),
+         MINV
+    );
 }
 
 
@@ -321,11 +451,11 @@ X64_INSTRUCTION(copy) {
 
 
 X64_INSTRUCTION(ret) {
-  EMIT(iface->output, X64_MOV,
-        MREG(x64_EAX),
-        MREG(select_register(iface->vregs->items[instr.arg1.vreg])),
-        MINV);
-  EMIT(iface->output, X64_JMP, MLBL(".end"), MINV, MINV); // goes to epilogue (works for nasm)
+    emit_copy_if_not_same(iface,
+        ret_registers[regsize_from_bytes(iface->vregs->items[instr.arg1.vreg].size)][0],
+        select_register(iface->vregs->items[instr.arg1.vreg])
+    );
+    EMIT(iface->output, X64_JMP, MLBL(".end"), MINV, MINV); // goes to epilogue (works for nasm)
 }
 
 
@@ -367,70 +497,44 @@ X64_INSTRUCTION(cmpCC) {
 
 
 X64_INSTRUCTION(call) {
-  //preliminary spilling live registers to slots after local variables
-  // int spill_offset = 0;
-  // for (int j = 0; j < iface->interval.count; j++) {
-  //     Interval span = iface->interval.items[j];
-  //     if (span.start < iface->ctx.current_instruction && iface->ctx.current_instruction < span.end) {
-  //         spill_offset += 4;
-  //         EMIT(iface->output, X64_MOV, MSTK(spill_offset + iface->ctx.stack_offset), MREG(VIRT_TO_PHYS_REG(iface->vreg_info.items[span.vreg].size, span.vreg)), MINV);
-  //     }
-  // }
-
-  for (int j = 0; j < iface->arg_count; j++) {
-    int size = iface->vregs->items[iface->args[j]].size;
-
-    EMIT(iface->output, X64_MOV,
-            MREG(arg_registers[regsize_from_bytes(size)][j]),
-            MREG(select_register(iface->vregs->items[iface->args[j]])),
-            MINV);
-  }
-
-  const char *name = NULL;
-  for (int i = 0; i < iface->globals->table.capacity; i++) {
-    SymbolData *sym = iface->globals->table.items[i];
-    if (sym != NULL && sym->id == instr.arg1.glbl) {
-      name = iface->globals->table.keys[i].data;
-      break;
+    for (int j = 0; j < iface->arg_count; j++) {
+        int size = iface->vregs->items[iface->args[j]].size;
+        emit_copy_if_not_same(iface,
+            arg_registers[regsize_from_bytes(size)][j],
+            select_register(iface->vregs->items[iface->args[j]])
+        );
     }
-  }
-  
-  
-  iface->arg_count = 0;
-  EMIT(iface->output, X64_CALL, MLBL(name), MINV, MINV);
-  
-  if (instr.dest.type == OPERAND_VREG) {
-    EMIT(iface->output, X64_MOV,
-         MREG(select_register(iface->vregs->items[instr.dest.vreg])),
-         MREG(x64_EAX),
-         MINV);
-  }
 
-  // spill_offset = 0;
-  // for (int j = 0; j < iface->interval.count; j++) {
-  //     Interval span = iface->interval.items[j];
-  //     if (span.start < iface->ctx.current_instruction && iface->ctx.current_instruction < span.end) {
-  //         spill_offset += 4;
-  //         EMIT(iface->output, X64_MOV, MREG(VIRT_TO_PHYS_REG(iface->vreg_info.items[span.vreg].size, span.vreg)), MSTK(spill_offset + iface->ctx.stack_offset), MINV);
-  //     }
-  //   }
+    char *name = malloc(32);
+        for (int i = 0; i < iface->globals->table.capacity; i++) {
+        SymbolData *sym = iface->globals->table.items[i];
+        if (sym != NULL && sym->id == instr.arg1.glbl) {
+            if (sym->externed) snprintf(name, 32, mangled_format, (char*)iface->globals->table.keys[i].data);
+            else snprintf(name, 32, "%s", (char*)iface->globals->table.keys[i].data);
+            break;
+        }
+    }
+  
+    iface->arg_count = 0;
+    EMIT(iface->output, X64_CALL, MLBL(name), MINV, MINV);
+
+    emit_copy_if_not_same(iface,
+        select_register(iface->vregs->items[instr.dest.vreg]),
+        ret_registers[regsize_from_bytes(iface->vregs->items[instr.dest.vreg].size)][0]
+    );
 }
 
 
 X64_INSTRUCTION(param) {
-  EMIT(iface->output, X64_MOV,
-        MREG(select_register(iface->vregs->items[instr.dest.vreg])),
-        MREG(arg_registers[regsize_from_bytes(iface->vregs->items[instr.dest.vreg].size)][instr.arg1.imm]),
-        MINV);
+    emit_copy_if_not_same(iface,
+        select_register(iface->vregs->items[instr.dest.vreg]),
+        arg_registers[regsize_from_bytes(iface->vregs->items[instr.dest.vreg].size)][instr.arg1.imm]
+    );
 }
 
 
 X64_INSTRUCTION(arg) {
   iface->args[iface->arg_count++] = instr.arg1.vreg;
-// EMIT(iface->output, X64_MOV,
-//       MREG(select_register(iface->vregs->items[instr.dest.vreg])),
-//       MREG(arg_registers[iface->vregs->items[instr.dest.vreg].size][instr.arg1.imm]),
-//       MINV);
 }
 
 
@@ -444,11 +548,22 @@ void emit_entry(FILE *out, Program *program) {
 }
 
 
+void emit_mangled_symbol(FILE *out, const char *name) {
+    fprintf(out, mangled_format, name);
+}
+
+
 void emit_symbols(FILE *out, Program *program) {
     fprintf(out, "global\t" ENTRY_SYMBOL "\n");
-    for (int i = 0; i < program->count; i++) {
-      // if (program->items[i].externed)
-      //   fprintf(out, "extern\t_%s\n", program->items[i].name);
+    for (int i = 0; i < program->symbols->table.capacity; i++) {
+        if (program->symbols->table.keys[i].size != 0) {
+            SymbolData *symbol = program->symbols->table.items[i];
+            if (symbol->type == SYM_TYPE_PROCEDURE && symbol->externed) {
+                fprintf(out, "extern ");
+                emit_mangled_symbol(out, program->symbols->table.keys[i].data);
+                fprintf(out, "\n");
+            }
+        }
     }
     fprintf(out, "\n");
 }
@@ -488,6 +603,7 @@ CodegenBackend LINUX_X86_64_BACKEND = (CodegenBackend) {
     [OPCODE_INDEX] = &emit_x64_from_ir_load_index,//&emit_x64_from_ir_,
     [OPCODE_ADDR] = &emit_x64_from_ir_load_addr,
     [OPCODE_STORE] = &emit_x64_from_ir_store,
+    [OPCODE_STORE_INDEX] = &emit_x64_from_ir_store_index,
     [OPCODE_COPY] = &emit_x64_from_ir_copy,
     [OPCODE_IMM] = &emit_x64_from_ir_loadi,
     [OPCODE_RET] = &emit_x64_from_ir_ret,

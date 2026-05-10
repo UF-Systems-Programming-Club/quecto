@@ -3,6 +3,8 @@
 
 #include "ir.h"
 
+#define LABEL_OPCODE 0
+
 typedef enum {
   MOPERAND_INVALID = 0,
   MOPERAND_REG,
@@ -24,6 +26,7 @@ typedef struct {
     int reg;
     MemAccess mem;
     int imm;
+    int glbl;
     const char *label;
   };
 } MachineOperand;
@@ -57,6 +60,7 @@ typedef struct {
 } CodegenInterface;
 
 typedef void (*EmitFn)(CodegenInterface *iface, Instr instr);
+typedef char *(*MangleFn)(CodegenInterface *iface, const char *symbol);
 typedef void (*CalculateFn)(CodegenInterface *iface);
 typedef void (*EmitProcFn)(CodegenInterface *face, Procedure *procedure);
 typedef Bytecode (*AdhereFn)(Bytecode bytecode);
@@ -66,6 +70,7 @@ typedef void (*EmitProgramDataFn)(FILE *out, Program *program);
 typedef struct {
   AdhereFn adhere_bytecode_to_spec;
   CalculateFn calculate_offsets;
+  MangleFn mangle_symbols;
   EmitProgramDataFn emit_symbols;
   EmitProgramDataFn emit_entry;
   AdhereFn adhere_bytecode;

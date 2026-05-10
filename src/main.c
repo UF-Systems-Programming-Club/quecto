@@ -94,16 +94,21 @@ int compile(const char *filename) {
         .arena = &backing,
     };
 
-    Passes passes = (PassFn[11]) {
+    Passes passes = (PassFn[]) {
             pass_insert_phis,
             pass_rename,
             pass_kill_slots,
+            debug_pass_print,
             pass_remove_copies,
-            pass_three_op_to_two,
+            debug_pass_print,
             pass_liveness,
             pass_compute_liveness,
+            pass_crosses_call,
+            pass_precoloring,
             pass_color_cfg,
+            debug_pass_print_colored,
             pass_phis_into_copies,
+            // pass_three_op_to_two,
             pass_sweep_nops,
             NULL,
     };
@@ -111,9 +116,8 @@ int compile(const char *filename) {
     Program program = { .symbols = &symbols };
     emit_program(&emit_ctx, &program, ast);
 
-    // print_program(program);
     passes_run(&program, passes, (Arenas) { .scratch = &scratch, .persistent = &backing});
-    print_program(program);
+    print_program(program, true);
 
     FILE *out = fopen("out.S", "w");
     compile_program_with(out, &LINUX_X86_64_BACKEND, &program);

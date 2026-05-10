@@ -5,7 +5,7 @@
 #include "common.h"
 #include "symbol_table.h"
 
-
+#define VREG_NONE -1
 
 typedef enum {
     OPCODE_NONE,
@@ -26,6 +26,7 @@ typedef enum {
     OPCODE_ADDR,
 
     OPCODE_STORE,
+    OPCODE_STORE_INDEX,
     OPCODE_COPY,
 
     OPCODE_CALL,
@@ -44,27 +45,14 @@ typedef enum {
     OPCODE_COUNT,
 } Opcode;
 
-
 typedef enum {
-    ADDR_NONE = 0,
-    ADDR_VREG,
-    ADDR_REG,
-    //ADDR_LABEL,
-} AddrType; 
-
+    OPC_NONCOMM = 1,
+    OPC_CLOBBERS_CALL = 2,
+} OpcodeFlags;
 
 typedef struct {
-    AddrType type;
-    union {
-        int vreg;
-        int reg;
-    };
-} Addr;
-
-
-typedef struct {
-	Addr base;
-	Addr index;
+	int base; // vreg
+	int index; // vreg
 	int offset;
 	int stride;
 	int size;
@@ -74,13 +62,27 @@ typedef struct {
 typedef enum {
     OPERAND_NONE = 0,
     OPERAND_VREG,
-    OPERAND_SLOT,
-    OPERAND_BLOCK, // for jumps and stuff
-    OPERAND_REG,
     OPERAND_IMM,
     OPERAND_MEM,
+    OPERAND_SLOT,
+    OPERAND_BLOCK, // for jumps and stuff
     OPERAND_GLOBAL
 } OperandType;
+
+typedef enum {
+    OPDR_NONE = 0,
+    OPDR_USE,
+    OPDR_DEF,
+} OperandRole;
+
+
+typedef struct {
+    OperandRole dest, arg1, arg2;
+    OpcodeFlags flags;
+} OpcodeDesc;
+
+
+extern const OpcodeDesc opcode_description_table[];
 
 
 typedef struct {
@@ -102,7 +104,6 @@ typedef struct {
     Operand dest;
     Operand arg1;
     Operand arg2;
-    int successor[2];
 } Instr;
 
 
@@ -118,7 +119,8 @@ typedef enum {
     PR_STACK_POINTER = 2,
     PR_GENERAL_PURPOSE = 4,
     PR_CALLEE_SAVED = 8,
-    PR_CALLER_SAVED = 16,
+    PR_RETURN = 32,
+    PR_ARG = 64,
 } PhysRegFlags;
 
 
@@ -138,6 +140,7 @@ typedef struct {
     bool sign;
     Interval interval;
     Color color;
+    PhysRegFlags hint;
     bool crosses_call;
     bool killed; // marked for death
 } VregInfo;
@@ -176,7 +179,7 @@ typedef struct {
     DYN_ARR(Phi) phis;
     DYN_ARR(int) predecessors;
     Bytecode bytecode;
-    Instr terminator;
+    int successors[2];
 } BasicBlock;
 
 
@@ -209,22 +212,29 @@ typedef struct {
 extern const char *opcode_to_string[OPCODE_COUNT];
 extern const Opcode opposite_opcode_table[OPCODE_COUNT];
 
-// if arg is -1, matches anything
-bool instr_match(Instr *instr, Opcode opcode, OperandType dest, OperandType arg1, OperandType arg2);
 Operand allocate_vreg_explicit(Arena *arena, Procedure *procedure, VregInfo info);
-bool vreg_defined(Instr instr, int vreg);
-bool vreg_in_use(Instr instr, int vreg);
-int vreg_if_use(Instr instr, int *vregs);
+// bool vreg_defined(Instr instr, int vreg);
+// bool vreg_in_use(Instr instr, int vreg);
+// int vreg_if_use(Instr instr, int *vregs);
 VregInfo vregi_from_sloti(SlotInfo slot);
-bool instr_match(Instr *instr, Opcode opcode, OperandType dest, OperandType arg1, OperandType arg2);
+bool instr_match(Instr *instr, Opcode opcode, OperandType dest, OperandType arg1, OperandType arg2); // if arg is -1, matches anything
+int operand_collect_vregs(Operand opnd, int *out, int offset);
+int instr_collect_used_vregs(Instr instr, int *out);
+bool instr_uses_vreg(Instr instr, int vreg);
+bool instr_defines_vreg(Instr instr, int vreg);
+bool operand_has_vreg(Operand operand, int vreg);
+int instr_collect_used_slots(Instr instr, Operand *out[]);
+int instr_collect_def_slots(Instr instr, Operand *out[]);
+void instr_replace_vreg(Instr *instr, int find, int replace);
+
 
 void print_procedure(Procedure proc);
-void print_program(Program program);
+void print_procedure_colored(Procedure *proc);
+bool print_operand(Operand operand, bool leading);
+void print_program(Program program, bool colored);
 void print_cfg(CFGraph graph);
 void print_block(CFGraph graph, bool walked[], int block);
-void print_terminator(Instr instr);
 void print_instruction(Instr instr);
 void print_vregs(Procedure procedure);
-void print_bytecode(Bytecode bytecode, size_t bsize, int blocks[bsize]);
 
 #endif

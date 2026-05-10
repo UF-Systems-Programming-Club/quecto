@@ -134,11 +134,14 @@ typedef struct {
 } StringView;
 
 typedef struct {
-    bool *buckets;
-    size_t size;
+    uint64_t *buckets;
+    size_t bit_count; 
+    size_t word_count;   
 } Set;
 
 void set_create(Set *set, Arena *arena, size_t size);
+bool set_equals(Set *a, Set *b);
+void set_intersect(Set *a, Set *b);
 bool set_insert(Set *set, int val);
 void set_remove(Set *set, int val);
 int set_pop(Set *set);

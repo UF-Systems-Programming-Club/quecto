@@ -10,6 +10,14 @@ Operand emit_instr_into_block(Arena *arena, BasicBlock *block, Instr instr) {
 }
 
 
+Operand add_instr_x_before_end_block(Arena *arena, BasicBlock *block, Instr instr) {
+    Instr terminator = block->bytecode.items[block->bytecode.count - 1];
+    arena_array_append(arena, block->bytecode, terminator);
+    block->bytecode.items[block->bytecode.count - 2] = instr;
+    return instr.dest;
+}
+
+
 void allocate_cfg(Arena *arena, CFGraph *cfg) {
     cfg->idom = arena_alloc(arena, sizeof(int) * cfg->count);
     cfg->rpo = arena_alloc(arena, sizeof(int) * cfg->count);
@@ -40,8 +48,8 @@ bool dominates(CFGraph *cfg, int a, int b) { // does A dominate B
 
 
 int exit_for(CFGraph *cfg, int a) {
-    int succ1 = cfg->items[a].terminator.successor[0];
-    int succ2 = cfg->items[a].terminator.successor[1];
+    int succ1 = cfg->items[a].successors[0];
+    int succ2 = cfg->items[a].successors[1];
     if (succ1 == -1) return -1;
     return cfg->rpo[succ1] > cfg->rpo[succ2] ? succ1 : succ2;
 }
@@ -52,8 +60,8 @@ void fill_rpo(CFGraph *cfg, int *index, int block) {
 
     cfg->rpo[block] = 0;
     
-    fill_rpo(cfg, index, cfg->items[block].terminator.successor[1]);
-    fill_rpo(cfg, index, cfg->items[block].terminator.successor[0]);
+    fill_rpo(cfg, index, cfg->items[block].successors[1]);
+    fill_rpo(cfg, index, cfg->items[block].successors[0]);
 
     (*index)++;
     cfg->rpo[block] = cfg->count - *index;
@@ -104,8 +112,8 @@ void add_predecessor(CFGraph *cfg, int block, int with) {
     }
     if (add) array_append(cfg->items[block].predecessors, with);
 
-    add_predecessor(cfg, cfg->items[block].terminator.successor[0], block);
-    add_predecessor(cfg, cfg->items[block].terminator.successor[1], block);
+    add_predecessor(cfg, cfg->items[block].successors[0], block);
+    add_predecessor(cfg, cfg->items[block].successors[1], block);
 }
 
 

@@ -1,5 +1,7 @@
 #include "passes.h"
 #include "cfg.h"
+#include "common.h"
+#include "ir.h"
 
 
 void passes_run(Program *program, Passes passes, Arenas arenas) {
@@ -52,22 +54,12 @@ void pass_liveness(Arenas *arenas, Procedure *procedure) {
                 set_insert(&cfg->defines[b], instr.dest.vreg);
             }
             int used[16];
-            int count = vreg_if_use(instr, used);
+            int count = instr_collect_used_vregs(instr, used);
             for (int v = 0; v < count; v++) {
                 if (!set_has(&cfg->defines[b], used[v])) {
                     set_insert(&cfg->uses[b], used[v]);
                 }
             }
-        }
-        
-        instr = block->terminator;
-        if (instr.arg1.type == OPERAND_VREG) {
-            if (!set_has(&cfg->defines[b], instr.arg1.vreg))
-                set_insert(&cfg->uses[b], instr.arg1.vreg);
-        }
-        if (instr.arg2.type == OPERAND_VREG) {
-            if (!set_has(&cfg->defines[b], instr.arg2.vreg))
-                set_insert(&cfg->uses[b], instr.arg2.vreg);
         }
     }
 
@@ -79,7 +71,7 @@ void pass_liveness(Arenas *arenas, Procedure *procedure) {
             BasicBlock *block = &cfg->items[b];
 
             for (int s = 0; s < 2; s++) {
-                int succ = block->terminator.successor[s];
+                int succ = block->successors[s];
 
                 if (succ == -1) continue;
                 set_add(&tmp, &cfg->live_in[succ]);
@@ -97,21 +89,16 @@ void pass_liveness(Arenas *arenas, Procedure *procedure) {
                 
             }
 
-            for (int i = 0; i < vregs->count; i++)
-                if (cfg->live_out[b].buckets[i] != tmp.buckets[i]) {
-                    changed = true;
-                    break;
-                }
+            if (!set_equals(&cfg->live_out[b], &tmp))
+                changed = true;
             
             set_copy(&cfg->live_out[b], &tmp);
             set_subtract(&tmp, &cfg->defines[b]);
             set_add(&tmp, &cfg->uses[b]);
+
+            if (!set_equals(&cfg->live_in[b], &tmp))
+                changed = true;
             
-            for (int i = 0; i < vregs->count; i++)
-                if (cfg->live_in[b].buckets[i] != tmp.buckets[i]) {
-                    changed = true;
-                    break;
-                }
             
             set_copy(&cfg->live_in[b], &tmp);
             set_clear(&tmp);
@@ -219,7 +206,7 @@ void pass_rename_recurs(Arenas *arenas, Procedure *procedure, OperandStack stack
 
     for (int i = 0; i < block->bytecode.count; i++) {
         Instr *instr = &block->bytecode.items[i];
-
+       
         if (instr_match(instr, OPCODE_LOAD, -1, OPERAND_SLOT, OPERAND_NONE)) {
             instr->opcode = OPCODE_COPY;
             instr->arg1 = OperandStack_peek(&stacks[instr->arg1.slot], 1);
@@ -237,7 +224,7 @@ void pass_rename_recurs(Arenas *arenas, Procedure *procedure, OperandStack stack
     }
 
     for (int i = 0; i < 2; i++) {
-        int s = block->terminator.successor[i];
+        int s = block->successors[i];
         if (s == -1) continue;
 
         BasicBlock *succ = &cfg->items[s];
@@ -292,19 +279,15 @@ void pass_remove_copies(Arenas *arenas, Procedure *procedure) {
         for (int j = 0; j < cfg->items[i].bytecode.count; j++) {
             Instr *instr = &cfg->items[i].bytecode.items[j];
 
-            if (instr->opcode == OPCODE_COPY) {
-                for (int k = j; k < cfg->items[i].bytecode.count; k++) {
+            if (instr->opcode == OPCODE_COPY && instr->dest.type == OPERAND_VREG && instr->arg1.type == OPERAND_VREG) {
+                for (int k = j + 1; k < cfg->items[i].bytecode.count; k++) {
                     Instr *marked = &cfg->items[i].bytecode.items[k];
-                    if (marked->arg1.type == instr->dest.type && marked->arg1.vreg == instr->dest.vreg)
-                        marked->arg1 = instr->arg1;
-                    if (marked->arg2.type == instr->dest.type && marked->arg2.vreg == instr->dest.vreg)
-                        marked->arg2 = instr->arg1;
+                    instr_replace_vreg(marked, instr->dest.vreg, instr->arg1.vreg);
+                    // if (marked->arg1.type == instr->dest.type && marked->arg1.vreg == instr->dest.vreg)
+                    //     marked->arg1 = instr->arg1;
+                    // if (marked->arg2.type == instr->dest.type && marked->arg2.vreg == instr->dest.vreg)
+                    //     marked->arg2 = instr->arg1;
                 }
-                Instr *marked = &cfg->items[i].terminator;
-                if (marked->arg1.type == instr->dest.type && marked->arg1.vreg == instr->dest.vreg)
-                    marked->arg1 = instr->arg1;
-                if (marked->arg2.type == instr->dest.type && marked->arg2.vreg == instr->dest.vreg)
-                     marked->arg2 = instr->arg1;                
                 *instr = (Instr) { 0 };
             }
         }
@@ -329,7 +312,7 @@ void pass_compute_liveness(Arenas *arenas, Procedure *procedure) {
                 int iend = cfg->items[b].bytecode.count; // if for doesnt for must be in terminator
                 for (int k = cfg->items[b].bytecode.count - 1; k >= 0; k--) {
                     Instr instr = cfg->items[b].bytecode.items[k];
-                    if (vreg_in_use(instr, i)) {
+                    if (instr_uses_vreg(instr, i)) {
                         iend = k;
                         break;
                     }
@@ -345,7 +328,7 @@ void pass_compute_liveness(Arenas *arenas, Procedure *procedure) {
                 int istart = 0;
                 for (int k = cfg->items[b].bytecode.count - 1; k >= 0; k--) {
                     Instr instr = cfg->items[b].bytecode.items[k];
-                    if (vreg_defined(instr, i)) {
+                    if (instr_defines_vreg(instr, i)) {
                         istart = k;
                         break;
                     }
@@ -361,9 +344,9 @@ void pass_compute_liveness(Arenas *arenas, Procedure *procedure) {
 
     for (int b = 0; b < cfg->count; b++) {
         for (int s = 0; s < 2; s++) { // find backedges
-            int succ = cfg->items[b].terminator.successor[s];
+            int succ = cfg->items[b].successors[s];
             
-            if (cfg->items[b].terminator.successor[s] == -1) continue;
+            if (succ == -1) continue;
             if (!dominates(cfg, succ, b)) continue; // if block -> succ, and succ dominates block, must be loop/backedge
                                                                 // thus we go to the succesors other successor and that must be exit
             int exit = exit_for(cfg, succ);
@@ -398,20 +381,13 @@ void pass_crosses_call(Arenas *arenas, Procedure *procedure) {
 
         set_copy(&live, &cfg->live_out[b]);
 
-        
-        Instr terminator = cfg->items[b].terminator;
-        int in_use[16];
-        int count = vreg_if_use(terminator, in_use);
-        for (int i = 0; i < count; i++) {
-            set_insert(&live, in_use[i]);   
-        }
-
         for (int i = cfg->items[b].bytecode.count - 1; i >= 0; i--) {
             Instr instr = cfg->items[b].bytecode.items[i];
             if (instr.opcode == OPCODE_CALL) {
                 for (int v = 0; v < procedure->vregs.count; v++) {
                     if (set_has(&live, v) && !(instr.dest.type == OPERAND_VREG && instr.dest.vreg == v)) {
                         procedure->vregs.items[v].crosses_call = true;
+                        procedure->vregs.items[v].hint |= PR_CALLEE_SAVED;
                     }
                 }
             }
@@ -422,7 +398,7 @@ void pass_crosses_call(Arenas *arenas, Procedure *procedure) {
             }
 
             int in_use[16];
-            int count = vreg_if_use(instr, in_use);
+            int count = instr_collect_used_vregs(instr, in_use);
             for (int i = 0; i < count; i++) {
                 set_insert(&live, in_use[i]);   
             }
@@ -430,50 +406,130 @@ void pass_crosses_call(Arenas *arenas, Procedure *procedure) {
     }
 }
 
-typedef DEFINE_STACK(Color) ColorStack;
 
-void ColorStack_set_backing(ColorStack *stack, Arena *arena) {
-    stack->arena = arena;
-}
+typedef struct {
+    Arena *arena;
+    int *position_from_index;
+    Set enabled;
+    Set general_purpose;
+    Set callee_saved;
+    Set args;
+    Set rets;
+    Set intersection;
+    Color *backing; // index, flags
+} ColorPool;
 
-void ColorStack_push(ColorStack *stack, Color value) {
-    if (stack->cursor + 1 > stack->capacity) {
-        size_t old = stack->capacity;
-        size_t new = old == 0 ? 16 : old * 2;
-        stack->stack = arena_realloc(stack->arena, stack->stack, old * sizeof(Color), new * sizeof(Color)); 
-        stack->capacity = new;
+
+void color_pool_init(ColorPool *pool, Arena *arena, Color *backing, size_t count) {
+    pool->arena = arena;
+    pool->backing = backing;
+    pool->position_from_index = arena_alloc(arena, sizeof(int) * count);
+    set_create(&pool->enabled, arena, count);
+    set_create(&pool->intersection, arena, count);
+    set_create(&pool->general_purpose, arena, count);
+    set_create(&pool->callee_saved, arena, count);
+    set_create(&pool->args, arena, count);
+    set_create(&pool->rets, arena, count);
+
+    for (int i = 0; i < count; i++) {
+        pool->position_from_index[backing[i].index] = i;
+        if ((backing[i].flags & PR_GENERAL_PURPOSE) == PR_GENERAL_PURPOSE) set_insert(&pool->general_purpose, i);
+        if ((backing[i].flags & PR_CALLEE_SAVED) == PR_CALLEE_SAVED) set_insert(&pool->callee_saved, i);
+        if ((backing[i].flags & PR_ARG) == PR_ARG) set_insert(&pool->args, i);
+        if ((backing[i].flags & PR_RETURN) == PR_RETURN) set_insert(&pool->rets, i);
+
+        set_insert(&pool->enabled, i);
     }
-    stack->stack[stack->cursor++] = value;
+
+    set_clear(&pool->intersection);
 }
 
-Color ColorStack_pop(ColorStack *stack, PhysRegFlags filter) {
-    bool found = false;
-    Color popped;
-    for (int start = stack->cursor - 1; start >= 0; start--) {
-        if ((stack->stack[start].flags & filter) == filter) {
-            popped = stack->stack[start];
-            found = true;
 
-            for (size_t move = start + 1; move < stack->cursor; move++) {
-                stack->stack[move - 1] = stack->stack[move];
+void color_pool_push(ColorPool *pool, Color color) {
+    set_insert(&pool->enabled, pool->position_from_index[color.index]);
+}
+
+
+PhysRegFlags lift(PhysRegFlags filter) {
+    if ((filter & PR_RETURN) == PR_RETURN) return filter & ~PR_RETURN;
+    if ((filter & PR_ARG) == PR_ARG) return filter & ~PR_ARG;
+    if ((filter & PR_CALLEE_SAVED) == PR_CALLEE_SAVED) return filter & ~PR_ARG;
+    return filter;
+}
+
+
+Color color_pool_pop(ColorPool *pool, PhysRegFlags filter) {
+    bool changed = true;
+
+    while (changed) {
+        set_copy(&pool->intersection, &pool->enabled);
+        changed = false;
+
+        if ((filter & PR_GENERAL_PURPOSE) == PR_GENERAL_PURPOSE) set_intersect(&pool->intersection, &pool->general_purpose);
+        if ((filter & PR_CALLEE_SAVED) == PR_CALLEE_SAVED) set_intersect(&pool->intersection, &pool->callee_saved);
+        if ((filter & PR_ARG) == PR_ARG) set_intersect(&pool->intersection, &pool->args);
+        if ((filter & PR_RETURN) == PR_RETURN) set_intersect(&pool->intersection, &pool->rets);
+
+        if (set_empty(&pool->intersection)) {
+            if (filter != lift(filter)) changed = true;
+            filter = lift(filter);
+            continue;
+        }
+
+        int position = set_pop(&pool->intersection);
+        set_remove(&pool->enabled, position);
+        return pool->backing[position];
+    }
+    assert(0 && "pop failed");
+    return (Color) { .index = -1 };
+}
+
+
+bool color_pool_empty(ColorPool *pool) {
+    return set_empty(&pool->enabled);
+}
+
+
+void pass_precoloring(Arenas *_, Procedure *procedure) {
+    CFGraph *cfg = &procedure->cfg;
+    VregInfoTable *vregs = &procedure->vregs;
+
+    for (int k = 0; k < cfg->count; k++) {
+        int b = cfg->rpo_list[k];
+
+        for (int i = 0; i < cfg->items[b].bytecode.count; i++) {
+            Instr instr = cfg->items[b].bytecode.items[i];
+
+            if (instr.opcode == OPCODE_RET && instr.arg1.type == OPERAND_VREG) {
+                vregs->items[instr.arg1.vreg].hint |= PR_RETURN;
             }
-            stack->cursor--;
-            
-            break;
+
+            if (instr.opcode == OPCODE_ARG && instr.arg1.type == OPERAND_VREG) {
+                vregs->items[instr.arg1.vreg].hint |= PR_ARG;
+            }
+
+            if (instr.opcode == OPCODE_PARAM && instr.dest.type == OPERAND_VREG) {
+                vregs->items[instr.dest.vreg].hint |= PR_ARG;
+            }
+
+            if (instr.opcode == OPCODE_CALL && instr.dest.type == OPERAND_VREG && !vregs->items[instr.dest.vreg].crosses_call) {
+                vregs->items[instr.dest.vreg].hint |= PR_RETURN;
+            }
         }
     }
-    
-    return found ? popped : (Color) { .index = -1 };
 }
 
-void pass_color_cfg_recurs(Arenas *arenas, Procedure *procedure, int block, Set *live, ColorStack *free) {
+
+void pass_color_cfg_recurs(Arenas *arenas, Procedure *procedure, int block, Set *live, ColorPool *pool) {
     CFGraph *cfg = &procedure->cfg;
     VregInfoTable *vregs = &procedure->vregs;
     BasicBlock *blk = &cfg->items[block];
 
     size_t mark = arena_mark(arenas->scratch);
-    size_t free_mark = free->cursor;
-    Set tmp;
+    // size_t free_mark = free->cursor;
+    Set tmp, last_pool;
+    set_create(&last_pool, arenas->scratch, pool->enabled.bit_count);
+    set_copy(&last_pool, &pool->enabled);
     set_create(&tmp, arenas->scratch, vregs->count);
     set_copy(&tmp, live);
 
@@ -481,53 +537,70 @@ void pass_color_cfg_recurs(Arenas *arenas, Procedure *procedure, int block, Set 
         Phi phi = blk->phis.items[p];
         set_insert(live, phi.dest.vreg);
 
-        PhysRegFlags filter = procedure->vregs.items[phi.dest.vreg].crosses_call ?
-                (PR_GENERAL_PURPOSE | PR_CALLEE_SAVED) : PR_GENERAL_PURPOSE;
+        PhysRegFlags filter = PR_GENERAL_PURPOSE | vregs->items[phi.dest.vreg].hint;;
+        if (vregs->items[phi.dest.vreg].crosses_call) {
+            filter |= PR_CALLEE_SAVED;
+        }
             
-        if (free->cursor > 0) vregs->items[phi.dest.vreg].color = ColorStack_pop(free, filter);
+        if (!color_pool_empty(pool)) vregs->items[phi.dest.vreg].color = color_pool_pop(pool, filter);
         else assert(0 && "no spills yet...");
     }
 
     for (int i = 0; i < blk->bytecode.count; i++) {
+        Instr instr = blk->bytecode.items[i];
+        
+        bool non_comm = (instr.opcode == OPCODE_SUB || instr.opcode == OPCODE_DIV);
+        int protected = (non_comm && instr.arg2.type == OPERAND_VREG) ? instr.arg2.vreg : -1;
+
         for (int v = 0; v < vregs->count; v++) {
+            if (v == protected) continue;
+            
             if (set_has(live, v)
                 && !set_has(&cfg->live_out[block], v)
                 && vregs->items[v].interval.iend <= i
                 && vregs->items[v].interval.bend == block
             ) {
                 set_remove(live, v);
-                ColorStack_push(free, vregs->items[v].color);
+                color_pool_push(pool, vregs->items[v].color);
             }
         }
 
-        Instr instr = blk->bytecode.items[i];
         if (instr.dest.type == OPERAND_VREG) {
             set_insert(live, instr.dest.vreg);
 
+            PhysRegFlags filter = PR_GENERAL_PURPOSE | vregs->items[instr.dest.vreg].hint;
 
-            PhysRegFlags filter = PR_GENERAL_PURPOSE;
             if (vregs->items[instr.dest.vreg].crosses_call) {
                 filter |= PR_CALLEE_SAVED;
             }
 
-            if (free->cursor > 0) vregs->items[instr.dest.vreg].color = ColorStack_pop(free, filter);
+            if (!color_pool_empty(pool)) vregs->items[instr.dest.vreg].color = color_pool_pop(pool, filter);
             else assert(0 && "no spills yet...");            
 
 
             if ((vregs->items[instr.dest.vreg].color.flags & PR_CALLEE_SAVED) == PR_CALLEE_SAVED) {
                 set_insert(&procedure->saved_colors, vregs->items[instr.dest.vreg].color.index);
             }
-            
+        }
+
+        if (protected != -1 && set_has(live, protected)
+                && !set_has(&cfg->live_out[block], protected)
+                && vregs->items[protected].interval.iend <= i
+                && vregs->items[protected].interval.bend == block
+        ) {
+            set_remove(live, protected);
+            color_pool_push(pool, vregs->items[protected].color);
         }
     }
 
     for (int b = 0; b < cfg->count; b++) {
-        if (cfg->idom[b] == block && b != block) pass_color_cfg_recurs(arenas, procedure, b, live, free);
+        if (cfg->idom[b] == block && b != block) pass_color_cfg_recurs(arenas, procedure, b, live, pool);
     }
 
     set_copy(live, &tmp);
+    set_copy(&pool->enabled, &last_pool);
     arena_restore(arenas->scratch, mark);
-    free->cursor = free_mark;
+    // free->cursor = free_mark;
 }
 
 
@@ -538,18 +611,31 @@ void pass_color_cfg(Arenas *arenas, Procedure *procedure) {
     set_create(&live, arenas->scratch, procedure->vregs.count);
     set_create(&procedure->saved_colors, arenas->persistent, 16);
 
-    ColorStack stack = { 0 };
-    ColorStack_set_backing(&stack, arenas->scratch);
+    Color colors [16] = {
+        (Color) { .index = 15, .flags = PR_GENERAL_PURPOSE | PR_CALLEE_SAVED}, // r15
+        (Color) { .index = 14, .flags = PR_GENERAL_PURPOSE | PR_CALLEE_SAVED}, // r14
+        (Color) { .index = 13, .flags = PR_GENERAL_PURPOSE | PR_CALLEE_SAVED}, // r13
+        (Color) { .index = 12, .flags = PR_GENERAL_PURPOSE | PR_CALLEE_SAVED }, // r12
+        (Color) { .index = 11, .flags = PR_GENERAL_PURPOSE }, // r11
+        (Color) { .index = 10, .flags = PR_GENERAL_PURPOSE }, // r10
+        (Color) { .index = 9, .flags = PR_GENERAL_PURPOSE }, // r9
+        (Color) { .index = 8, .flags = PR_GENERAL_PURPOSE }, // r8
+        (Color) { .index = 7, .flags = PR_STACK_POINTER }, // rsp
+        (Color) { .index = 6, .flags = PR_BASE_POINTER }, // rbp
+        (Color) { .index = 3, .flags = PR_GENERAL_PURPOSE | PR_ARG }, // rdx
+        (Color) { .index = 2, .flags = PR_GENERAL_PURPOSE | PR_ARG }, // rcx
+        
+        (Color) { .index = 4, .flags = PR_GENERAL_PURPOSE | PR_ARG }, // rsi
+        (Color) { .index = 5, .flags = PR_GENERAL_PURPOSE | PR_ARG }, // rdi
+        
+        (Color) { .index = 1, .flags = PR_GENERAL_PURPOSE }, // rbx
+        (Color) { .index = 0, .flags = PR_GENERAL_PURPOSE | PR_RETURN}, // rax
+    };
 
-    for (int i = 11; i > 7; i--) {
-        ColorStack_push(&stack, (Color) { .index = i, .flags = PR_GENERAL_PURPOSE | PR_CALLEE_SAVED });
-    }    
-    for (int i = 7; i >= 0; i--) {
-        ColorStack_push(&stack, (Color) { .index = i, .flags = PR_GENERAL_PURPOSE});
-    }
-    
-    pass_crosses_call(arenas, procedure);
-    pass_color_cfg_recurs(arenas, procedure, procedure->cfg.entry_block, &live, &stack);
+    ColorPool pool = { 0 };
+    color_pool_init(&pool, arenas->scratch, colors, 16);
+
+    pass_color_cfg_recurs(arenas, procedure, procedure->cfg.entry_block, &live, &pool);
     arena_restore(arenas->scratch, mark);
 }
 
@@ -564,7 +650,7 @@ void pass_phis_into_copies(Arenas *arenas, Procedure *procedure) {
                 instr.opcode = OPCODE_COPY;
                 instr.dest = phi.dest;
                 instr.arg1 = phi.args[a];
-                emit_instr_into_block(arenas->persistent, &cfg->items[cfg->items[b].predecessors.items[a]], instr);
+                add_instr_x_before_end_block(arenas->persistent,&cfg->items[cfg->items[b].predecessors.items[a]], instr);
             }
         }
     }
@@ -588,15 +674,14 @@ void pass_sweep_nops(Arenas *arenas, Procedure *procedure) {
 }
 
 
-const Opcode op_cond_opcode_table[OPCODE_COUNT] = {
-    [OPCODE_JMP] = OPCODE_JMP,
-    [OPCODE_BNE] = OPCODE_BEQ,
-    [OPCODE_BEQ] = OPCODE_BNE,
-    [OPCODE_BGE] = OPCODE_BLT,
-    [OPCODE_BLE] = OPCODE_BGT,
-    [OPCODE_BGT] = OPCODE_BLE,
-    [OPCODE_BLT] = OPCODE_BGE,
-};
+void debug_pass_print(Arenas *_, Procedure *procedure) {
+    print_procedure(*procedure);
+}
+
+
+void debug_pass_print_colored(Arenas *_, Procedure *procedure) {
+    print_procedure_colored(procedure);
+}
 
 
 void pass_three_op_to_two(Arenas *arenas, Procedure *procedure) {
@@ -618,6 +703,7 @@ void pass_three_op_to_two(Arenas *arenas, Procedure *procedure) {
                     copy.opcode = OPCODE_COPY;
                     copy.dest = allocate_vreg_explicit(arenas->persistent, procedure, procedure->vregs.items[instr.arg1.vreg]);
                     copy.arg1 = instr.arg1;
+                    // instr.dest = copy.dest;
                     instr.arg1 = copy.dest;
                     bc.items[bc.count++] = copy;
                     bc.items[bc.count++] = instr;

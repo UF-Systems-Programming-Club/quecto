@@ -5,6 +5,7 @@
 
 void allocate_cfg(Arena *arena, CFGraph *cfg);
 Operand emit_instr_into_block(Arena *arena, BasicBlock *block, Instr instr);
+Operand add_instr_x_before_end_block(Arena *arena, BasicBlock *block, Instr instr);
 
 void fill_rpo(CFGraph *cfg, int *index, int block);
 void fill_idom(CFGraph *cfg);

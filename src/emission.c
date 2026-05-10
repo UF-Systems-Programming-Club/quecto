@@ -1,12 +1,12 @@
 #include "emission.h"
 #include "cfg.h"
+#include "ir.h"
 
 #define NONE (Operand) { 0 }
 #define VREG(v) (Operand) { .type = OPERAND_VREG, .vreg = (v) }
 #define IMM(i) (Operand) { .type = OPERAND_IMM, .imm = (i) }
 #define MEM(m) (Operand) { .type = OPERAND_MEM, .mem = (m) }
 #define INDEX(b, i, o, s) (MemRef) { .base = (b), .index = (i), .offset = (o), .stride = (s), .size = 0 }
-#define AT_VR(v) (Addr) { .type = ADDR_VREG, .vreg = v }
 #define GLOBAL(g) (Operand) { .type = OPERAND_GLOBAL, .glbl = (g) }
 #define SLOT(s) (Operand) { .type = OPERAND_SLOT, .slot = (s) }
 
@@ -130,7 +130,7 @@ Operand emit_addr(EmitContext *context, AST *lvalue) {
             int size = quecto_type_size(lvalue->evaled_type);
             emit_instr(context, OPCODE_ADDR,
                        out,
-                       MEM(INDEX(AT_VR(base.vreg), AT_VR(index.vreg), 0, size)),
+                       MEM(INDEX(base.vreg, index.vreg, 0, size)),
                        NONE);
             break;
         }
@@ -151,7 +151,7 @@ Operand emit_lhs(EmitContext *context, AST *lhs) {
             Operand base = emit_addr(context, lhs->array);
             Operand index = emit_expr(context, lhs->index);
             int size = quecto_type_size(lhs->evaled_type);
-            return MEM(INDEX(AT_VR(base.vreg), AT_VR(index.vreg), 0 , size));
+            return MEM(INDEX(base.vreg, index.vreg, 0 , size));
         }
         default: UNREACHABLE("invalid lhs");
     }
@@ -162,8 +162,8 @@ void emit_list(EmitContext *context, AST *list, Operand *into) {
     for (int i = 0; i < list->count; i++) {
         Operand arg = emit_expr(context, list->items[i]);
         
-        emit_instr(context, OPCODE_STORE,
-                   MEM(INDEX(AT_VR(into->vreg), 0, -i * quecto_type_size(list->evaled_type->inner), 0)),
+        emit_instr(context, OPCODE_STORE_INDEX,
+                   MEM(INDEX(into->vreg, 0, -i * quecto_type_size(list->evaled_type->inner), 0)),
                    arg,
                    NONE);
     }
@@ -185,7 +185,7 @@ void emit_decl(EmitContext *context, AST *decl) {
 void emit_assign(EmitContext *context, AST *assign) {
     Operand lhs = emit_lhs(context, assign->lhs);
     Operand rhs = emit_expr(context, assign->rhs);
-    emit_instr(context, OPCODE_STORE, lhs, rhs, NONE);    
+    emit_instr(context, lhs.type == OPERAND_MEM ? OPCODE_STORE_INDEX : OPCODE_STORE, lhs, rhs, NONE);    
 }
 
 
@@ -316,7 +316,7 @@ Operand emit_expr(EmitContext *context, AST *expr) {
         case AST_INDEX: {
             Operand base = emit_addr(context, expr->array);
             Operand index = emit_expr(context, expr->index);
-            Operand ref = MEM(INDEX(AT_VR(base.vreg), AT_VR(index.vreg), 0, quecto_type_size(expr->evaled_type)));
+            Operand ref = MEM(INDEX(base.vreg, index.vreg, 0, quecto_type_size(expr->evaled_type)));
             return emit_instr(context, OPCODE_INDEX, allocate_vreg_for_type(context, expr->evaled_type), ref, NONE);
         }
         case AST_CALL: return emit_call(context, expr, true);
@@ -341,11 +341,15 @@ Operand emit_instr(EmitContext *context, Opcode opcode, Operand dest, Operand ar
 void emit_branch(EmitContext *context, int true_target, int false_target, AST *expr) {
     assert(context->current_block != -1 && expr->type == AST_BINARY_OP && op_is_conditional(expr->op));
     
-    Instr terminator = { .opcode = jump_condition_opcode_table[expr->op], .successor = { true_target, false_target} };
+    Instr terminator = { 0 };
+    terminator.opcode = jump_condition_opcode_table[expr->op];
     terminator.arg1 = emit_expr(context, expr->left);
     terminator.arg2 = emit_expr(context, expr->right);
 
-    context->procedure->cfg.items[context->current_block].terminator = terminator;
+    context->procedure->cfg.items[context->current_block].successors[0] = true_target;
+    context->procedure->cfg.items[context->current_block].successors[1] = false_target;
+
+    emit_instr_into_block(context->arena, &context->procedure->cfg.items[context->current_block], terminator);
     context->current_block = -1;
 }
 
@@ -353,9 +357,10 @@ void emit_branch(EmitContext *context, int true_target, int false_target, AST *e
 void emit_jmp(EmitContext *context, int target) {
     assert(context->current_block != -1);
     
-    Instr terminator = { .opcode = OPCODE_JMP, .successor = { target, -1} };
+    Instr terminator = { .opcode = OPCODE_JMP };
+    context->procedure->cfg.items[context->current_block].successors[0] = target;
+    emit_instr_into_block(context->arena, &context->procedure->cfg.items[context->current_block], terminator);
 
-    context->procedure->cfg.items[context->current_block].terminator = terminator;
     context->current_block = -1;
 }
 
@@ -363,15 +368,18 @@ void emit_jmp(EmitContext *context, int target) {
 void emit_ret(EmitContext *context, Operand with) {
     assert(context->current_block != -1);
     
-    Instr terminator = { .opcode = OPCODE_RET, .arg1 = with , .successor = { -1, -1} };
+    Instr terminator = { .opcode = OPCODE_RET, .arg1 = with };
+    emit_instr_into_block(context->arena, &context->procedure->cfg.items[context->current_block], terminator);
 
-    context->procedure->cfg.items[context->current_block].terminator = terminator;
     context->current_block = -1;
 }
 
 
 int allocate_block(EmitContext *context) {
-    arena_array_append(context->arena, context->procedure->cfg, (BasicBlock){ 0 });
+    BasicBlock block = { 0 };
+    block.successors[0] = -1;
+    block.successors[1] = -1;
+    arena_array_append(context->arena, context->procedure->cfg, block);
     return context->procedure->cfg.count - 1;
 }
 
@@ -395,6 +403,7 @@ Operand allocate_vreg_explicit(Arena *arena, Procedure *procedure, VregInfo info
     info.interval.istart = -1;
     info.interval.bstart = -1;
     info.color.index = -1;
+    info.hint = 0;
     arena_array_append(arena, procedure->vregs, info);
     return VREG(procedure->vregs.count - 1);
 }

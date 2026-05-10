@@ -157,63 +157,85 @@ void arena_free(Arena *a) {
 }
 
 
-void set_create(Set *set, Arena *arena, size_t size) {
-    set->size = size;
-    set->buckets = arena_alloc(arena, size);
+void set_create(Set *set, Arena *arena, size_t size) { // bit_count is in universe
+    set->bit_count = size;
+    set->word_count = (size + 63) / 64;
+    set->buckets = arena_alloc(arena, set->word_count * sizeof(uint64_t)); // for bitset
+}
+
+void set_intersect(Set *a, Set *b) {
+    assert(a->bit_count == b->bit_count);
+
+    for (int i = 0; i < b->word_count; i++) {
+        a->buckets[i] &= b->buckets[i];
+    }
 }
 
 void set_add(Set *a, Set *b) {
-    assert(a->size == b->size);
-    for (int i = 0; i < b->size; i++)
+    assert(a->bit_count == b->bit_count);
+
+    for (int i = 0; i < b->word_count; i++) {
         a->buckets[i] |= b->buckets[i];
+    }
 }
 
 void set_subtract(Set *a, Set *b) {
-    assert(a->size == b->size);
-    for (int i = 0; i < b->size; i++)
-        if(a->buckets[i] == b->buckets[i]) a->buckets[i] = false;
+    assert(a->bit_count == b->bit_count);
+
+    for (int i = 0; i < b->word_count; i++)
+        a->buckets[i] &= ~b->buckets[i];
 }
 
 bool set_insert(Set *set, int val) {
-    return set->buckets[val] ? false : (set->buckets[val] = true);
+    return set->buckets[val >> 6] >> (val & 63) & 1 ? false : (set->buckets[val >> 6] |= 1ULL << (val & 63)); 
 }
 
-int set_pop(Set *set) {
-    for (int i = set->size - 1; i >= 0; i--) {
+int set_pop(Set *set) { // pop first
+    for (int i = set->word_count - 1; i >= 0; i--) {
         if (set->buckets[i]) {
-            set->buckets[i] = false;
-            return i;
+            uint64_t w = set->buckets[i];
+            uint64_t bit = 63 - __builtin_clzll(w);
+            set->buckets[i] &= ~(1ULL << bit);
+            return i * 64 + bit;
         }
     }
     return -1;
 }
 
 bool set_has(Set *set, int val) {
-    return set->buckets[val];
+    return set->buckets[val >> 6] >> (val & 63) & 1;
 }
 
 void set_remove(Set *set, int val) {
-    set->buckets[val] = false;
+    set->buckets[val >> 6] &= ~(1ULL << (val & 63));
 }
 
 void set_clear(Set *set) {
-    memset(set->buckets, false, set->size);
+    memset(set->buckets, 0ULL, set->word_count * sizeof(uint64_t));
 }
 
 void set_copy(Set *dst, Set *src) {
-    assert(dst->size == src->size);
-    memcpy(dst->buckets, src->buckets, src->size);
+    assert(dst->bit_count == src->bit_count);
+
+    memcpy(dst->buckets, src->buckets, src->word_count * sizeof(uint64_t));
+}
+
+bool set_equals(Set *a, Set *b) {
+    assert(a->bit_count == b->bit_count);
+    return memcmp(a->buckets, b->buckets, a->word_count * sizeof(uint64_t)) == 0;
 }
 
 bool set_empty(Set *set) {
-    for (int i = 0; i < set->size; i++) {
+    for (int i = 0; i < set->word_count; i++) {
         if (set->buckets[i]) return false;
     }
     return true;
 }
 
 void set_complement(Set *set) {
-    for (int i = 0; i < set->size; i++) {
-        set->buckets[i] = !set->buckets[i];
+    for (int i = 0; i < set->word_count; i++) {
+        set->buckets[i] = ~set->buckets[i];
     }
+    if (set->bit_count & 63)
+        set->buckets[set->word_count - 1] &= (1ULL << (set->bit_count & 63)) - 1;
 }
