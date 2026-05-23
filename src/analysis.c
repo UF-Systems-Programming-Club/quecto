@@ -35,34 +35,41 @@ void analyze_ast(AnalysisContext *context, AST *program) { // assumes ast is a A
 void analyze_procedure(AnalysisContext *context, AST *procedure, bool externed) {
     assert(procedure->type == AST_PROCEDURE);
 
-    SymbolData *signature = insert_symbol(context->arena, context->symbol_table, procedure->name->ident, SYM_TYPE_PROCEDURE);
-    
-    signature->param_count = procedure->param_count;
-    signature->return_count = procedure->return_count;
-    signature->local_var_size = 0;
-    signature->externed = externed;
+    SymbolData *symbol = insert_symbol(context->arena, context->symbol_table, procedure->name->ident);
 
     procedure->symbols = arena_alloc_type(context->arena, SymbolTable);
     procedure->symbols->prev = context->symbol_table;
     context->symbol_table = procedure->symbols;
-    
+
+    QuectoType qtype = { 0 };
+    qtype.type = QUECTO_PROCEDURE;
+
+    ProcSignature signature = { 0 };
+
+    signature.param_count = procedure->param_count;
     for (int i = 0; i < procedure->param_count; i++) {
-        SymbolData *sym = insert_symbol(context->arena, context->symbol_table, procedure->params[i]->symbol->ident, SYM_TYPE_VARIABLE);
+        SymbolData *sym = insert_symbol(context->arena, context->symbol_table, procedure->params[i]->lhs->ident);
         sym->qtype = procedure->params[i]->evaled_type;
-        signature->param_types[i] = procedure->params[i]->evaled_type;
-    }
-    for (int i = 0; i < procedure->return_count; i++) {
-        SymbolData *sym = insert_symbol(context->arena, context->symbol_table, procedure->returns[i]->symbol->ident, SYM_TYPE_VARIABLE);
-        sym->qtype = procedure->returns[i]->evaled_type;
-        signature->return_types[i] = procedure->returns[i]->evaled_type;
+        signature.param_types[i] = procedure->params[i]->evaled_type;
     }
 
-    context->returns = signature->return_types;
-    context->return_count = procedure->return_count;
+    signature.return_count = procedure->return_count;
+    for (int i = 0; i < procedure->return_count; i++) {
+        SymbolData *sym = insert_symbol(context->arena, context->symbol_table, procedure->returns[i]->lhs->ident);
+        sym->qtype = procedure->returns[i]->evaled_type;
+        signature.return_types[i] = procedure->returns[i]->evaled_type;
+    }
+
+    qtype.signature = arena_intern(context->arena, context->type_intern_table, &signature, sizeof(signature));
+
+    symbol->qtype = arena_intern(context->arena, context->type_intern_table, &qtype, sizeof(QuectoType));
+    symbol->externed = externed;
+    symbol->id = ++context->global_count;
+    
+    context->current_procedure = symbol->qtype->signature;
 
     if (procedure->body != NULL)
         analyze_block(context, procedure->body);
-
     context->symbol_table = procedure->symbols->prev;
 }
 
@@ -90,8 +97,8 @@ void analyze_statement(AnalysisContext *context, AST *statement) {
                 analyze_statement(context, statement->otherwise);
             break;
         case AST_RETURN: 
-            if (statement->expr)
-                analyze_expression(context, statement->expr, context->returns[0]);
+            if (statement->rhs)
+                analyze_expression(context, statement->rhs, context->current_procedure->return_types[0]);
             break;
         default:
             UNREACHABLE("AST NOT STATEMENT");
@@ -101,15 +108,16 @@ void analyze_statement(AnalysisContext *context, AST *statement) {
 
 
 void analyze_declaration(AnalysisContext *context, AST *decl) {
-    SymbolData *symbol = insert_symbol(context->arena, context->symbol_table, decl->symbol->ident, SYM_TYPE_VARIABLE);
-    symbol->stack_offset = 0;
+    assert(decl->type == AST_DECL);
+    
+    SymbolData *symbol = insert_symbol(context->arena, context->symbol_table, decl->lhs->ident);
 
-    if (decl->expr == NULL && decl->evaled_type->type == QUECTO_UNKNOWN) {
+    if (decl->rhs == NULL && decl->evaled_type->type == QUECTO_UNKNOWN) {
         report_error(decl->line, decl->col, "cannot infer type without expr");
         return;
     }
 
-    QuectoType *is = analyze_expression(context, decl->expr, decl->evaled_type);
+    QuectoType *is = analyze_expression(context, decl->rhs, decl->evaled_type);
     if (decl->evaled_type->type == QUECTO_UNKNOWN) {
         decl->evaled_type = (is->type == QUECTO_COMP_INT) ? &default_integer_type : is;
     }
@@ -127,18 +135,18 @@ void analyze_declaration(AnalysisContext *context, AST *decl) {
 void analyze_assignment(AnalysisContext *context, AST *assignment) {
     SymbolData *var;
     QuectoType *expr_type;
-    switch (assignment->symbol->type) { // should rename this b/c not just symbol anymore
+    switch (assignment->lhs->type) { // should rename this b/c not just symbol anymore
         case AST_SYMBOL:
-            var = lookup_or_error(context, assignment->symbol, "assignment to undefined symbol");
-            expr_type = analyze_expression(context, assignment->expr, var->qtype);
+            var = lookup_or_error(context, assignment->lhs, "assignment to undefined symbol");
+            expr_type = analyze_expression(context, assignment->rhs, var->qtype);
             if (!quecto_types_equal(var->qtype, expr_type)) {
                 report_error(assignment->line, assignment->col, "mismatched types");
             }
             break;
         case AST_INDEX:
-            var = lookup_or_error(context, get_underlying_symbol_from(assignment->symbol), "assignment to undefined symbol");
-            analyze_index(context, assignment->symbol);
-            expr_type = analyze_expression(context, assignment->expr, var->qtype->inner);
+            var = lookup_or_error(context, get_underlying_symbol_from(assignment->lhs), "assignment to undefined symbol");
+            analyze_index(context, assignment->lhs);
+            expr_type = analyze_expression(context, assignment->rhs, var->qtype->inner);
             if (!quecto_types_equal(var->qtype->inner, expr_type)) {
                 report_error(assignment->line, assignment->col, "mismatched types");
             }
@@ -166,35 +174,32 @@ QuectoType *analyze_expression(AnalysisContext *context, AST *expr, QuectoType *
 
 
 QuectoType *analyze_call(AnalysisContext *context, AST *call) {
-    SymbolData *signature = lookup_or_error(context, call->callee, "cannot call an undefined procedure");
+    SymbolData *symbol = lookup_or_error(context, call->callee, "cannot call an undefined procedure");
 
-    if (signature->type != SYM_TYPE_PROCEDURE) {
+    if (!quecto_is_procedure(symbol->qtype)) {
         report_error(call->line, call->col, "Cannot call a non-procedure");
         return NULL;
     }
 
-    if (signature->param_count != call->arg_count) {
+    ProcSignature *call_signature = symbol->qtype->signature;
+
+    if (call_signature->param_count != call->arg_count) {
         report_error(call->line, call->col, "Call does not match procedure signature");
         return NULL;
     }
 
     for (int i = 0; i < call->arg_count; i++) {
-        analyze_expression(context, call->args[i], signature->param_types[i]);
+        analyze_expression(context, call->args[i], call_signature->param_types[i]);
     }
 
-    return call->evaled_type = signature->return_types[0];
+    return call->evaled_type = call_signature->return_types[0];
 }
 
 
 QuectoType *analyze_index(AnalysisContext *context, AST *index) {
-    SymbolData *signature = lookup_or_error(context, index->access, "undefined variable");
+    SymbolData *signature = lookup_or_error(context, index->array, "undefined variable");
 
-    if (signature->type != SYM_TYPE_VARIABLE) {
-        report_error(index->line, index->col, "cannot index a non variable");
-        return NULL;
-    }
-
-    if (signature->qtype->type != QUECTO_ARRAY) {
+    if (!quecto_is_array(signature->qtype)) {
         report_error(index->line, index->col, "cannot index a non array");
         return NULL;
     }

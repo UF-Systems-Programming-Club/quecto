@@ -1,7 +1,6 @@
 #include <stdio.h>
 
 #include "ast.h"
-#include "bytecode.h"
 #include "common.h"
 #include "error.h"
 #include "symbol_table.h"
@@ -23,13 +22,13 @@ void print_ast(AST* ast, int indent) {
 
             printf("(");
             for (int i = 0; i < ast->param_count; i++) {
-                print_ast(ast->params[i]->symbol, 0);
+                print_ast(ast->params[i]->lhs, 0);
                 printf(": "); print_type(ast->params[i]->evaled_type);
                 if (i < ast->param_count - 1) printf(", ");
             }
             printf(") => (");
             for (int i = 0; i < ast->return_count; i++) {
-                print_ast(ast->returns[i]->symbol, 0);
+                print_ast(ast->returns[i]->lhs, 0);
                 printf(": "); print_type(ast->returns[i]->evaled_type);
                 if (i < ast->return_count - 1) printf(", ");
             }
@@ -47,7 +46,7 @@ void print_ast(AST* ast, int indent) {
             printf(")");
             break;
         case AST_INDEX:
-            print_ast(ast->access, indent);
+            print_ast(ast->array, indent);
             printf("[");
             print_ast(ast->index, 0);
             printf("]");
@@ -75,17 +74,17 @@ void print_ast(AST* ast, int indent) {
             print_indent(0, "%d", ast->int_lit);
             break;
         case AST_ASSIGNMENT:
-            print_ast(ast->symbol, indent);
+            print_ast(ast->lhs, indent);
             printf(" = ");
-            print_ast(ast->expr, 0);
+            print_ast(ast->rhs, 0);
             printf(";\n");
             break;
         case AST_DECL:
-            print_ast(ast->symbol, indent);
+            print_ast(ast->lhs, indent);
             printf(" : ");
             if (ast->evaled_type != NULL) print_type(ast->evaled_type);
             printf(" = ");
-            print_ast(ast->expr, 0);
+            print_ast(ast->rhs, 0);
             printf(";\n");
             break;
         case AST_BINARY_OP:
@@ -115,7 +114,7 @@ void print_ast(AST* ast, int indent) {
             break;
         case AST_RETURN:
             print_indent(0, "return ");
-            print_ast(ast->expr, 0);
+            print_ast(ast->rhs, 0);
             printf(";\n");
             break;
         case AST_IF:
@@ -149,7 +148,7 @@ void print_ast(AST* ast, int indent) {
 }
 
 AST *get_underlying_symbol_from(AST *index) {
-    return (index->access && index->access->type == AST_SYMBOL) ? index->access : get_underlying_symbol_from(index->access);
+    return (index->array && index->array->type == AST_SYMBOL) ? index->array : get_underlying_symbol_from(index->array);
 }
 
 bool op_is_arithmetic(BinaryOp op) {

@@ -86,19 +86,21 @@ typedef struct AST {
 
         // Indexing
         struct {
-            struct AST *access; // symbol
+            struct AST *array; // symbol
             struct AST *index; // expr
         };
 
+        // Access
         struct {
             struct AST *on;
             struct AST *what;
-        };
+        }; 
+
 
         // Declaration and Assignment
         struct {
-            struct AST *symbol;
-            struct AST *expr;
+            struct AST *lhs;
+            struct AST *rhs;
         };
 
         // If, Elif, Else, While

@@ -34,7 +34,7 @@ void ht_resize(HashTable *ht) {
         }
 
         new_keys[index] = key;
-        new_items[index] = item;
+        // new_items[index] = item;
     }
 
     ht->keys = new_keys;
@@ -91,6 +91,22 @@ void *ht_nsearch(HashTable *ht, const void *key, size_t key_size) {
     return NULL;
 }
 
+int ht_nindex(HashTable *ht, const void *key, size_t key_size) {
+    if (ht->capacity == 0) return -1;
+
+    uint64_t hash = fnv1a_hash(key, key_size);
+    size_t index = hash % ht->capacity;
+    while (ht->keys[index].data != NULL) {
+        if (ht->keys[index].size == key_size && memcmp(ht->keys[index].data, key, key_size) == 0) {
+            return index;
+        }
+
+        index = (index + 1) % ht->capacity;
+    }
+
+    return -1;
+}
+
 
 void arena_create(Arena *a, size_t capacity) {
     a->capacity = capacity;
@@ -122,13 +138,7 @@ void *arena_alloc(Arena *a, size_t size) {
 
 void *arena_realloc(Arena *a, void *ptr, size_t old_size, size_t new_size) {
     uint8_t *res = (uint8_t *)arena_alloc(a, new_size);
-    for (size_t i = 0; i < old_size; i++) {
-        uint8_t *it = (uint8_t *)ptr;
-        *res = *it;
-        it++;
-        res++;
-    }
-
+    memcpy(res, ptr, old_size);
     return res;
 }
 
@@ -147,9 +157,101 @@ void arena_reset(Arena *a) {
     a->size = 0;
 }
 
+size_t arena_mark(Arena *a) {
+    return a->size;
+}
+
+void arena_restore(Arena *a, size_t mark) {
+    a->size = mark;
+}
+
 void arena_free(Arena *a) {
     free(a->data);
     a->data = NULL;
     a->capacity = 0;
     a->size = 0;
+}
+
+
+void set_create(Set *set, Arena *arena, size_t size) { // bit_count is in universe
+    set->bit_count = size;
+    set->word_count = (size + 63) / 64;
+    set->buckets = arena_alloc(arena, set->word_count * sizeof(uint64_t)); // for bitset
+}
+
+void set_intersect(Set *a, Set *b) {
+    assert(a->bit_count == b->bit_count);
+
+    for (int i = 0; i < b->word_count; i++) {
+        a->buckets[i] &= b->buckets[i];
+    }
+}
+
+void set_add(Set *a, Set *b) {
+    assert(a->bit_count == b->bit_count);
+
+    for (int i = 0; i < b->word_count; i++) {
+        a->buckets[i] |= b->buckets[i];
+    }
+}
+
+void set_subtract(Set *a, Set *b) {
+    assert(a->bit_count == b->bit_count);
+
+    for (int i = 0; i < b->word_count; i++)
+        a->buckets[i] &= ~b->buckets[i];
+}
+
+bool set_insert(Set *set, int val) {
+    return set->buckets[val >> 6] >> (val & 63) & 1 ? false : (set->buckets[val >> 6] |= 1ULL << (val & 63)); 
+}
+
+int set_pop(Set *set) { // pop first
+    for (int i = set->word_count - 1; i >= 0; i--) {
+        if (set->buckets[i]) {
+            uint64_t w = set->buckets[i];
+            uint64_t bit = 63 - __builtin_clzll(w);
+            set->buckets[i] &= ~(1ULL << bit);
+            return i * 64 + bit;
+        }
+    }
+    return -1;
+}
+
+bool set_has(Set *set, int val) {
+    return set->buckets[val >> 6] >> (val & 63) & 1;
+}
+
+void set_remove(Set *set, int val) {
+    set->buckets[val >> 6] &= ~(1ULL << (val & 63));
+}
+
+void set_clear(Set *set) {
+    memset(set->buckets, 0ULL, set->word_count * sizeof(uint64_t));
+}
+
+void set_copy(Set *dst, Set *src) {
+    assert(dst->bit_count == src->bit_count);
+
+    memcpy(dst->buckets, src->buckets, src->word_count * sizeof(uint64_t));
+}
+
+bool set_equals(Set *a, Set *b) {
+    assert(a->bit_count == b->bit_count);
+    return memcmp(a->buckets, b->buckets, a->word_count * sizeof(uint64_t)) == 0;
+}
+
+bool set_empty(Set *set) {
+    for (int i = 0; i < set->word_count; i++) {
+        if (set->buckets[i]) return false;
+    }
+    return true;
+}
+
+void set_complement(Set *set) {
+    for (int i = 0; i < set->word_count; i++) {
+        set->buckets[i] = ~set->buckets[i];
+    }
+    if (set->bit_count & 63)
+        set->buckets[set->word_count - 1] &= (1ULL << (set->bit_count & 63)) - 1;
 }

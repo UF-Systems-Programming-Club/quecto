@@ -3,13 +3,8 @@
 #include "symbol_table.h"
 #include "common.h"
 
-const char *symbol_type_to_string_table[] = {
-    [SYM_TYPE_VARIABLE] = "variable",
-    [SYM_TYPE_PROCEDURE] = "procedure"
-};
-
 const uint32_t quecto_primitive_width[] = {
-    [QUECTO_COMP_INT] = -1, // depends on containter or other known types in an expression
+    [QUECTO_COMP_INT] = -1, // depends on container or other known types in an expression
     [QUECTO_I8] = 1,
     [QUECTO_U8] = 1,
     [QUECTO_I32] = 4,
@@ -20,14 +15,10 @@ const uint32_t quecto_primitive_width[] = {
 
 QuectoType default_integer_type = (QuectoType) { .type = QUECTO_U32 };
 
-static_assert(sizeof(symbol_type_to_string_table) / sizeof(char *) == SYM_TYPE_COUNT,
-        "Every symbol type should have entry in string table.");
-
-SymbolData *insert_symbol(Arena *arena, SymbolTable *symbol_table, const char *symbol, SymbolType type) {
+SymbolData *insert_symbol(Arena *arena, SymbolTable *symbol_table, const char *symbol) {
     HashTable *table = &symbol_table->table;
 
     SymbolData *data = arena_alloc_type(arena, SymbolData);
-    data->type = type;
 
     ht_insert(table, symbol, data);
     return data;
@@ -41,20 +32,6 @@ void *get_symbol(SymbolTable *symbol_table, const char *str) {
         table = table->prev;
     }
     return NULL;
-}
-
-void print_symbol_table(SymbolTable *symbol_table, int indent) {
-    for (int i = 0; i < symbol_table->table.capacity; i++) {
-        if (symbol_table->table.keys[i].data == NULL) continue;
-
-        SymbolData *data = (SymbolData*) symbol_table->table.items[i];
-
-        print_indent(1, "\"%.*s\":\t{ type:\t%s,\tstack offset:\t%d },\n",
-            (int)symbol_table->table.keys[i].size,
-            (char*)symbol_table->table.keys[i].data,
-            symbol_type_to_string_table[data->type],
-            data->stack_offset);
-    }
 }
 
 
@@ -81,6 +58,16 @@ bool quecto_is_integer(QuectoType *a) {
         default:
             return false;
     }
+}
+
+
+bool quecto_is_procedure(QuectoType *a) {
+    return a->type == QUECTO_PROCEDURE;
+}
+
+
+bool quecto_is_array(QuectoType *a) {
+    return a->type == QUECTO_ARRAY;
 }
 
 
@@ -132,6 +119,37 @@ bool quecto_is_signed(QuectoType *a) {
     }
 }
 
+
+void print_symbol_table(SymbolTable *symbol_table, int indent) {
+    for (int i = 0; i < symbol_table->table.capacity; i++) {
+        if (symbol_table->table.keys[i].data == NULL) continue;
+
+        SymbolData *data = (SymbolData*) symbol_table->table.items[i];
+
+        print_indent(indent, "\"%.*s\":\t",
+                     (int)symbol_table->table.keys[i].size,
+                     (char*)symbol_table->table.keys[i].data
+                 );
+        print_type(data->qtype);
+        printf("\n");
+    }
+}
+
+
+void print_function_signature(ProcSignature *signature) {
+    printf("(");
+    for (int i = 0; i < signature->param_count; i++) {
+        print_type(signature->param_types[i]);
+        if (i == signature->param_count) printf(", ");
+    }
+    printf(") -> (");
+    for (int i = 0; i < signature->return_count; i++) {
+        print_type(signature->return_types[i]);
+        if (i == signature->return_count) printf(", ");
+    }
+    printf(")");
+}
+
 void print_type(QuectoType *qtype) {
     if (qtype == NULL) {
         printf("(null)");
@@ -148,6 +166,7 @@ void print_type(QuectoType *qtype) {
             print_type(qtype->inner);
             printf("[%lu]", qtype->array_size);
             break;
+        case QUECTO_PROCEDURE: print_function_signature(qtype->signature); break;
         default:
             UNREACHABLE("Non-existent Quecto Type");
             break;

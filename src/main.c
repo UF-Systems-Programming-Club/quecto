@@ -7,8 +7,9 @@
 #include "parser.h"
 #include "ast.h"
 #include "analysis.h"
-#include "bytecode.h"
+#include "emission.h"
 #include "codegen.h"
+#include "passes.h"
 #include "error.h"
 #include "backends/linux_x64.h"
 
@@ -23,7 +24,7 @@ int main(int argc, char **argv) { // quecto <command> <input> {flags}
         int current_arg = 1;
         if (strncmp(argv[current_arg++], "build", sizeof("build")) == 0) {
             if (current_arg >= argc) {
-                printf("no file supplied.");
+                printf("no file supplied.\n");
                 return -1;
             }
             char *filename = argv[current_arg];
@@ -62,9 +63,11 @@ int compile(const char *filename) {
     if (error) return -1;
 
     Arena backing = {0};
+    Arena scratch = {0};
     HashTable types = {0}; // intern table
 
-    arena_create(&backing, 1024 * 1024);
+    arena_create(&backing, 1024 * 2048);
+    arena_create(&scratch, 1024 * 1024);
 
     ParserState parser = {
         .tokens = tokens,
@@ -86,24 +89,33 @@ int compile(const char *filename) {
 
     analyze_ast(&analysis_ctx, ast);
 
-    print_ast(ast, 0);
-
     EmitContext emit_ctx = (EmitContext) {
         .scope = &symbols,
         .arena = &backing,
     };
 
-    Program program = {0};
-    emit_program_bytecode(&emit_ctx, &program, ast);
+    Passes passes = (PassFn[]) {
+            pass_insert_phis,
+            pass_rename,
+            pass_kill_slots,
+            pass_remove_copies,
+            pass_liveness,
+            pass_compute_liveness,
+            pass_crosses_call,
+            pass_precoloring,
+            pass_color_cfg,
+            pass_phis_into_copies,
+            pass_sweep_nops,
+            NULL,
+    };
 
-    pretty_print_program(program);
-    
-    PhysRegs pregs = {0};
-    adhere_program(&program, &pregs);
-    analyze_program(&program, &pregs);
+    Program program = { .symbols = &symbols };
+    emit_program(&emit_ctx, &program, ast);
+
+    passes_run(&program, passes, (Arenas) { .scratch = &scratch, .persistent = &backing});
 
     FILE *out = fopen("out.S", "w");
-    compile_program_with(out, &LINUX_X86_64_BACKEND, &program);
+    compile_program_with(out, &scratch, &LINUX_X86_64_BACKEND, &program);
 
     fclose(out);
     

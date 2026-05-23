@@ -11,6 +11,11 @@
 
 #define MAX_PARAMS 4
 
+#define DYN_ARR(type) struct { \
+    type *items; \
+    size_t count, capacity; \
+}
+
 #define UNREACHABLE(err)\
     do {\
         fprintf(stderr, "UNREACHABLE reached at %s:%d in %s(): %s\n", __FILE__, __LINE__, __func__, (err));\
@@ -66,11 +71,12 @@
 // NOTE: this hash table implementation does not support removal (yet?), as the symbol table
 // does not require removal
 
+
+
 #define FNV_PRIME 0x100000001b3
 #define FNV_BASIS 0xcbf29ce484222325
 
 uint64_t fnv1a_hash(const void *str, size_t n);
-
 
 typedef struct {
     size_t size;
@@ -89,6 +95,7 @@ void ht_ninsert(HashTable *ht, const void *key, size_t key_size, void *item);
 void ht_resize(HashTable *ht);
 void *ht_search(HashTable *ht, const char *str);
 void *ht_nsearch(HashTable *ht, const void *key, size_t key_size);
+int ht_nindex(HashTable *ht, const void *key, size_t key_size);
 
 // for printing
 
@@ -104,12 +111,21 @@ typedef struct {
     size_t capacity;
 } Arena;
 
+typedef struct {
+    Arena *persistent;
+    Arena *scratch;
+} Arenas;
+
 void arena_create(Arena *a, size_t capacity);
 void *arena_alloc(Arena *a, size_t size);
 void *arena_realloc(Arena *a, void *ptr, size_t old_size, size_t new_size);
 void *arena_intern(Arena *a, HashTable *intern_table, const void *value, size_t size);
 void arena_clear(Arena *a);
 void arena_free(Arena *a);
+
+size_t arena_mark(Arena *a);
+void arena_restore(Arena *a, size_t cursor);
+
 #define arena_alloc_type(arena_ptr, type) \
     (type *)arena_alloc((arena_ptr), sizeof(type))
 
@@ -117,6 +133,55 @@ typedef struct {
     size_t len;
     const char *str;
 } StringView;
+
+typedef struct {
+    uint64_t *buckets;
+    size_t bit_count; 
+    size_t word_count;   
+} Set;
+
+void set_create(Set *set, Arena *arena, size_t size);
+bool set_equals(Set *a, Set *b);
+void set_intersect(Set *a, Set *b);
+bool set_insert(Set *set, int val);
+void set_remove(Set *set, int val);
+int set_pop(Set *set);
+bool set_empty(Set *set);
+void set_add(Set *a, Set *b); // stores into a
+void set_subtract(Set *a, Set *b);
+bool set_has(Set *set, int val);
+void set_complement(Set *set);
+void set_clear(Set *set);
+void set_copy(Set *dst, Set* src);
+
+#define DEFINE_STACK(type) \
+struct { \
+    Arena *arena; \
+    type *stack; \
+    size_t capacity; \
+    size_t cursor; \
+} \
+
+#define DEFINE_STACK_DEF(name, type) \
+     static inline void name##_set_backing(name *stack, Arena *arena) {\
+         stack->arena = arena;\
+     }\
+     static inline type name##_pop(name *stack) { \
+         if (stack->cursor <= 0) return (type) { 0 };\
+         return stack->stack[--stack->cursor];\
+     } \
+     static inline type name##_peek(name *stack, int dist) { \
+        return stack->stack[stack->cursor - dist]; \
+     } \
+     static inline void name##_push(name *stack, type val) { \
+        if (stack->cursor + 1 > stack->capacity) { \
+            size_t old = stack->capacity; \
+            size_t new = old == 0 ? 16 : old * 2; \
+            stack->stack = arena_realloc(stack->arena, stack->stack, old * sizeof(type), new * sizeof(type)); \
+            stack->capacity = new;\
+        }\
+        stack->stack[stack->cursor++] = val; \
+     } \
 
 #define sv_literal(str) (StringView){ sizeof(str) - 1, (str) }
 #define sv_fmt "%.*s"
