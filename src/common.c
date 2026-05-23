@@ -91,6 +91,22 @@ void *ht_nsearch(HashTable *ht, const void *key, size_t key_size) {
     return NULL;
 }
 
+int ht_nindex(HashTable *ht, const void *key, size_t key_size) {
+    if (ht->capacity == 0) return -1;
+
+    uint64_t hash = fnv1a_hash(key, key_size);
+    size_t index = hash % ht->capacity;
+    while (ht->keys[index].data != NULL) {
+        if (ht->keys[index].size == key_size && memcmp(ht->keys[index].data, key, key_size) == 0) {
+            return index;
+        }
+
+        index = (index + 1) % ht->capacity;
+    }
+
+    return -1;
+}
+
 
 void arena_create(Arena *a, size_t capacity) {
     a->capacity = capacity;

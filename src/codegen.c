@@ -9,9 +9,10 @@
 
 #define MLBL(l) ((MachineOperand){.type = MOPERAND_LABEL, .label = (l) })
 
-MachineCode emit_procedure_with(CodegenBackend *backend, Procedure procedure, SymbolTable *globals) {
+MachineCode emit_procedure_with(CodegenBackend *backend, Arena *scratch, Procedure procedure, SymbolTable *globals) {
     CodegenInterface iface = {
         .output = {0},
+        .scratch = scratch,
         .vregs = &procedure.vregs,
         .slots = &procedure.slots,
         .globals = globals,
@@ -25,7 +26,7 @@ MachineCode emit_procedure_with(CodegenBackend *backend, Procedure procedure, Sy
         int b = procedure.cfg.rpo_list[i];
         BasicBlock *block = &procedure.cfg.items[b];
         
-        char *buf = malloc(16);
+        char *buf = arena_alloc(scratch, 16);
         snprintf(buf, 16, "\t.L_BLK%d", b);
         MachineInstr instr = (MachineInstr) { .instruction = LABEL_OPCODE, .dest = MLBL(buf)};
         array_append(iface.output, instr);
@@ -61,19 +62,17 @@ MachineCode emit_procedure_with(CodegenBackend *backend, Procedure procedure, Sy
     }
 
     backend->emit_epilogue(&iface, &procedure);
-
     return iface.output;
 }
 
 
-void compile_program_with(FILE *out, CodegenBackend *backend, Program *program) {
+void compile_program_with(FILE *out, Arena *scratch, CodegenBackend *backend, Program *program) {
     backend->emit_symbols(out, program);
     backend->emit_entry(out, program);
 
     for (int i = 0; i < program->count; i++) {
-        // if (program->items[i].externed) continue;
         fprintf(out, "%s:\n", program->items[i].name);
-        MachineCode code = emit_procedure_with(backend, program->items[i], program->symbols);
+        MachineCode code = emit_procedure_with(backend, scratch, program->items[i], program->symbols);
         backend->print_machine_code(out, &code);
     }
 }

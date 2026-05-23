@@ -34,9 +34,9 @@
     array_append( (out), ((MachineInstr) {.instruction = (op), .dest = (d), .arg1 = (a1), .arg2 = (a2)}) )
 
 #ifdef __MACH__
-const char *mangled_format = "_%s";
+const char *mangled_format = "_%.*s";
 #else
-const char *mangled_format = "%s";
+const char *mangled_format = "%.*s";
 #endif
 
 
@@ -505,16 +505,11 @@ X64_INSTRUCTION(call) {
         );
     }
 
-    char *name = malloc(32);
-        for (int i = 0; i < iface->globals->table.capacity; i++) {
-        SymbolData *sym = iface->globals->table.items[i];
-        if (sym != NULL && sym->id == instr.arg1.glbl) {
-            if (sym->externed) snprintf(name, 32, mangled_format, (char*)iface->globals->table.keys[i].data);
-            else snprintf(name, 32, "%s", (char*)iface->globals->table.keys[i].data);
-            break;
-        }
-    }
-  
+    Key global_name = iface->globals->table.keys[instr.arg1.glbl];
+    SymbolData *global_data = iface->globals->table.items[instr.arg1.glbl];
+    char *name = arena_alloc(iface->scratch, (global_name.size + 8) * sizeof(char));
+    snprintf(name, global_name.size + 8, global_data->externed ? mangled_format : "%.*s", global_name.size, global_name.data);
+    
     iface->arg_count = 0;
     EMIT(iface->output, X64_CALL, MLBL(name), MINV, MINV);
 
@@ -558,7 +553,7 @@ void emit_symbols(FILE *out, Program *program) {
     for (int i = 0; i < program->symbols->table.capacity; i++) {
         if (program->symbols->table.keys[i].size != 0) {
             SymbolData *symbol = program->symbols->table.items[i];
-            if (symbol->type == SYM_TYPE_PROCEDURE && symbol->externed) {
+            if (symbol->externed) {
                 fprintf(out, "extern ");
                 emit_mangled_symbol(out, program->symbols->table.keys[i].data);
                 fprintf(out, "\n");

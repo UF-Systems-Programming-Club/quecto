@@ -80,13 +80,7 @@ typedef struct {
   FPrintFn print_machine_code;
 } CodegenBackend;
 
-// functions that every backend will need to implement
-// MachCode instruction_selection(Bytecode bytecode, PhysRegs *pregs);
-// This function essentially performs any and all transformations to
-// the bytecode that are necessary before register allocation occurs
-// (e.g. 3AC to 2AC conversion for x64, respecting calling conventions, etc;)
-
-void compile_program_with(FILE *out, CodegenBackend *backend, Program *program);
+void compile_program_with(FILE *out, Arena *scratch, CodegenBackend *backend, Program *program);
 void print_machine_code(MachineCode *code, int indent);
 
 #endif

@@ -95,6 +95,7 @@ void ht_ninsert(HashTable *ht, const void *key, size_t key_size, void *item);
 void ht_resize(HashTable *ht);
 void *ht_search(HashTable *ht, const char *str);
 void *ht_nsearch(HashTable *ht, const void *key, size_t key_size);
+int ht_nindex(HashTable *ht, const void *key, size_t key_size);
 
 // for printing
 

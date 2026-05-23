@@ -1,6 +1,8 @@
 #include "emission.h"
 #include "cfg.h"
+#include "common.h"
 #include "ir.h"
+#include "symbol_table.h"
 
 #define NONE (Operand) { 0 }
 #define VREG(v) (Operand) { .type = OPERAND_VREG, .vreg = (v) }
@@ -41,7 +43,8 @@ void emit_program(EmitContext *context, Program *into, AST *program) {
 void emit_procedure(EmitContext *context, Procedure *into, AST *procedure) {
     assert(procedure->type == AST_PROCEDURE);
 
-    SymbolData *info = get_symbol(context->scope, procedure->name->ident);
+    SymbolData *symbol = get_symbol(context->scope, procedure->name->ident);
+    ProcSignature *signature = symbol->qtype->signature;
 
     context->procedure = into;
 
@@ -55,7 +58,7 @@ void emit_procedure(EmitContext *context, Procedure *into, AST *procedure) {
     context->procedure->cfg.entry_block = allocate_block(context);
     start_block(context, context->procedure->cfg.entry_block);
 
-    for (int i = 0; i < info->param_count; i++) {
+    for (int i = 0; i < signature->param_count; i++) {
         Operand slot = slot_for(context, get_symbol(context->scope, procedure->params[i]->lhs->ident), true);
         emit_instr(context, OPCODE_PARAM, slot, IMM(i), NONE);
     }
@@ -64,28 +67,6 @@ void emit_procedure(EmitContext *context, Procedure *into, AST *procedure) {
     if (context->current_block != -1) emit_ret(context, (Operand) { 0 });
 
     context->scope = procedure->symbols->prev;
-
-    // print_procedure(*context->procedure);
-
-    // passes_preparation(context);
-    // pass_insert_phis(context);
-    // pass_rename(context);
-    // pass_kill_slots(context);
-    // pass_remove_copies(context);
-
-    // pass_three_op_to_two(context);
-
-    // fill_liveness(context); // needs recompute after phis inserted
-    // pass_compute_liveness(context);
-    // pass_color_cfg(context);
-    // pass_phis_into_copies(context);
-    // pass_sweep_nops(context);
-    // context->procedure->flattened = pass_flatten(context);
-    
-    // remove_copies(into);
-    // phis_into_copies(context, into);
-    // sweep_nops(context, into);
-    // into->flattened = flatten_cfg(context->arena, &into->cfg);
 }
 
 
@@ -431,11 +412,8 @@ Operand allocate_vreg_for_type(EmitContext *context, QuectoType *type) {
 Operand global_for(EmitContext *context, const char *ident) {
     SymbolTable *globals = context->scope;
     for (;globals->prev != NULL; globals = globals->prev);
-    SymbolData *sym = get_symbol(globals, ident);
 
-    assert(sym != NULL); // not in globals;
-    
-    return GLOBAL(sym->id);
+    return GLOBAL(ht_nindex(&globals->table, ident, strlen(ident)));
 }
 
 

@@ -5,13 +5,12 @@
 #include "symbol_table.h"
 
 typedef struct {
-  int global_count;
-  
-  Arena *arena;
-  HashTable *type_intern_table;
-  
-  QuectoType **returns;
-  size_t return_count;
+    int global_count;
+
+    Arena *arena;
+    HashTable *type_intern_table;
+
+    ProcSignature *current_procedure;
 
     SymbolTable *symbol_table;
 } AnalysisContext;

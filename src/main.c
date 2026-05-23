@@ -24,7 +24,7 @@ int main(int argc, char **argv) { // quecto <command> <input> {flags}
         int current_arg = 1;
         if (strncmp(argv[current_arg++], "build", sizeof("build")) == 0) {
             if (current_arg >= argc) {
-                printf("no file supplied.");
+                printf("no file supplied.\n");
                 return -1;
             }
             char *filename = argv[current_arg];
@@ -113,10 +113,9 @@ int compile(const char *filename) {
     emit_program(&emit_ctx, &program, ast);
 
     passes_run(&program, passes, (Arenas) { .scratch = &scratch, .persistent = &backing});
-    // print_program(program, true);
 
     FILE *out = fopen("out.S", "w");
-    compile_program_with(out, &LINUX_X86_64_BACKEND, &program);
+    compile_program_with(out, &scratch, &LINUX_X86_64_BACKEND, &program);
 
     fclose(out);
     
