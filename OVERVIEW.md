@@ -2,7 +2,7 @@
 
 ## Goals
 
-Quecto is meant to be a experimental systems language but as it stands the compiling process is whats being developed before any
+Quecto is meant to be an experimental systems language but as it stands the compiling process is whats being developed before any
 high-level constructs are made or added. There are no explicit design constraints and choices are made semi-arbitrarily.
 
 Currently the desired grammar looks like this:
@@ -39,8 +39,8 @@ The list can go on and on.
 
 ## Compiler
 
-Currently the Quecto Compiler has 5 stages:
-  - Texer
+Currently the Quecto Compiler has 6 stages:
+  - Lexer
   - Parsing
   - Analysis
   - IR Generation
@@ -64,7 +64,7 @@ Related Files:
   - `include/parser.h`
   - `src/parser.c`
   - `include/ast.h`
-  - `include/ast.c`
+  - `src/ast.c`
 
 ### Analysis
 
@@ -75,14 +75,29 @@ Related Files:
   - `include/analysis.h`
   - `src/analysis.c`
 
-### IR Generation
+### IR Emission
 
-Quecto uses its own Intermediate Representation that currently has roughly 22 different OPCODEs but these are subject to change. This
+Quecto uses its own Intermediate Representation that is contained within a Control Flow Graph. This
 stage is dependent on Analysis such that the IR code generated is valid and it is also depedent on the Symbol Table derived in Analysis.
 
 Related Files:
-  - `include/bytecode.h`
-  - `src/bytecode.c`
+  - `include/ir.h`
+  - `include/cfg.h`
+  - `include/emission.h`
+  - `src/ir.c`
+  - `src/emission.c`
+  - `src/cfg.c`
+
+### CFG + IR Analysis
+
+After emission, there are a series of passes done on the Quecto IR to transform it into SSA so that more advanced optimizations can be implemented in the future, but for
+now regalloc is done using a "ColorPool" that allows for register hints.
+
+Related Files:
+  - `include/passes.h`
+  - `include/cfg.h`
+  - `src/passes.c`
+  - `src/cfg.c`
 
 ### Code Generation
 
@@ -93,3 +108,4 @@ assembly's conventions.
 Related Files:
   - `include/codegen.h`
   - `src/codegen.c`
+  - `src/backends/linux_x64.c`
