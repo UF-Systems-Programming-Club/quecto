@@ -20,10 +20,18 @@ int get_token_precedence_table[] = {
     [TOKEN_OPEN_PAREN] = 4,
     [TOKEN_OPEN_SQUARE] = 4,
     [TOKEN_PERIOD] = 5,
+    [TOKEN_INT_LIT] = 6,
+    [TOKEN_FLOAT_LIT] = 6,
+    [TOKEN_IDENTIFIER] = 6,
+    [TOKEN_AMPERSAND] = 7,
 };
 
 bool token_is_operator(TokenType type) {
-    return (TOKEN_PLUS <= type && type <= TOKEN_GREATER_THAN) || (type == TOKEN_OPEN_PAREN) || (type == TOKEN_OPEN_SQUARE) || (type == TOKEN_PERIOD);
+    return (TOKEN_PLUS <= type && type <= TOKEN_GREATER_THAN) || (type == TOKEN_OPEN_PAREN) || (type == TOKEN_OPEN_SQUARE) || (type == TOKEN_PERIOD) || (type == TOKEN_AMPERSAND);
+}
+
+bool token_has_precedence(TokenType type) {
+    return (token_is_operator(type) || type == TOKEN_IDENTIFIER || type == TOKEN_INT_LIT || type == TOKEN_FLOAT_LIT || type == TOKEN_IDENTIFIER);
 }
 
 
@@ -33,7 +41,7 @@ bool token_is_primitive(TokenType type) {
 
 
 int get_token_type_precedence(TokenType type) {
-    return (token_is_operator(type)) ? get_token_precedence_table[type] : -1;
+    return token_has_precedence(type) ? get_token_precedence_table[type] : -1;
 }
 
 
@@ -110,7 +118,7 @@ AST *parse_identifier(ParserState *parser) {
     return symbol;
 }
 
-
+// array : ^[[i32; _]; _] = 
 QuectoType *parse_type(ParserState *parser) {
     QuectoType qtype = { 0 };
 
@@ -119,9 +127,20 @@ QuectoType *parse_type(ParserState *parser) {
         case TOKEN_I32:     qtype.type = QUECTO_I32; break;
         case TOKEN_U32:     qtype.type = QUECTO_U32; break;
         case TOKEN_I8:      qtype.type = QUECTO_I8; break;
-        case TOKEN_U8:      qtype.type = QUECTO_U8; break;                    
+        case TOKEN_U8:      qtype.type = QUECTO_U8; break;
+        case TOKEN_OPEN_SQUARE:
+            qtype.type = QUECTO_ARRAY;
+            qtype.inner = parse_type(parser);
+            expect_next_token(parser, tok, TOKEN_SEMICOLON);
+            expect_next_token(parser, tok, TOKEN_INT_LIT);
+            qtype.array_size = tok->int_lit;
+            expect_next_token(parser, tok, TOKEN_CLOSE_SQUARE);
+            break;
+        case TOKEN_CARET:
+            qtype.type = QUECTO_POINTER;
+            qtype.inner = parse_type(parser);
+            break;                
         default: {
-            // report_error(tok->line, tok->col, "not a recognized type");
             parser->current--;
             qtype.type = QUECTO_UNKNOWN;
         }
@@ -129,19 +148,7 @@ QuectoType *parse_type(ParserState *parser) {
 
     QuectoType *Q = arena_intern(parser->arena, parser->type_intern_table, &qtype, sizeof(QuectoType));
 
-    if (peek_token_type(parser, 0) == TOKEN_OPEN_SQUARE) {
-        expect_next_token(parser, tok, TOKEN_OPEN_SQUARE);
-        expect_next_token(parser, tok, TOKEN_INT_LIT);
-        
-        QuectoType qtype_outer;
-        qtype_outer.type = QUECTO_ARRAY;
-        qtype_outer.inner = Q;
-        qtype_outer.array_size = tok->int_lit;
-        
-        expect_next_token(parser, tok, TOKEN_CLOSE_SQUARE);
-        return arena_intern(parser->arena, parser->type_intern_table, &qtype_outer, sizeof(QuectoType));
-    }
-    
+
     return Q;
 }
 
@@ -215,7 +222,7 @@ ParserClsfcn classify_statement(ParserState *parser) {
         case TOKEN_OPEN_CURLY: return PCLF_BLOCK;
         case TOKEN_IDENTIFIER: {
             int i = 0;
-            while (peek_token_type(parser, i) != TOKEN_EOF) {
+            while (peek_token_type(parser, i) != TOKEN_SEMICOLON) {
                 switch(peek_token_type(parser, i)) {
                     case TOKEN_COLON: return PCLF_DECL;
                     case TOKEN_EQUALS: return PCLF_ASSIGN;
@@ -338,7 +345,10 @@ AST *parse_stmt_declaration(ParserState *parser) {
     Token tok;
 
     decl->lhs = parse_identifier(parser);
+    decl->line = tok.line;
+    decl->col = tok.col;
     expect_next_token(parser, &tok, TOKEN_COLON);
+
     decl->evaled_type = parse_type(parser);
 
     if (match_next_token(parser, &tok, TOKEN_EQUALS)) {
@@ -427,7 +437,7 @@ AST *parse_call(ParserState *parser, AST *on) {
 AST *parse_index(ParserState *parser, AST *on) {
     AST *index = arena_alloc_type(parser->arena, AST);
     index->type = AST_INDEX;
-    index->array = on;
+    index->base = on;
 
     Token tok;
     expect_next_token(parser, &tok, TOKEN_OPEN_SQUARE);
@@ -441,57 +451,69 @@ AST *parse_index(ParserState *parser, AST *on) {
 AST *parse_access(ParserState *parser, AST *on) {
     AST *access = arena_alloc_type(parser->arena, AST);
     access->type = AST_ACCESS;
-    access->on = on;
+    access->base = on;
 
     Token tok;
     expect_next_token(parser, &tok, TOKEN_PERIOD);
-    access->what = parse_identifier(parser);
+    access->specifier = parse_identifier(parser);
     
     return access;
+}
+
+AST *parse_int_lit(ParserState *parser) {
+    Token tok;
+    expect_next_token(parser, &tok, TOKEN_INT_LIT);
+    AST *literal = arena_alloc_type(parser->arena, AST);
+    literal->type = AST_INT_LIT;
+    literal->int_lit = tok.int_lit;
+    return literal;
+}
+
+AST *parse_float_lit(ParserState *parser) {
+    Token tok;
+    expect_next_token(parser, &tok, TOKEN_INT_LIT);
+    AST *literal = arena_alloc_type(parser->arena, AST);
+    literal->type = AST_FLOAT_LIT;
+    literal->int_lit = tok.float_lit;
+    return literal;
+}
+
+AST *parse_reference(ParserState *parser) {
+    Token tok;
+    expect_next_token(parser, &tok, TOKEN_AMPERSAND);
+    AST *ref = arena_alloc_type(parser->arena, AST);
+    ref->type = AST_REF;
+    ref->base = parse_expression(parser, 0); 
+    return ref;
 }
 
 
 AST *parse_expression(ParserState *parser, int min_prec) {  
     Token tok;
-    expect_next_token_multiple(parser, &tok, 4, TOKEN_INT_LIT, TOKEN_FLOAT_LIT, TOKEN_IDENTIFIER, TOKEN_OPEN_PAREN);
-
-    AST *left;
-
-    switch (tok.type) {
-        case TOKEN_INT_LIT:
-            left = arena_alloc_type(parser->arena, AST);
-            left->type = AST_INT_LIT;
-            left->int_lit = tok.int_lit;
-            break;
-        case TOKEN_FLOAT_LIT:
-            left = arena_alloc_type(parser->arena, AST);
-            left->type = AST_FLOAT_LIT;
-            left->float_lit = tok.float_lit;
-            break;
-        case TOKEN_IDENTIFIER:
-            left = arena_alloc_type(parser->arena, AST);
-            left->type = AST_SYMBOL;
-            left->ident = tok.identifier;
-            break;
-        case TOKEN_OPEN_PAREN:
-            left = parse_expression(parser, 0);
-            expect_next_token(parser, &tok, TOKEN_CLOSE_PAREN);
-            break;
-        default:
-            UNREACHABLE("TokenType");
-            break;
-    }
+    AST *left = NULL;
 
     // NOTE: utilizes the fact that get precedence returns -1 when the next token is
-    // not an operator
+    // not an operator or apart of an expression
     while (get_token_type_precedence(peek_token_type(parser, 0)) > min_prec) {
         switch (peek_token_type(parser, 0)) {
             case TOKEN_OPEN_SQUARE: left = parse_index(parser, left); break;
-            case TOKEN_OPEN_PAREN:  left = parse_call(parser, left); break;
+            case TOKEN_OPEN_PAREN:
+                if (left == NULL) {
+                    expect_next_token(parser, &tok, TOKEN_OPEN_PAREN);
+                    left = parse_expression(parser, 0);
+                    expect_next_token(parser, &tok, TOKEN_CLOSE_PAREN);
+                } else left = parse_call(parser, left);
+                break;
             case TOKEN_PERIOD:      left = parse_access(parser, left); break;
+            case TOKEN_AMPERSAND:   left = parse_reference(parser); break;
+            case TOKEN_INT_LIT:     left = parse_int_lit(parser); break;
+            case TOKEN_FLOAT_LIT:   left = parse_float_lit(parser); break;
+            case TOKEN_IDENTIFIER:  left = parse_identifier(parser); break;
             default:                left = parse_binary_op(parser, left); break;
         }
     }
+
+    assert(left != NULL && "failed to parse expression");
 
     return left;
 }

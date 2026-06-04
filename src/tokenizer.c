@@ -11,6 +11,8 @@ const char *token_to_string_table[] = {
     [TOKEN_MINUS] = "-",
     [TOKEN_MULTIPLY] = "*",
     [TOKEN_DIVIDE] = "/",
+    [TOKEN_CARET] = "^",
+    [TOKEN_AMPERSAND] = "^",
     [TOKEN_OPEN_CURLY] = "{",
     [TOKEN_CLOSE_CURLY] = "}",
     [TOKEN_OPEN_PAREN] = "(",
@@ -138,6 +140,8 @@ TokenArray tokenize(const char *buf, size_t buf_size) {
             case '-': tok.type = TOKEN_MINUS;       break;
             case '*': tok.type = TOKEN_MULTIPLY;    break;
             case '/': tok.type = TOKEN_DIVIDE;      break;
+            case '^': tok.type = TOKEN_CARET;       break;
+            case '&': tok.type = TOKEN_AMPERSAND;       break;
             case '{': tok.type = TOKEN_OPEN_CURLY;  break;
             case '}': tok.type = TOKEN_CLOSE_CURLY; break;
             case '(': tok.type = TOKEN_OPEN_PAREN;  break;

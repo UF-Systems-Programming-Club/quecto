@@ -92,6 +92,7 @@ void emit_statement(EmitContext *context, AST *statement) {
 }
 
 
+
 Operand emit_addr(EmitContext *context, AST *lvalue) {
     Operand out = allocate_vreg(context, (VregInfo) {.size = 8, .sign = 0});
 
@@ -106,8 +107,9 @@ Operand emit_addr(EmitContext *context, AST *lvalue) {
             break;
         }
         case AST_INDEX: {
-            Operand base = emit_addr(context, lvalue->array);
+            Operand base = emit_addr(context, lvalue->base);
             Operand index = emit_expr(context, lvalue->index);
+            index = emit_instr(context, OPCODE_EXT_Z, allocate_vreg(context, (VregInfo){.size=8,.sign=false}), index, NONE);
             int size = quecto_type_size(lvalue->evaled_type);
             emit_instr(context, OPCODE_ADDR,
                        out,
@@ -122,6 +124,19 @@ Operand emit_addr(EmitContext *context, AST *lvalue) {
 }
 
 
+Operand emit_decay(EmitContext *context, AST *of) {
+    switch (of->evaled_type->type) {
+        case QUECTO_ARRAY:
+            return emit_addr(context, of);
+        case QUECTO_POINTER:
+            return emit_symbol(context, of);
+        default:
+            assert(0 && "type cannot decay");
+            return NONE;
+    }
+}
+
+
 Operand emit_lhs(EmitContext *context, AST *lhs) {
     switch (lhs->type) {
         case AST_SYMBOL: {
@@ -129,8 +144,9 @@ Operand emit_lhs(EmitContext *context, AST *lhs) {
             return slot_for(context, var, false);
         }
         case AST_INDEX: {
-            Operand base = emit_addr(context, lhs->array);
+            Operand base = emit_decay(context, lhs->base);
             Operand index = emit_expr(context, lhs->index);
+            index = emit_instr(context, OPCODE_EXT_Z, allocate_vreg(context, (VregInfo){.size=8,.sign=false}), index, NONE);
             int size = quecto_type_size(lhs->evaled_type);
             return MEM(INDEX(base.vreg, index.vreg, 0 , size));
         }
@@ -254,9 +270,13 @@ Operand emit_symbol(EmitContext *context, AST *sym) {
 
 Operand emit_call(EmitContext *context, AST *call, bool has_dest) {
     assert(call->type == AST_CALL);
-    
+
+    Operand ops[call->arg_count];
     for (int i = 0; i < call->arg_count; i++) {
-        emit_instr(context, OPCODE_ARG, NONE, emit_expr(context, call->args[i]), NONE);
+        ops[i] = emit_expr(context, call->args[i]);
+    }
+    for (int i = 0; i < call->arg_count; i++) {
+        emit_instr(context, OPCODE_ARG, NONE, ops[i], NONE);
     }
     return emit_instr(context, OPCODE_CALL,
                         has_dest ? allocate_vreg_for_type(context, call->evaled_type) : NONE,
@@ -295,11 +315,13 @@ Operand emit_expr(EmitContext *context, AST *expr) {
         case AST_INT_LIT: return emit_instr(context, OPCODE_IMM, allocate_vreg_for_type(context, expr->evaled_type), IMM(expr->int_lit), NONE);
         case AST_SYMBOL: return emit_symbol(context, expr);
         case AST_INDEX: {
-            Operand base = emit_addr(context, expr->array);
+            Operand base = emit_decay(context, expr->base);
             Operand index = emit_expr(context, expr->index);
+            index = emit_instr(context, OPCODE_EXT_Z, allocate_vreg(context, (VregInfo){.size=8,.sign=false}), index, NONE);
             Operand ref = MEM(INDEX(base.vreg, index.vreg, 0, quecto_type_size(expr->evaled_type)));
             return emit_instr(context, OPCODE_INDEX, allocate_vreg_for_type(context, expr->evaled_type), ref, NONE);
         }
+        case AST_REF: return emit_addr(context, expr->base);
         case AST_CALL: return emit_call(context, expr, true);
         case AST_BINARY_OP: return emit_binary_op(context, expr);
         default: UNREACHABLE("invalid expr ast type");
@@ -326,6 +348,11 @@ void emit_branch(EmitContext *context, int true_target, int false_target, AST *e
     terminator.opcode = jump_condition_opcode_table[expr->op];
     terminator.arg1 = emit_expr(context, expr->left);
     terminator.arg2 = emit_expr(context, expr->right);
+
+    int size = quecto_type_size(expr->evaled_type);
+
+    if (context->procedure->vregs.items[terminator.arg1.vreg].size < size) terminator.arg1 = emit_instr(context, OPCODE_EXT_Z, allocate_vreg(context, (VregInfo){.size=size,.sign=false}), terminator.arg1, NONE);
+    if (context->procedure->vregs.items[terminator.arg2.vreg].size < size) terminator.arg2 = emit_instr(context, OPCODE_EXT_Z, allocate_vreg(context, (VregInfo){.size=size,.sign=false}), terminator.arg2, NONE);
 
     context->procedure->cfg.items[context->current_block].successors[0] = true_target;
     context->procedure->cfg.items[context->current_block].successors[1] = false_target;
@@ -438,3 +465,4 @@ Operand slot_for(EmitContext *context, SymbolData *sym, bool param) {
 
     return SLOT(*slot);
 }
+

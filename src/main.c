@@ -2,6 +2,7 @@
 #include <stdlib.h>
 
 #include "common.h"
+#include "ir.h"
 #include "symbol_table.h"
 #include "tokenizer.h"
 #include "parser.h"

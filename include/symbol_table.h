@@ -12,6 +12,7 @@ typedef enum {
     QUECTO_U32,
     QUECTO_I32,
     QUECTO_ARRAY,
+    QUECTO_POINTER,
     QUECTO_PROCEDURE,
     QUECTO_COUNT
 } QuectoPrimitiveType;

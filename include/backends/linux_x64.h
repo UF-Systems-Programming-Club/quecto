@@ -11,6 +11,7 @@ typedef enum {
     X64_DIV,
     X64_CMP,
     X64_MOV,
+    X64_MOVZ,
     X64_RET,
     X64_JMP,
     X64_JNE,

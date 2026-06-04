@@ -46,15 +46,19 @@ void print_ast(AST* ast, int indent) {
             printf(")");
             break;
         case AST_INDEX:
-            print_ast(ast->array, indent);
+            print_ast(ast->base, indent);
             printf("[");
             print_ast(ast->index, 0);
             printf("]");
             break;
+        case AST_REF:
+            printf("&");
+            print_ast(ast->base, indent);
+            break;
         case AST_ACCESS:
-            print_ast(ast->on, indent);
+            print_ast(ast->base, indent);
             printf(".");
-            print_ast(ast->what, 0);
+            print_ast(ast->specifier, 0);
             break;
         case AST_LIST:
             printf("{");
@@ -148,7 +152,7 @@ void print_ast(AST* ast, int indent) {
 }
 
 AST *get_underlying_symbol_from(AST *index) {
-    return (index->array && index->array->type == AST_SYMBOL) ? index->array : get_underlying_symbol_from(index->array);
+    return (index->base && index->base->type == AST_SYMBOL) ? index->base : get_underlying_symbol_from(index->base);
 }
 
 bool op_is_arithmetic(BinaryOp op) {

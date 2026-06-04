@@ -10,6 +10,7 @@ const uint32_t quecto_primitive_width[] = {
     [QUECTO_I32] = 4,
     [QUECTO_U32] = 4,
     [QUECTO_ARRAY] = -1,
+    [QUECTO_POINTER] = -1,
     [QUECTO_UNKNOWN] = -1,
 };
 
@@ -91,6 +92,8 @@ int quecto_type_size(QuectoType *a) {
          switch (a->type) {
             case QUECTO_ARRAY:
                  return quecto_type_size(a->inner) * a->array_size;
+            case QUECTO_POINTER:
+                return 8; // should depend on system
             default:
                 UNREACHABLE("invalid");
          }   
@@ -112,6 +115,8 @@ bool quecto_is_signed(QuectoType *a) {
         switch (a->type) {
             case QUECTO_ARRAY:
                 return quecto_is_signed(a->inner);
+            case QUECTO_POINTER:
+                return false;
             default:
                 UNREACHABLE("invalid");
                 return false;
@@ -163,8 +168,13 @@ void print_type(QuectoType *qtype) {
         case QUECTO_U8:          printf("u8"); break;
         case QUECTO_COMP_INT:    printf("comptime_int"); break;
         case QUECTO_ARRAY:
+            printf("[");
             print_type(qtype->inner);
-            printf("[%lu]", qtype->array_size);
+            printf("; %lu]", qtype->array_size);
+            break;
+        case QUECTO_POINTER:
+            printf("^");
+            print_type(qtype->inner);
             break;
         case QUECTO_PROCEDURE: print_function_signature(qtype->signature); break;
         default:

@@ -20,6 +20,8 @@ typedef enum {
     TOKEN_COLON,
     TOKEN_COMMA,
     TOKEN_PERIOD,
+    TOKEN_CARET,
+    TOKEN_AMPERSAND,
     
     TOKEN_PLUS,
     TOKEN_MINUS,

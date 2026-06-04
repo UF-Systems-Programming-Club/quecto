@@ -12,6 +12,13 @@ QuectoType *resolve_binary_type(QuectoType *left, QuectoType *right) {
     return right;
 }
 
+QuectoType *pointer_of_type(AnalysisContext *context, QuectoType *type) {
+    QuectoType pointer = { 0 };
+    pointer.type = QUECTO_POINTER;
+    pointer.inner = type;
+    return arena_intern(context->arena, context->type_intern_table, &pointer, sizeof(QuectoType));
+}
+
 
 SymbolData *lookup_or_error(AnalysisContext *context, AST *symbol, const char *message) {
     SymbolData *var = get_symbol(context->symbol_table, symbol->ident);
@@ -64,7 +71,6 @@ void analyze_procedure(AnalysisContext *context, AST *procedure, bool externed) 
 
     symbol->qtype = arena_intern(context->arena, context->type_intern_table, &qtype, sizeof(QuectoType));
     symbol->externed = externed;
-    symbol->id = ++context->global_count;
     
     context->current_procedure = symbol->qtype->signature;
 
@@ -123,7 +129,8 @@ void analyze_declaration(AnalysisContext *context, AST *decl) {
     }
 
     if (!quecto_types_equal(decl->evaled_type, is)) {
-        report_error(decl->line, decl->col, "declared as ");  print_type(decl->evaled_type); printf(" but assigned "); print_type(is); printf(".\n");
+        //report_error(decl->line, decl->col, "declared as "); // todo: create string/char buffer builder to ease printing for multiple destinations (i.e file output, errors, regular)
+        printf("declared as "); print_type(decl->evaled_type); printf(" but assigned "); print_type(is); printf(".\n");
     }
 
     symbol->qtype = decl->evaled_type;
@@ -167,6 +174,7 @@ QuectoType *analyze_expression(AnalysisContext *context, AST *expr, QuectoType *
         case AST_BINARY_OP: return analyze_binary_op(context, expr, expected);
         case AST_INDEX: return analyze_index(context, expr);
         case AST_LIST: return analyze_list(context, expr, expected);
+        case AST_REF: return analyze_ref(context, expr);
         default: UNREACHABLE("AST NOT EXPR");
     }
     return NULL;
@@ -197,18 +205,21 @@ QuectoType *analyze_call(AnalysisContext *context, AST *call) {
 
 
 QuectoType *analyze_index(AnalysisContext *context, AST *index) {
-    SymbolData *signature = lookup_or_error(context, index->array, "undefined variable");
 
-    if (!quecto_is_array(signature->qtype)) {
-        report_error(index->line, index->col, "cannot index a non array");
-        return NULL;
-    }
-
-    analyze_expression(context, index->index, NULL);
-
-    return index->evaled_type = signature->qtype->inner;
+    // if (!quecto_is_array(signature->qtype)) {
+    //     report_error(index->line, index->col, "cannot index a non array");
+    //     return NULL;
+    // }
+    index->base->evaled_type = analyze_expression(context, index->base, NULL);
+    index->index->evaled_type = analyze_expression(context, index->index, NULL);
+    return index->evaled_type = index->base->evaled_type->inner;
 }
 
+QuectoType *analyze_ref(AnalysisContext *context, AST *ref) {
+    QuectoType *inner = analyze_expression(context, ref->base, NULL);
+    // todo: verify that the reference is valid i.e not a constant integer etc
+    return ref->evaled_type = pointer_of_type(context, inner);
+};
 
 QuectoType *analyze_binary_op(AnalysisContext *context, AST *op, QuectoType *expected) {
     QuectoType *left = analyze_expression(context, op->left, expected);

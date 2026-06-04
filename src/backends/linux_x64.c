@@ -47,6 +47,7 @@ const char *x86_op_to_str[] = {
     [X64_DIV] = "div",
     [X64_CMP] = "cmp",
     [X64_MOV] = "mov",
+    [X64_MOVZ] = "movzx",
     [X64_RET] = "ret",
     [X64_JMP] = "jmp",
     [X64_JNE] = "jne",
@@ -121,7 +122,7 @@ const char *x86_reg_to_str[] = {
 };
 
 x64_Register registers[4][16] = {
-    [0] = { x64_AL, x64_BL, x64_CL, x64_DL, x64_SIL, x64_DIL, x64_BPL, x64_SPL, x64_R8B, x64_R9B, x64_R10B, x64_R11, x64_R12B, x64_R13B, x64_R14B, x64_R15B },
+    [0] = { x64_AL, x64_BL, x64_CL, x64_DL, x64_SIL, x64_DIL, x64_BPL, x64_SPL, x64_R8B, x64_R9B, x64_R10B, x64_R11B, x64_R12B, x64_R13B, x64_R14B, x64_R15B },
     [1] = { },
     [2] = { x64_EAX, x64_EBX, x64_ECX, x64_EDX, x64_ESI, x64_EDI, x64_EBP, x64_ESP, x64_R8D, x64_R9D, x64_R10D, x64_R11D, x64_R12D, x64_R13D, x64_R14D, x64_R15D },
     [3] = { x64_RAX, x64_RBX, x64_RCX, x64_RDX, x64_RSI, x64_RDI, x64_RBP, x64_RSP, x64_R8, x64_R9, x64_R10, x64_R11, x64_R12, x64_R13, x64_R14, x64_R15 }
@@ -384,16 +385,21 @@ X64_INSTRUCTION(load_index) {
         MMEM(AALL(addr_register(iface->vregs->items[instr.arg1.mem.base]),
                   instr.arg1.mem.stride,
                   addr_register(iface->vregs->items[instr.arg1.mem.index]),
-                  instr.arg2.mem.offset)),
+                  instr.arg1.mem.offset)),
         MINV
     );
 }
 
 X64_INSTRUCTION(load_addr) {
-  EMIT(iface->output, X64_LEA,
-       MREG(select_register(iface->vregs->items[instr.dest.vreg])),
-       select_stack(iface, instr.arg1.slot),
-       MINV);
+    
+    EMIT(iface->output, X64_LEA,
+        MREG(select_register(iface->vregs->items[instr.dest.vreg])),
+        instr.arg1.type == OPERAND_SLOT ? select_stack(iface, instr.arg1.slot) :
+                MMEM(AALL(addr_register(iface->vregs->items[instr.arg1.mem.base]),
+                    instr.arg1.mem.stride,
+                    addr_register(iface->vregs->items[instr.arg1.mem.index]),
+                    instr.arg1.mem.offset)),
+        MINV);
 }
 
 X64_INSTRUCTION(store) {
@@ -438,6 +444,13 @@ void emit_copy_if_not_same(CodegenInterface *iface, x64_Register dest, x64_Regis
     );
 }
 
+X64_INSTRUCTION(ext_zero) {
+    EMIT(iface->output, X64_MOVZ,
+        MREG(select_register(iface->vregs->items[instr.dest.vreg])),
+        MREG(select_register(iface->vregs->items[instr.arg1.vreg])),
+        MINV
+    );
+}
 
 X64_INSTRUCTION(copy) {
     if (select_register(iface->vregs->items[instr.dest.vreg]) == select_register(iface->vregs->items[instr.arg1.vreg]))
@@ -544,7 +557,7 @@ void emit_entry(FILE *out, Program *program) {
 
 
 void emit_mangled_symbol(FILE *out, const char *name) {
-    fprintf(out, mangled_format, name);
+    fprintf(out, mangled_format, strlen(name), name);
 }
 
 
@@ -595,6 +608,7 @@ CodegenBackend LINUX_X86_64_BACKEND = (CodegenBackend) {
     [OPCODE_CMP_LEQ] = &emit_x64_from_ir_cmpCC,
     [OPCODE_CMP_GEQ] = &emit_x64_from_ir_cmpCC,
     [OPCODE_LOAD] = &emit_x64_from_ir_load,
+    [OPCODE_EXT_Z] = &emit_x64_from_ir_ext_zero,
     [OPCODE_INDEX] = &emit_x64_from_ir_load_index,//&emit_x64_from_ir_,
     [OPCODE_ADDR] = &emit_x64_from_ir_load_addr,
     [OPCODE_STORE] = &emit_x64_from_ir_store,
