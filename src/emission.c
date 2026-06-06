@@ -329,8 +329,6 @@ Operand emit_expr(EmitContext *context, AST *expr) {
 }
 
 
-
-
 Operand emit_instr(EmitContext *context, Opcode opcode, Operand dest, Operand arg1, Operand arg2) {
     Instr instr = { 0 };
     instr.opcode = opcode;

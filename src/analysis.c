@@ -39,7 +39,7 @@ void analyze_ast(AnalysisContext *context, AST *program) { // assumes ast is a A
 }
 
 
-void analyze_procedure(AnalysisContext *context, AST *procedure, bool externed) {
+ void analyze_procedure(AnalysisContext *context, AST *procedure, bool externed) {
     assert(procedure->type == AST_PROCEDURE);
 
     SymbolData *symbol = insert_symbol(context->arena, context->symbol_table, procedure->name->ident);
@@ -118,19 +118,19 @@ void analyze_declaration(AnalysisContext *context, AST *decl) {
     
     SymbolData *symbol = insert_symbol(context->arena, context->symbol_table, decl->lhs->ident);
 
-    if (decl->rhs == NULL && decl->evaled_type->type == QUECTO_UNKNOWN) {
-        report_error(decl->line, decl->col, "cannot infer type without expr");
-        return;
-    }
-
-    QuectoType *is = analyze_expression(context, decl->rhs, decl->evaled_type);
-    if (decl->evaled_type->type == QUECTO_UNKNOWN) {
-        decl->evaled_type = (is->type == QUECTO_COMP_INT) ? &default_integer_type : is;
-    }
-
-    if (!quecto_types_equal(decl->evaled_type, is)) {
+    
+    if (decl->rhs != NULL) {
+        QuectoType *is = analyze_expression(context, decl->rhs, decl->evaled_type);
+        if (decl->evaled_type->type == QUECTO_UNKNOWN)
+            decl->evaled_type = (is->type == QUECTO_COMP_INT) ? &default_integer_type : is;
+        if (!quecto_types_equal(decl->evaled_type, is)) {
         //report_error(decl->line, decl->col, "declared as "); // todo: create string/char buffer builder to ease printing for multiple destinations (i.e file output, errors, regular)
-        printf("declared as "); print_type(decl->evaled_type); printf(" but assigned "); print_type(is); printf(".\n");
+            printf("declared as "); print_type(decl->evaled_type); printf(" but assigned "); print_type(is); printf(".\n");
+        }
+    } else {
+        if (decl->evaled_type->type == QUECTO_UNKNOWN) {
+            report_error(decl->line, decl->col, "cannot infer type without expr");
+        }
     }
 
     symbol->qtype = decl->evaled_type;
@@ -169,7 +169,8 @@ void analyze_assignment(AnalysisContext *context, AST *assignment) {
 QuectoType *analyze_expression(AnalysisContext *context, AST *expr, QuectoType *expected) {
     switch(expr->type) {
         case AST_CALL: return analyze_call(context, expr);
-        case AST_INT_LIT: return expr->evaled_type = (expected == NULL || expected->type == QUECTO_UNKNOWN) ? &default_integer_type : expected; 
+        case AST_INT_LIT: return expr->evaled_type = (expected == NULL || expected->type == QUECTO_UNKNOWN) ? &default_integer_type : expected;
+        case AST_STR_LIT: return analyze_string_literal(context, expr);
         case AST_SYMBOL: return analyze_symbol(context, expr);
         case AST_BINARY_OP: return analyze_binary_op(context, expr, expected);
         case AST_INDEX: return analyze_index(context, expr);
@@ -215,11 +216,13 @@ QuectoType *analyze_index(AnalysisContext *context, AST *index) {
     return index->evaled_type = index->base->evaled_type->inner;
 }
 
+
 QuectoType *analyze_ref(AnalysisContext *context, AST *ref) {
     QuectoType *inner = analyze_expression(context, ref->base, NULL);
     // todo: verify that the reference is valid i.e not a constant integer etc
     return ref->evaled_type = pointer_of_type(context, inner);
 };
+
 
 QuectoType *analyze_binary_op(AnalysisContext *context, AST *op, QuectoType *expected) {
     QuectoType *left = analyze_expression(context, op->left, expected);
@@ -232,6 +235,11 @@ QuectoType *analyze_binary_op(AnalysisContext *context, AST *op, QuectoType *exp
     if (!right_valid && left_valid) right = analyze_expression(context, op->right, left);
 
     return op->evaled_type = resolve_binary_type(left, right);
+}
+
+
+QuectoType *analyze_string_literal(AnalysisContext *context, AST *lit) {
+    return lit->evaled_type = pointer_of_type(context, &default_char_type);
 }
 
 

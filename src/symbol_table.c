@@ -15,6 +15,7 @@ const uint32_t quecto_primitive_width[] = {
 };
 
 QuectoType default_integer_type = (QuectoType) { .type = QUECTO_U32 };
+QuectoType default_char_type = (QuectoType) { .type = QUECTO_I8 };
 
 SymbolData *insert_symbol(Arena *arena, SymbolTable *symbol_table, const char *symbol) {
     HashTable *table = &symbol_table->table;

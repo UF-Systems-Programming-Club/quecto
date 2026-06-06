@@ -12,7 +12,7 @@ const char *token_to_string_table[] = {
     [TOKEN_MULTIPLY] = "*",
     [TOKEN_DIVIDE] = "/",
     [TOKEN_CARET] = "^",
-    [TOKEN_AMPERSAND] = "^",
+    [TOKEN_AMPERSAND] = "&",
     [TOKEN_OPEN_CURLY] = "{",
     [TOKEN_CLOSE_CURLY] = "}",
     [TOKEN_OPEN_PAREN] = "(",
@@ -31,6 +31,7 @@ const char *token_to_string_table[] = {
     [TOKEN_LESS_THAN] = "<",
     [TOKEN_GREATER_THAN] = ">",
     [TOKEN_INT_LIT] = "integer literal",
+    [TOKEN_STR_LIT] = "string literal",
     [TOKEN_FLOAT_LIT] = "float literal",
     [TOKEN_IDENTIFIER] = "identifier",
     [TOKEN_RETURN] = "return",
@@ -45,6 +46,28 @@ const char *token_to_string_table[] = {
     [TOKEN_I8] = "i8",
     [TOKEN_U8] = "u8",
     [TOKEN_EOF] = "end of file"
+};
+
+const TokenType token_from_char[] = {
+    [':'] = TOKEN_COLON,
+    [';'] = TOKEN_SEMICOLON,
+    ['+'] = TOKEN_PLUS,
+    ['-'] = TOKEN_MINUS,
+    ['/'] = TOKEN_DIVIDE,
+    ['*'] = TOKEN_MULTIPLY,
+    ['='] = TOKEN_EQUALS,
+    ['>'] = TOKEN_GREATER_THAN,
+    ['<'] = TOKEN_LESS_THAN,
+    ['('] = TOKEN_OPEN_PAREN,
+    [')'] = TOKEN_CLOSE_PAREN,
+    ['['] = TOKEN_OPEN_SQUARE,
+    [']'] = TOKEN_CLOSE_SQUARE,
+    ['{'] = TOKEN_OPEN_CURLY,
+    ['}'] = TOKEN_CLOSE_CURLY,
+    ['.'] = TOKEN_PERIOD,
+    [','] = TOKEN_COMMA,
+    ['^'] = TOKEN_CARET,
+    ['&'] = TOKEN_AMPERSAND,
 };
 
 static_assert(sizeof(token_to_string_table) / sizeof(char *) == TOKEN_COUNT,
@@ -88,11 +111,11 @@ float float_from_str(const char *a, size_t len) {
     return accum;
 }
 
-bool is_number(char c) {
+bool is_number(uint8_t c) {
     return '0' <= c && c <= '9';
 }
 
-bool is_alpha(char c) {
+bool is_alpha(uint8_t c) {
     return ('a' <= c  && c <= 'z') || ('A' <= c && c <= 'Z');
 }
 
@@ -106,96 +129,63 @@ void print_token(Token tok) {
     printf("\n");
 }
 
-TokenArray tokenize(const char *buf, size_t buf_size) {
-    TokenArray tokens = {0};
+TokenArray tokenize(Arenas *arena, const char *buf, size_t size) {
+    TokenArray tokens = { 0 };
+
+    int mark = arena_mark(arena->scratch);
 
     size_t start = 0;
     size_t next = 0;
-    size_t line = 1;
-    size_t column = 1;
+    size_t col = 1;
+    size_t line = 0;
+    
+    while (start < size) {
+        uint8_t chr = buf[next++];
+        Token tok = { .col = col, .line = line };
 
-    while (start < buf_size) {
-        char c = buf[next++];
-
-        Token tok = {
-            .col = column,
-            .line = line,
-        };
-
-        switch (c) {
+        switch (chr) {
             case '\n':
-                column = 1;
+                col = 1;
                 line++;
                 start = next;
                 continue;
             case ' ':
             case '\t':
-                column++;
+                col++;
                 start = next;
                 continue;
             case '\r':
-                UNREACHABLE("idk what to do here yet");
-                break;
-            case '+': tok.type = TOKEN_PLUS;        break;
-            case '-': tok.type = TOKEN_MINUS;       break;
-            case '*': tok.type = TOKEN_MULTIPLY;    break;
-            case '/': tok.type = TOKEN_DIVIDE;      break;
-            case '^': tok.type = TOKEN_CARET;       break;
-            case '&': tok.type = TOKEN_AMPERSAND;       break;
-            case '{': tok.type = TOKEN_OPEN_CURLY;  break;
-            case '}': tok.type = TOKEN_CLOSE_CURLY; break;
-            case '(': tok.type = TOKEN_OPEN_PAREN;  break;
-            case ')': tok.type = TOKEN_CLOSE_PAREN; break;
-            case '[': tok.type = TOKEN_OPEN_SQUARE; break;
-            case ']': tok.type = TOKEN_CLOSE_SQUARE;break;
-            case ';': tok.type = TOKEN_SEMICOLON;   break;
-            case ':': tok.type = TOKEN_COLON;       break;
-            case '.': tok.type = TOKEN_PERIOD;      break;
-            case ',': tok.type = TOKEN_COMMA;       break;
-            case '<':
-                switch (buf[next]) {
-                    case '=':   tok.type = TOKEN_LESS_EQUALS; next++; break;
-                    default:    tok.type = TOKEN_LESS_THAN;           break;
+                col = 1;
+                line++;
+                start = buf[next] == '\n' ? ++next : next;
+                continue;
+            case '/':
+                if (buf[next] == '/') {
+                    while (next < size && buf[next] != '\n')
+                        next++;
+                    continue;
                 }
-                break;
-            case '>':
-                switch (buf[next]) {
-                    case '=':   tok.type = TOKEN_GREATER_EQUALS; next++; break;
-                    default:    tok.type = TOKEN_GREATER_THAN;           break;
-                }
+            case '+': case '*': case '-': case '^': case '&': case '{': case '}': case '(': case ')': case '[': case ']':  case ':': case ';': case '.': case ',':
+                tok.type = token_from_char[chr];
                 break;
             case '=':
-                switch (buf[next]) {
-                    case '=':   tok.type = TOKEN_EQUALS_EQUALS; next++; break;
-                    case '>':   tok.type = TOKEN_ARROW;         next++; break;
-                    default:    tok.type = TOKEN_EQUALS;                break;
-                }
+                tok.type = token_from_char[chr];
+                if (buf[next] == '>' || buf[next] == '=') next++;
                 break;
-            default:
-                if (is_alpha(c)) {
+            case '<': case '>':
+                tok.type = token_from_char[chr];
+                if (buf[next] == '=') next++;
+                break;
+            default: {
+                if (is_alpha(chr) || chr == '_') {
                     tok.type = TOKEN_IDENTIFIER;
-                    while (next < buf_size && (is_alpha(buf[next]) || is_number(buf[next]) || buf[next] == '_')) {
+                    while (next < size && (is_alpha(buf[next]) || is_number(buf[next]) || buf[next] == '_')) {
                         next++;
                     }
-
-                    char keyword[MAX_KEYWORD_LEN];
-                    memcpy(keyword,  &buf[start], next - start);
-                    keyword[next - start] = '\0';
-                    
-                    struct keyword *result = lookup_keyword(keyword, next - start);
-                    if (result != NULL) {
-                        tok.type = result->token;
-                    } else {
-                        tok.identifier = (char *)malloc(next - start + 1);
-                        strncpy(tok.identifier, &buf[start], next - start);
-                        tok.identifier[next - start] = '\0';
-                    }
-                    
-                }
-                else if (is_number(c)) {
+                } else if (is_number(chr)) {
                     tok.type = TOKEN_INT_LIT;
                     int num_decimal_points = 0;
-                    while (next < buf_size && (is_number(buf[next]) || buf[next] == '.')) {
+                    while (next < size && (is_number(buf[next]) || buf[next] == '.')) {
                         if (buf[next] == '.') {
                             tok.type = TOKEN_FLOAT_LIT;
                             num_decimal_points++;
@@ -205,33 +195,50 @@ TokenArray tokenize(const char *buf, size_t buf_size) {
 
                     if (num_decimal_points > 1)
                         report_error(tok.line, tok.col, "too many decimal points in float literal");
-
-                    switch (tok.type) {
-                        case TOKEN_FLOAT_LIT:
-                            tok.float_lit = float_from_str(&buf[start], next - start);
-                            break;
-                        case TOKEN_INT_LIT:
-                            tok.int_lit = int_from_str(&buf[start], next - start);
-                            break;
-                        default:
-                            UNREACHABLE("TokenType");
-                    }
-                } else {
-                    report_error(tok.line, tok.col, "unrecognized character \'%c\'", c);
                 }
+            }
+        }
+
+        char *token = arena_alloc(arena->scratch, sizeof(char) * (next - start));
+        strncpy(token, &buf[start], next - start);
+
+        if (next - start > 1) {
+            struct keyword *result = lookup_keyword(token, next - start);
+            if (result != NULL)
+                tok.type = result->token;
+        }
+
+        switch (tok.type) {
+            case TOKEN_IDENTIFIER:
+                tok.identifier = arena_alloc(arena->persistent, sizeof(char) * (next - start + 1));
+                strncpy(tok.identifier, token, next - start);
+                tok.identifier[next - start] = '\0';
+                break;
+            case TOKEN_INT_LIT:
+                tok.int_lit = int_from_str(&buf[start], next - start);
+                break;
+            case TOKEN_FLOAT_LIT:
+                tok.float_lit = float_from_str(&buf[start], next - start);
+                break;
+            case TOKEN_NONE:
+                report_error(line, col, "unrecognized token");
+                break;
+            default:
                 break;
         }
 
         tok.lexeme.len = next - start;
         tok.lexeme.str = &buf[start];
-        array_append(tokens, tok);
-        column += next - start;
+        arena_array_append(arena->persistent, tokens, tok);
+        col += next - start;
         start = next;
     }
 
     Token tok_eof = {0};
     tok_eof.type = TOKEN_EOF;
-    array_append(tokens, tok_eof);
+    arena_array_append(arena->persistent, tokens, tok_eof);
+
+    arena_restore(arena->scratch, mark);
 
     return tokens;
 }

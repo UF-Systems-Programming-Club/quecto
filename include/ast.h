@@ -25,6 +25,7 @@ typedef enum {
     AST_WHILE,
     AST_SYMBOL,
     AST_INT_LIT,
+    AST_STR_LIT,
     AST_FLOAT_LIT,
 } ASTType;
 

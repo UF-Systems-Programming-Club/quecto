@@ -59,16 +59,22 @@ int compile(const char *filename) {
 
     src[fsize] = '\0';
     src_size = fsize;
-    
-    TokenArray tokens = tokenize(src, src_size);
-    if (error) return -1;
 
     Arena backing = {0};
     Arena scratch = {0};
-    HashTable types = {0}; // intern table
+    Arenas arena = {
+        .scratch = &scratch,
+        .persistent = &backing
+    };
 
     arena_create(&backing, 1024 * 2048);
     arena_create(&scratch, 1024 * 1024);
+    
+    TokenArray tokens = tokenize(&arena, src, src_size);
+    if (error) return -1;
+
+    HashTable types = {0}; // intern table
+
 
     ParserState parser = {
         .tokens = tokens,

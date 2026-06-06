@@ -32,5 +32,6 @@ QuectoType *analyze_ref(AnalysisContext *context, AST *ref);
 QuectoType *analyze_binary_op(AnalysisContext *context, AST *op, QuectoType *expected);
 QuectoType *analyze_list(AnalysisContext *context, AST *list, QuectoType *expected);
 QuectoType *analyze_symbol(AnalysisContext *context, AST *symbol);
+QuectoType *analyze_string_literal(AnalysisContext *context, AST *lit);
 
 #endif

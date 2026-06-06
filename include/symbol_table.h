@@ -47,6 +47,7 @@ typedef struct SymbolTable {
 extern const char *symbol_type_to_string_table[];
 extern const uint32_t quecto_primitive_width[QUECTO_COUNT];
 extern QuectoType default_integer_type; // default integer type
+extern QuectoType default_char_type; // default integer type
 
 void print_symbol_table(SymbolTable *symbol_table, int indent);
 SymbolData *insert_symbol(Arena *arena, SymbolTable *symbol_table, const char *symbol);
