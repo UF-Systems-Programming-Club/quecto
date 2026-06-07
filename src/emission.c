@@ -1,4 +1,5 @@
 #include "emission.h"
+#include "ast.h"
 #include "cfg.h"
 #include "common.h"
 #include "ir.h"
@@ -12,6 +13,7 @@
 #define GLOBAL(g) (Operand) { .type = OPERAND_GLOBAL, .glbl = (g) }
 #define SLOT(s) (Operand) { .type = OPERAND_SLOT, .slot = (s) }
 
+
 const Opcode jump_condition_opcode_table[OP_COUNT] = {
     [OP_EQUALS] = OPCODE_BEQ,
     [OP_NEQUALS] = OPCODE_BNE,
@@ -22,13 +24,13 @@ const Opcode jump_condition_opcode_table[OP_COUNT] = {
 };
 
 
-void emit_program(EmitContext *context, Program *into, AST *program) {
-    assert(program->type == AST_PROGRAM);
+void emit_program(EmitContext *context, Program *into, AST *base) {
+    ASTProgram *program = CAST_AST(base, ASTProgram, AST_PROGRAM);
 
-    for (AST **item = program->items; item < program->items + program->count; item++) {
+    for (int i = 0; i < program->decls.count; i++) {
         Procedure proc =  { 0 };
-        switch ((*item)->type) {
-            case AST_PROCEDURE: emit_procedure(context, &proc, *item); break;
+        switch (program->decls.items[i]->type) {
+            case AST_PROCEDURE: emit_procedure(context, &proc, program->decls.items[i]); break;
             case AST_EXTERN: continue;
             default:
             UNREACHABLE("not valid program level decl");
@@ -40,44 +42,49 @@ void emit_program(EmitContext *context, Program *into, AST *program) {
 }
 
 
-void emit_procedure(EmitContext *context, Procedure *into, AST *procedure) {
-    assert(procedure->type == AST_PROCEDURE);
+void emit_procedure(EmitContext *context, Procedure *into, AST *base) {
+    ASTProc *procedure = CAST_AST(base, ASTProc, AST_PROCEDURE);
+    ASTBlock *body = CAST_AST(procedure->body, ASTBlock, AST_BLOCK);
+    ASTIdentifier *name = CAST_AST(procedure->name, ASTIdentifier, AST_IDENTIFIER);
 
-    SymbolData *symbol = get_symbol(context->scope, procedure->name->ident);
+    SymbolData *symbol = get_symbol(context->scope, name->name);
     ProcSignature *signature = symbol->qtype->signature;
 
     context->procedure = into;
 
-    context->procedure->name = procedure->name->ident;
+    context->procedure->name = name->name;
     context->procedure->vregs = (VregInfoTable) { 0 };
     context->procedure->slots = (SlotTable) { 0 };
     context->procedure->cfg = (CFGraph) { 0 };
-
-    context->scope = procedure->symbols;
-
+    context->slot_from_symbol = (HashTable) { 0 }; // reset per-proc
+    
     context->procedure->cfg.entry_block = allocate_block(context);
     start_block(context, context->procedure->cfg.entry_block);
 
-    for (int i = 0; i < signature->param_count; i++) {
-        Operand slot = slot_for(context, get_symbol(context->scope, procedure->params[i]->lhs->ident), true);
+    for (int i = 0; i < procedure->params.count; i++) {
+        ASTDecl *decl = CAST_AST(procedure->params.items[i], ASTDecl, AST_DECL);
+        ASTIdentifier *ident = CAST_AST(decl->lhs, ASTIdentifier, AST_IDENTIFIER);
+        Operand slot = slot_for(context, get_symbol(body->symbols, ident->name), true);
         emit_instr(context, OPCODE_PARAM, slot, IMM(i), NONE);
     }
 
     emit_block(context, procedure->body);
     if (context->current_block != -1) emit_ret(context, (Operand) { 0 });
-
-    context->scope = procedure->symbols->prev;
 }
 
 
-void emit_block(EmitContext *context, AST *block) {
-    for (int i = 0; i < block->count; i++) {
-        emit_statement(context, block->items[i]);
+void emit_block(EmitContext *context, AST *base) {
+    ASTBlock *block = CAST_AST(base, ASTBlock, AST_BLOCK);
+    context->scope = block->symbols;
+    for (int i = 0; i < block->stmts.count; i++) {
+        emit_statement(context, block->stmts.items[i]);
     }
+    context->scope = block->symbols->prev;
 }
 
 
 void emit_statement(EmitContext *context, AST *statement) {
+    assert(statement != NULL);
     switch (statement->type) {
         case AST_CALL:       (void)emit_call(context, statement, false);   break;
         case AST_BINARY_OP:  (void)emit_expr(context, statement);   break;
@@ -93,43 +100,27 @@ void emit_statement(EmitContext *context, AST *statement) {
 
 
 
-Operand emit_addr(EmitContext *context, AST *lvalue) {
-    Operand out = allocate_vreg(context, (VregInfo) {.size = 8, .sign = 0});
 
-    switch (lvalue->type) {
-        case AST_SYMBOL: {
-            Operand slot = slot_for(context, get_symbol(context->scope, lvalue->ident), false);
-            context->procedure->slots.items[slot.slot].address_taken = true;
-            emit_instr(context, OPCODE_ADDR,
-                       out,
-                       slot,
-                       NONE);
-            break;
-        }
-        case AST_INDEX: {
-            Operand base = emit_addr(context, lvalue->base);
-            Operand index = emit_expr(context, lvalue->index);
-            index = emit_instr(context, OPCODE_EXT_Z, allocate_vreg(context, (VregInfo){.size=8,.sign=false}), index, NONE);
-            int size = quecto_type_size(lvalue->evaled_type);
-            emit_instr(context, OPCODE_ADDR,
-                       out,
-                       MEM(INDEX(base.vreg, index.vreg, 0, size)),
-                       NONE);
-            break;
-        }
-        default: UNREACHABLE("invalid lvalue");
+void emit_list(EmitContext *context, AST *base, Operand into) {
+    ASTListConstruct *list = CAST_AST(base, ASTListConstruct, AST_LIST);
+
+    for (int i = 0; i < list->items.count; i++) {
+        Operand arg = emit_expr(context, list->items.items[i]);
+        
+        emit_instr(context, OPCODE_STORE_INDEX,
+                   MEM(INDEX(into.vreg, 0, -i * quecto_type_size(list->items.items[i]->resolved_qtype), 0)),
+                   arg,
+                   NONE);
     }
-
-    return out;
 }
 
 
-Operand emit_decay(EmitContext *context, AST *of) {
-    switch (of->evaled_type->type) {
+Operand decay(EmitContext *context, AST *base) {
+    switch (base->resolved_qtype->type) {
         case QUECTO_ARRAY:
-            return emit_addr(context, of);
+            return addr_of_slot(context, slot_from_identifier(context, base));
         case QUECTO_POINTER:
-            return emit_symbol(context, of);
+            return emit_instr(context, OPCODE_LOAD, allocate_vreg(context, (VregInfo){.size = 8}), slot_from_identifier(context, base), NONE);
         default:
             assert(0 && "type cannot decay");
             return NONE;
@@ -137,62 +128,78 @@ Operand emit_decay(EmitContext *context, AST *of) {
 }
 
 
-Operand emit_lhs(EmitContext *context, AST *lhs) {
-    switch (lhs->type) {
-        case AST_SYMBOL: {
-            SymbolData *var = get_symbol(context->scope, lhs->ident);
-            return slot_for(context, var, false);
+Operand slot_from_identifier(EmitContext *context, AST *base) {
+    ASTIdentifier *ident = CAST_AST(base, ASTIdentifier, AST_IDENTIFIER);
+    SymbolData *var = get_symbol(context->scope, ident->name);
+    return slot_for(context, var, false);
+}
+
+
+Operand mem_from_index(EmitContext *context, AST *base) {
+    ASTIndex *index = CAST_AST(base, ASTIndex, AST_INDEX);
+    Operand head = decay(context, index->head);
+    Operand ind = emit_expr(context, index->index);
+    ind = emit_instr(context, OPCODE_EXT_Z, allocate_vreg(context, (VregInfo){.size=8,.sign=false}), ind, NONE);
+    int size = quecto_type_size(index->base.resolved_qtype);
+    
+    return MEM(INDEX(head.vreg, ind.vreg, 0, size));
+}
+
+
+Operand addr_of_slot(EmitContext *context, Operand slot) {
+    assert(slot.type == OPERAND_SLOT);
+
+    Operand out = allocate_vreg(context, (VregInfo) {.size = 8, .sign = 0});
+    
+    context->procedure->slots.items[slot.slot].address_taken = true;
+    emit_instr(context, OPCODE_ADDR, out, slot, NONE);
+
+    return out;
+}
+
+
+void emit_decl(EmitContext *context, AST *base) {
+    ASTDecl *decl = CAST_AST(base, ASTDecl, AST_DECL);
+    if (decl->rhs == NULL) return;
+
+    Operand slot = slot_from_identifier(context, decl->lhs);
+
+    switch (decl->rhs->type) {
+        case AST_LIST:
+            emit_list(context, decl->rhs, addr_of_slot(context, slot));
+            break;
+        default: {
+            Operand rhs = emit_expr(context, decl->rhs);
+            emit_instr(context, OPCODE_STORE, slot, rhs, NONE);
         }
-        case AST_INDEX: {
-            Operand base = emit_decay(context, lhs->base);
-            Operand index = emit_expr(context, lhs->index);
-            index = emit_instr(context, OPCODE_EXT_Z, allocate_vreg(context, (VregInfo){.size=8,.sign=false}), index, NONE);
-            int size = quecto_type_size(lhs->evaled_type);
-            return MEM(INDEX(base.vreg, index.vreg, 0 , size));
-        }
+    }
+}
+
+
+Operand emit_assign_lhs(EmitContext *context, AST *base) {
+    switch (base->type) {
+        case AST_IDENTIFIER: return slot_from_identifier(context, base);
+        case AST_INDEX: return mem_from_index(context, base);
+        case AST_ACCESS: UNREACHABLE("unimplemented"); break;
         default: UNREACHABLE("invalid lhs");
     }
 }
 
 
-void emit_list(EmitContext *context, AST *list, Operand *into) {
-    for (int i = 0; i < list->count; i++) {
-        Operand arg = emit_expr(context, list->items[i]);
-        
-        emit_instr(context, OPCODE_STORE_INDEX,
-                   MEM(INDEX(into->vreg, 0, -i * quecto_type_size(list->evaled_type->inner), 0)),
-                   arg,
-                   NONE);
-    }
-}
-
-
-void emit_decl(EmitContext *context, AST *decl) {
-    if (decl->evaled_type->type == QUECTO_ARRAY) {
-        Operand lhs = emit_addr(context, decl->lhs);
-        emit_list(context, decl->rhs, &lhs);
-    } else {
-        Operand lhs = emit_lhs(context, decl->lhs);
-        Operand rhs = emit_expr(context, decl->rhs);
-        emit_instr(context, OPCODE_STORE, lhs, rhs, NONE);
-    } 
-}
-
-
-void emit_assign(EmitContext *context, AST *assign) {
-    Operand lhs = emit_lhs(context, assign->lhs);
+void emit_assign(EmitContext *context, AST *base) {
+    ASTAssign *assign = CAST_AST(base, ASTAssign, AST_ASSIGNMENT);
+    Operand lhs = emit_assign_lhs(context, assign->lhs);
     Operand rhs = emit_expr(context, assign->rhs);
     emit_instr(context, lhs.type == OPERAND_MEM ? OPCODE_STORE_INDEX : OPCODE_STORE, lhs, rhs, NONE);    
 }
 
-
-void emit_if(EmitContext *context, AST *_if) {
-    assert(_if->type == AST_IF);
+void emit_if(EmitContext *context, AST *base) {
+    ASTIf *_if = CAST_AST(base, ASTIf, AST_IF);
 
     int end = allocate_block(context);
     int btrue = allocate_block(context);
     int bfalse = _if->otherwise ? allocate_block(context) : end;
-    emit_branch(context, btrue, bfalse, _if->condition);
+    emit_branch(context, btrue, bfalse, _if->cond);
     
     start_block(context, btrue);
     emit_statement(context, _if->then);
@@ -206,12 +213,13 @@ void emit_if(EmitContext *context, AST *_if) {
 }
 
 
-void emit_if_chain(EmitContext *context, AST *_if, int end) {
-    if (_if->type == AST_ELIF) {
+void emit_if_chain(EmitContext *context, AST *base, int end) {
+    if (base->type == AST_ELIF) {
+        ASTIf *_if = CAST_AST(base, ASTIf, AST_ELIF);
         int btrue = allocate_block(context);
         int bfalse = allocate_block(context);
 
-        emit_branch(context, btrue, bfalse, _if->condition);
+        emit_branch(context, btrue, bfalse, _if->cond);
 
         start_block(context, btrue);
         emit_statement(context, _if->then);
@@ -221,7 +229,8 @@ void emit_if_chain(EmitContext *context, AST *_if, int end) {
             start_block(context, bfalse);
             emit_if_chain(context, _if->otherwise, end);
         }
-    } else if (_if->type == AST_ELSE) {
+    } else if (base->type == AST_ELSE) {
+        ASTIf *_if = CAST_AST(base, ASTIf, AST_ELSE);
         emit_statement(context, _if->then);
         emit_jmp(context, end);
     } else {
@@ -230,15 +239,15 @@ void emit_if_chain(EmitContext *context, AST *_if, int end) {
 }
 
 
-void emit_while(EmitContext *context, AST *_while) {
-    assert(_while->type == AST_WHILE);
+void emit_while(EmitContext *context, AST *base) {
+    ASTWhile *_while = CAST_AST(base, ASTWhile, AST_WHILE);
 
     int condition = allocate_block(context);
     int loop = allocate_block(context);
     int end = allocate_block(context);
 
     start_block(context, condition);
-    emit_branch(context, loop, end, _while->condition);
+    emit_branch(context, loop, end, _while->cond);
     start_block(context, loop);
     emit_statement(context, _while->then);
     emit_jmp(context, condition);
@@ -246,48 +255,45 @@ void emit_while(EmitContext *context, AST *_while) {
 }
 
 
-void emit_return(EmitContext *context, AST *ret) {
-    assert(ret->type == AST_RETURN);
-    
-    if (ret->rhs)
-        emit_ret(context, emit_expr(context, ret->rhs));
+void emit_return(EmitContext *context, AST *base) {
+    ASTReturn *ret = CAST_AST(base, ASTReturn, AST_RETURN);
+
+    if (ret->expr != NULL)
+        emit_ret(context, emit_expr(context, ret->expr));
     else
-        emit_ret(context, (Operand) {0});
+        emit_ret(context, NONE);
 }
 
 
-Operand emit_symbol(EmitContext *context, AST *sym) {
-    Operand slot = slot_for(context, get_symbol(context->scope, sym->ident), false);
-    switch (sym->evaled_type->type) {
-        case QUECTO_ARRAY: return emit_addr(context, sym);
-        default: return emit_instr(context, OPCODE_LOAD,
-                                   allocate_vreg_for_type(context, sym->evaled_type),
-                                   slot,
-                                   NONE);
+Operand emit_call(EmitContext *context, AST *base, bool has_dest) {
+    ASTCall *call = CAST_AST(base, ASTCall, AST_CALL);
+    ASTIdentifier *ident = CAST_AST(call->ident, ASTIdentifier, AST_IDENTIFIER);
+
+    Operand ops[call->args.count];
+    for (int i = 0; i < call->args.count; i++) {
+        ops[i] = emit_expr(context, call->args.items[i]);
     }
-}
-
-
-Operand emit_call(EmitContext *context, AST *call, bool has_dest) {
-    assert(call->type == AST_CALL);
-
-    Operand ops[call->arg_count];
-    for (int i = 0; i < call->arg_count; i++) {
-        ops[i] = emit_expr(context, call->args[i]);
-    }
-    for (int i = 0; i < call->arg_count; i++) {
+    
+    for (int i = 0; i < call->args.count; i++) {
         emit_instr(context, OPCODE_ARG, NONE, ops[i], NONE);
     }
+    
     return emit_instr(context, OPCODE_CALL,
-                        has_dest ? allocate_vreg_for_type(context, call->evaled_type) : NONE,
-                        global_for(context, call->callee->ident),
-                        NONE
-                    );
+        has_dest ? allocate_vreg_for_type(context, call->base.resolved_qtype) : NONE,
+        global_for(context, ident->name),
+        NONE
+    );
 }
 
 
-Operand emit_binary_op(EmitContext *context, AST *op) {
-    assert(op->type == AST_BINARY_OP);
+Operand emit_ref(EmitContext *context, AST* base) {
+    ASTRef *ref = CAST_AST(base, ASTRef, AST_REF);
+    return emit_instr(context, OPCODE_ADDR, allocate_vreg(context, (VregInfo){ .size = 8 }), emit_expr(context, ref->head), NONE);
+}
+
+
+Operand emit_binary_op(EmitContext *context, AST *base) {
+    ASTBinaryOp *op = CAST_AST(base, ASTBinaryOp, AST_BINARY_OP);
     
     Opcode opcode;
     switch (op->op) {
@@ -302,28 +308,26 @@ Operand emit_binary_op(EmitContext *context, AST *op) {
         case OP_GREATER_EQUALS: opcode = OPCODE_CMP_GEQ; break;
         default: UNREACHABLE("invalid operation");
     }
+
     return emit_instr(context, opcode,
-                      allocate_vreg_for_type(context, op->evaled_type),
-                      emit_expr(context, op->left),
-                      emit_expr(context, op->right)
-                    );
+          allocate_vreg_for_type(context, op->base.resolved_qtype),
+          emit_expr(context, op->left),
+          emit_expr(context, op->right)
+    );
 }
 
 
 Operand emit_expr(EmitContext *context, AST *expr) {
     switch (expr->type) {
-        case AST_INT_LIT: return emit_instr(context, OPCODE_IMM, allocate_vreg_for_type(context, expr->evaled_type), IMM(expr->int_lit), NONE);
-        case AST_SYMBOL: return emit_symbol(context, expr);
-        case AST_INDEX: {
-            Operand base = emit_decay(context, expr->base);
-            Operand index = emit_expr(context, expr->index);
-            index = emit_instr(context, OPCODE_EXT_Z, allocate_vreg(context, (VregInfo){.size=8,.sign=false}), index, NONE);
-            Operand ref = MEM(INDEX(base.vreg, index.vreg, 0, quecto_type_size(expr->evaled_type)));
-            return emit_instr(context, OPCODE_INDEX, allocate_vreg_for_type(context, expr->evaled_type), ref, NONE);
-        }
-        case AST_REF: return emit_addr(context, expr->base);
-        case AST_CALL: return emit_call(context, expr, true);
-        case AST_BINARY_OP: return emit_binary_op(context, expr);
+        case AST_INT_LIT:    return emit_instr(context, OPCODE_IMM, allocate_vreg_for_type(context, expr->resolved_qtype), IMM(((ASTIntLit*)expr)->literal), NONE);
+        case AST_IDENTIFIER:
+            if (quecto_is_array(expr->resolved_qtype))
+                return decay(context, expr);
+            return emit_instr(context, OPCODE_LOAD, allocate_vreg_for_type(context, expr->resolved_qtype), slot_from_identifier(context, expr), NONE);
+        case AST_INDEX:      return emit_instr(context, OPCODE_INDEX, allocate_vreg_for_type(context, expr->resolved_qtype), mem_from_index(context, expr), NONE);
+        case AST_REF:        return emit_ref(context, expr); 
+        case AST_CALL:       return emit_call(context, expr, true);
+        case AST_BINARY_OP:  return emit_binary_op(context, expr);
         default: UNREACHABLE("invalid expr ast type");
     }
 }
@@ -339,15 +343,16 @@ Operand emit_instr(EmitContext *context, Opcode opcode, Operand dest, Operand ar
 }
 
 
-void emit_branch(EmitContext *context, int true_target, int false_target, AST *expr) {
-    assert(context->current_block != -1 && expr->type == AST_BINARY_OP && op_is_conditional(expr->op));
+void emit_branch(EmitContext *context, int true_target, int false_target, AST *base) {
+    assert(context->current_block != -1);
+    ASTBinaryOp *expr = CAST_AST(base, ASTBinaryOp, AST_BINARY_OP);
     
     Instr terminator = { 0 };
     terminator.opcode = jump_condition_opcode_table[expr->op];
     terminator.arg1 = emit_expr(context, expr->left);
     terminator.arg2 = emit_expr(context, expr->right);
 
-    int size = quecto_type_size(expr->evaled_type);
+    int size = quecto_type_size(base->resolved_qtype);
 
     if (context->procedure->vregs.items[terminator.arg1.vreg].size < size) terminator.arg1 = emit_instr(context, OPCODE_EXT_Z, allocate_vreg(context, (VregInfo){.size=size,.sign=false}), terminator.arg1, NONE);
     if (context->procedure->vregs.items[terminator.arg2.vreg].size < size) terminator.arg2 = emit_instr(context, OPCODE_EXT_Z, allocate_vreg(context, (VregInfo){.size=size,.sign=false}), terminator.arg2, NONE);
@@ -443,7 +448,7 @@ Operand global_for(EmitContext *context, const char *ident) {
 
 
 Operand slot_for(EmitContext *context, SymbolData *sym, bool param) {
-    int *slot = ht_nsearch(&context->slot_from_symbol, &sym, sizeof(SymbolData*)); // pass by pointer cause pointers shud be unique alr
+    int *slot = ht_nsearch(&context->slot_from_symbol, &sym, sizeof(SymbolData*)); //pass by pointer cause pointers shud be unique alr
     if (slot != NULL) {
         return SLOT(*slot);
     }

@@ -556,8 +556,8 @@ void emit_entry(FILE *out, Program *program) {
 }
 
 
-void emit_mangled_symbol(FILE *out, const char *name) {
-    fprintf(out, mangled_format, strlen(name), name);
+void emit_mangled_symbol(FILE *out, const char *name, size_t len) {
+    fprintf(out, mangled_format, len, name);
 }
 
 
@@ -568,7 +568,7 @@ void emit_symbols(FILE *out, Program *program) {
             SymbolData *symbol = program->symbols->table.items[i];
             if (symbol->externed) {
                 fprintf(out, "extern ");
-                emit_mangled_symbol(out, program->symbols->table.keys[i].data);
+                emit_mangled_symbol(out, program->symbols->table.keys[i].data, program->symbols->table.keys[i].size);
                 fprintf(out, "\n");
             }
         }

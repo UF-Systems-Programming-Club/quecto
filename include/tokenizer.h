@@ -53,13 +53,31 @@ typedef struct keyword {
     int token;
 } KeywordEntry;
 
-extern const char *token_to_string_table[];
+typedef enum {
+    TOK_OPERATOR = 1,
+    TOK_KEYWORD = 8,
+    TOK_PRIMITIVE = 16,
+    TOK_HAS_PREC = 32,
+} TokenFlags;
+
+typedef struct {
+    const char *name;
+    int precedence;
+    TokenFlags flags;
+} TokenInfo;
+
+extern const TokenInfo token_info_table[];
+
 int int_from_str(const char* a, size_t len);
 float float_from_str(const char* a, size_t len);
-void print_token(Token tok);
+KeywordEntry *lookup_keyword(const char *str, size_t len);
 TokenArray tokenize(Arenas *arena, const char *buf, size_t size);
 
+void print_token(Token tok);
+bool token_is_operator(TokenType type);
+bool token_is_primitive(TokenType type);
+int token_precedence(TokenType type);
 
-KeywordEntry *lookup_keyword(const char *str, size_t len);
+
 
 #endif

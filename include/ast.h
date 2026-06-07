@@ -23,7 +23,7 @@ typedef enum {
     AST_ELIF,
     AST_ELSE,
     AST_WHILE,
-    AST_SYMBOL,
+    AST_IDENTIFIER,
     AST_INT_LIT,
     AST_STR_LIT,
     AST_FLOAT_LIT,
@@ -43,76 +43,52 @@ typedef enum {
     OP_COUNT,
 } BinaryOp;
 
-// todo: find a better way to organize AST nodes... previously it was a tagged union but now its a fat struct to prevent
-// name collisions and possible zeroing out/undefined behavior if accidentally setting a field unavaible to the tag.
 typedef struct AST {
     ASTType type;
-    size_t line, col; // for starting point of expr and for debugging
-    QuectoType *evaled_type;
+    Token token;
+    QuectoType *resolved_qtype;
+} ASTBase;
 
-    
-    // Program and block and list
-    struct {
-        struct AST **items;
-        size_t count;
-        size_t capacity;
-    };
-    // Extern
-    struct {
-        struct AST *externed;
-    };
+typedef ASTBase AST;
+typedef DYN_ARR(AST *) ASTList;
 
-    // Procedure
-    struct {
-        struct AST *name;
-        struct AST *params[MAX_PARAMS]; // probably better to go with hardcode MAX_PARAMS could do variable length but I dont think its important
-        struct AST *returns[MAX_PARAMS];
-        size_t param_count;
-        size_t return_count;
-        struct AST *body;
+#define CAST_AST(base, to, tag) (assert(base->type == tag), (to*)(base))
 
-        SymbolTable *symbols;
-    };
+#define UNWRAP(...) __VA_ARGS__
+#define DEFINE_AST(name, decls) typedef struct {ASTBase base; UNWRAP decls } AST##name;
 
-    BinaryOp op; // BINARY OP
-    struct AST *left;  // BINARY OP
-    struct AST *right; // BINARY OP
-    struct AST *lhs; // ASSIGN/DECL
-    struct AST *rhs; // ASSIGN/DECL
-    struct AST *base; // ACCESS/INDEX
-    struct AST *index; // INDEX
-    struct AST *specifier; // ACCESS
-    
-    // Calls
-    struct {
-        struct AST *callee;
-        struct AST *args[MAX_PARAMS];
-        size_t arg_count;
-    };
+DEFINE_AST(Program,    (ASTList decls;) )
+DEFINE_AST(Extern,     (AST *decl;) )
+DEFINE_AST(Proc,       (AST *name; ASTList params; ASTList rets; AST *body;) )
+DEFINE_AST(Block,      (SymbolTable *symbols; ASTList stmts;) )
+DEFINE_AST(ListConstruct,      (ASTList items;) )
+DEFINE_AST(BinaryOp,   (BinaryOp op; AST *left; AST *right;) )
+DEFINE_AST(Decl,       (AST *lhs; AST *rhs;) )
+DEFINE_AST(Assign,     (AST *lhs; AST *rhs;) )
+DEFINE_AST(Ref,        (AST *head;) )
+DEFINE_AST(Index,      (AST *head; AST *index;) )
+DEFINE_AST(Access,     (AST *head; AST *spec;) )
+DEFINE_AST(Call,       (AST *ident; ASTList args;) )
+DEFINE_AST(If,         (AST *cond; AST *then; AST *otherwise;) )
+DEFINE_AST(While,      (AST *cond; AST *then; ))
+DEFINE_AST(Return,     (AST *expr;) )
+DEFINE_AST(Identifier, (const char *name;) )
+DEFINE_AST(StringLit,  (const char *literal;) )
+DEFINE_AST(IntLit,     (unsigned int literal;) )
+DEFINE_AST(FloatLit,   (float literal;) )
 
-    // If, Elif, Else, While
-    struct {
-        struct AST *condition; // NULL for else statements
-        struct AST *then;
-        struct AST *otherwise; // else (cant name it else b/c keyword and cant think of a better word)
-    };
+#undef DEFINE_AST
+#undef UNWRAP
 
-    // Symbol
-    struct {
-        const char *ident; // NOTE: this is a pointer to the tokenized identifier
-                           // so every symbol has a unique string but not the
-                           // authority to do anything to it (which makes sense)
-    };
-
-    // number literals in expressions
-    unsigned int int_lit;
-    float float_lit;
-} AST;
 
 AST *get_underlying_symbol_from(AST *index);
 void print_ast(AST *ast, int indent);
 bool op_is_conditional(BinaryOp op);
 bool op_is_arithmetic(BinaryOp op);
 BinaryOp op_opposite(BinaryOp op);
+
+void ast_print(Arena *arena, AST *root);
+String ast_str(Arena *arena, AST *root);
+String astlist_str(Arena *arena, ASTList list, const char *delim, int indent);
 
 #endif

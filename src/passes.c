@@ -120,6 +120,7 @@ void pass_insert_phis(Arenas *arenas, Procedure *procedure) {
     set_create(&working, arenas->scratch, cfg->count);
     
     for (int slot = 0; slot < slots->count; slot++) {
+        if (slots->items[slot].address_taken) continue;
 
         set_clear(&stored_at_blocks);
         set_clear(&phi_blocks);
@@ -207,16 +208,16 @@ void pass_rename_recurs(Arenas *arenas, Procedure *procedure, OperandStack stack
     for (int i = 0; i < block->bytecode.count; i++) {
         Instr *instr = &block->bytecode.items[i];
        
-        if (instr_match(instr, OPCODE_LOAD, -1, OPERAND_SLOT, OPERAND_NONE)) {
+        if (instr_match(instr, OPCODE_LOAD, -1, OPERAND_SLOT, OPERAND_NONE) && !slots->items[instr->arg1.slot].address_taken) {
             instr->opcode = OPCODE_COPY;
             instr->arg1 = OperandStack_peek(&stacks[instr->arg1.slot], 1);
         }
 
-        if (instr_match(instr, OPCODE_PARAM, OPERAND_SLOT, -1, -1)) {
+        if (instr_match(instr, OPCODE_PARAM, OPERAND_SLOT, -1, -1) && !slots->items[instr->dest.slot].address_taken) {
             instr->dest = OperandStack_peek(&stacks[instr->dest.slot], 1);
         }
 
-        if (instr_match(instr, OPCODE_STORE, OPERAND_SLOT, -1, -1)) {
+        if (instr_match(instr, OPCODE_STORE, OPERAND_SLOT, -1, -1) && !slots->items[instr->dest.slot].address_taken) {
             OperandStack_push(&stacks[instr->dest.slot], instr->arg1);
             pushed[instr->dest.slot]++;
             *instr = (Instr) { 0 };
@@ -263,7 +264,7 @@ void pass_rename(Arenas *arenas, Procedure *procedure) {
 
     for (int i = 0; i < slots->count; i++) {
         OperandStack_set_backing(&stacks[i], arenas->scratch);
-        if (slots->items[i].param) {
+        if (slots->items[i].param && !slots->items[i].address_taken) {
             OperandStack_push(&stacks[i], allocate_vreg_explicit(arenas->persistent, procedure, vregi_from_sloti(slots->items[i])));
         }
     }

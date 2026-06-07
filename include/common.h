@@ -116,6 +116,11 @@ typedef struct {
     Arena *scratch;
 } Arenas;
 
+typedef struct {
+    size_t len;
+    char *data;
+} String;
+
 void arena_create(Arena *a, size_t capacity);
 void *arena_alloc(Arena *a, size_t size);
 void *arena_realloc(Arena *a, void *ptr, size_t old_size, size_t new_size);
@@ -123,6 +128,7 @@ void *arena_intern(Arena *a, HashTable *intern_table, const void *value, size_t 
 void arena_clear(Arena *a);
 void arena_free(Arena *a);
 
+String arena_sprintf(Arena *a, const char *fmt, ...);
 size_t arena_mark(Arena *a);
 void arena_restore(Arena *a, size_t cursor);
 
@@ -133,6 +139,7 @@ typedef struct {
     size_t len;
     const char *str;
 } StringView;
+
 
 typedef struct {
     uint64_t *buckets;
@@ -171,6 +178,7 @@ struct { \
          return stack->stack[--stack->cursor];\
      } \
      static inline type name##_peek(name *stack, int dist) { \
+        assert(stack->cursor >= (size_t)dist && "cannot peek"); \
         return stack->stack[stack->cursor - dist]; \
      } \
      static inline void name##_push(name *stack, type val) { \

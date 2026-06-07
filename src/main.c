@@ -16,6 +16,7 @@
 
 
 void help_prompt();
+void unrecognized_prompt();
 int compile(const char *filename);
 
 int main(int argc, char **argv) { // quecto <command> <input> {flags}
@@ -36,6 +37,8 @@ int main(int argc, char **argv) { // quecto <command> <input> {flags}
             }
         } else if (strncmp(argv[1], "help", sizeof("help")) == 0) {
             help_prompt();
+        } else {
+            unrecognized_prompt();
         }
     }   
 }
@@ -45,6 +48,10 @@ void help_prompt() {
     printf("List of Commands:\n");
     printf("\tbuild {file}\t\tBuilds the file.\n");
     printf("\thelp\t\tShows this prompt.\n");
+}
+
+void unrecognized_prompt() {
+    printf("unrecognized command\n");
 }
 
 int compile(const char *filename) {

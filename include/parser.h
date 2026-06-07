@@ -22,31 +22,37 @@ typedef struct {
     HashTable *type_intern_table;
     Arena *arena;
 } ParserState;
-// TODO: decl will need to be changed to var_decl in the future
-// because there will also be type decl and const decl i think
 
-AST *parse_program(ParserState *parser); 
-AST *parse_extern(ParserState *parser); 
-AST *parse_procedure(ParserState *parser);
-AST *parse_param_declaration(ParserState *parser);
-size_t parse_params(ParserState *parser, AST *list[MAX_PARAMS]);
-size_t parse_returns(ParserState *parser, AST *list[MAX_PARAMS]);
+typedef AST* (*ParseFn)(ParserState *parser);
 
 QuectoType *parse_type(ParserState *parser);
 
+AST *parse_program(ParserState *parser); 
+AST *parse_procedure(ParserState *parser);
+AST *parse_extern(ParserState *parser);
+
 AST *parse_statement(ParserState *parser);
 AST *parse_block(ParserState *parser); 
+AST *parse_decl(ParserState *parser);
+AST *parse_rhs(ParserState *parser);
 AST *parse_if(ParserState *parser); 
-AST *parse_if_chain(ParserState *parser); 
 AST *parse_while(ParserState *parser); 
 AST *parse_assignment(ParserState *parser);
-AST *parse_braced_initializer(ParserState *parser);
 AST *parse_return(ParserState *parser); 
-AST *parse_stmt_declaration(ParserState *parser);
 
-AST *parse_expression(ParserState *parser, int min_prec);
+ASTList parse_delimited(ParserState *parser, ParseFn callback, TokenType delimiter, TokenType end);
 
-// TODO: change this out to separate param and return list
-size_t parse_args(ParserState *parser, AST *list[MAX_PARAMS]);
+AST *parse_expr(ParserState *parser);
+AST *parse_binary_op(ParserState *parser, AST *left);
+AST *parse_call(ParserState *parser, AST *ident);
+AST *parse_index(ParserState *parser, AST *head);
+AST *parse_access(ParserState *parser, AST *on);
+AST *parse_reference(ParserState *parser);
+
+AST *parse_identifier(ParserState *parser);
+AST *parse_int_lit(ParserState *parser);
+AST *parse_float_lit(ParserState *parser);
+AST *parse_str_lit(ParserState *parser);
+
 
 #endif

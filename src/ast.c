@@ -5,191 +5,205 @@
 #include "error.h"
 #include "symbol_table.h"
 
-void print_ast(AST* ast, int indent) {
+
+#define STR_CASE(unwrap, into, check, body) case check: { into *unwrap = CAST_AST(ast, into, check); body }
+
+
+void ast_print(Arena *arena, AST *ast) {
+    int mark = arena_mark(arena);
+    String out = ast_str(arena, ast);
+
+    printf("%s\n", out.data);
+    arena_restore(arena, mark);
+}
+
+
+#define arena_sprintf_indent(fmt, ...) arena_sprintf(arena, "%.*s"fmt, indent, tabs, __VA_ARGS__)
+String ast_str_helper(Arena *arena, AST *ast, int indent) {
+    if (ast == NULL) return (String) { .len = 0, .data= ""};
     switch (ast->type) {
-        case AST_PROGRAM:
-            for (int i = 0; i < ast->count; i++) {
-                print_ast(ast->items[i], 0);
+        STR_CASE(program, ASTProgram, AST_PROGRAM, {
+            return astlist_str(arena, program->decls, "\n\n", indent);
+        })
+        STR_CASE(proc, ASTProc, AST_PROCEDURE, {
+            char *name = ast_str(arena, proc->name).data;
+            String params = astlist_str(arena, proc->params, ", ", 0);
+            String rets = astlist_str(arena, proc->rets, ", ", 0);
+            char *block = ast_str(arena, proc->body).data;
+            return arena_sprintf_indent("proc %s (%.*s) => (%.*s) %s ", name, params.len, params.data, rets.len, rets.data, block);
+        })
+        STR_CASE(exter, ASTExtern, AST_EXTERN, {
+            char *decl = ast_str(arena, exter->decl).data;
+            return arena_sprintf_indent("extern %s", decl);
+        })
+        STR_CASE(block, ASTBlock, AST_BLOCK, {
+            char *stmts = astlist_str(arena, block->stmts, "\n", indent + 1).data;
+            return arena_sprintf(arena, "{\n %s \n%.*s}", stmts, indent, tabs);
+        })
+        STR_CASE(decl, ASTDecl, AST_DECL, {
+            char *lhs = ast_str(arena, decl->lhs).data;  
+            char *rhs = ast_str(arena, decl->rhs).data;
+            
+            return (decl->rhs == NULL) ? arena_sprintf_indent("%s: type", lhs) : arena_sprintf_indent("%s := %s", lhs, rhs);
+        })
+        STR_CASE(assign, ASTAssign, AST_ASSIGNMENT, {
+            char *lhs = ast_str(arena, assign->lhs).data;
+            char *rhs = ast_str(arena, assign->rhs).data;
+            return arena_sprintf_indent("%s = %s", lhs, rhs);
+        })
+        STR_CASE(_if, ASTIf, AST_IF, {
+            char *cond = ast_str(arena, _if->cond).data;  
+            char *then = ast_str_helper(arena, _if->then, indent).data;
+            char *otherwise = ast_str_helper(arena, _if->otherwise, indent).data;
+            return arena_sprintf_indent("if (%s) %s %s", cond, then, otherwise);
+        })
+        STR_CASE(_if, ASTIf, AST_ELIF, {
+            char *cond = ast_str(arena, _if->cond).data;  
+            char *then = ast_str_helper(arena, _if->then, indent).data;
+            char *otherwise = ast_str_helper(arena, _if->otherwise, indent).data;
+            return arena_sprintf(arena, "elif (%s) %s %s", cond, then, otherwise);
+        })
+        STR_CASE(_if, ASTIf, AST_ELSE, {
+            char *then = ast_str_helper(arena, _if->then, indent).data;
+            return arena_sprintf(arena, "else %s", then);
+        })
+        STR_CASE(_if, ASTWhile, AST_WHILE, {
+            char *cond = ast_str(arena, _if->cond).data;  
+            char *then = ast_str_helper(arena, _if->then, indent).data;
+            return arena_sprintf_indent("while (%s) %s", cond, then);
+        })
+        STR_CASE(_if, ASTReturn, AST_RETURN, {
+            char *expr = ast_str(arena, _if->expr).data;
+            return arena_sprintf_indent("return %s", expr);
+        })
+        STR_CASE(_if, ASTCall, AST_CALL, {
+            char *ident = ast_str(arena, _if->ident).data;
+            char *args = astlist_str(arena, _if->args, ",", 0).data;
+            return arena_sprintf_indent("%s(%s)", ident, args);
+        })
+        STR_CASE(_if, ASTIndex, AST_INDEX, {
+            char *head = ast_str(arena, _if->head).data;
+            char *index = ast_str(arena, _if->index).data;
+            return arena_sprintf_indent("%s[%s]", head, index);
+        })
+        STR_CASE(_if, ASTAccess, AST_ACCESS, {
+            char *head = ast_str(arena, _if->head).data;
+            char *spec = ast_str(arena, _if->spec).data;
+            return arena_sprintf_indent("%s.%s", head, spec);
+        })
+        STR_CASE(ref, ASTRef, AST_REF, {
+            char *head = ast_str(arena, ref->head).data;
+            return arena_sprintf_indent("&%s", head);
+        })
+        STR_CASE(bin, ASTBinaryOp, AST_BINARY_OP, {
+            char *left = ast_str(arena, bin->left).data;
+            const char *op = "(?)";
+            switch (bin->op) {
+                case OP_LESS_THAN:      op = "<"; break;
+                case OP_EQUALS:         op = "=="; break;
+                case OP_GREATER_THAN:   op = ">"; break;
+                case OP_NEQUALS:        op = "!="; break;
+                case OP_LESS_EQUALS:    op = "<="; break;
+                case OP_GREATER_EQUALS: op = ">="; break;
+                case OP_PLUS:           op = "+"; break;
+                case OP_MINUS:          op = "-"; break;
+                case OP_DIVIDE:         op = "/"; break;
+                case OP_MULTIPLY:       op = "*"; break;
+                default: UNREACHABLE("invalid op");
             }
-            break;
-        case AST_EXTERN:
-            print_indent(0, "extern ");
-            print_ast(ast->externed, 0);
-            break;
-        case AST_PROCEDURE:
-            print_indent(0, "proc ");
-            print_ast(ast->name, 0);
-
-            printf("(");
-            for (int i = 0; i < ast->param_count; i++) {
-                print_ast(ast->params[i]->lhs, 0);
-                printf(": "); print_type(ast->params[i]->evaled_type);
-                if (i < ast->param_count - 1) printf(", ");
-            }
-            printf(") => (");
-            for (int i = 0; i < ast->return_count; i++) {
-                print_ast(ast->returns[i]->lhs, 0);
-                printf(": "); print_type(ast->returns[i]->evaled_type);
-                if (i < ast->return_count - 1) printf(", ");
-            }
-            printf(")\n");
-            if (ast->body != NULL)
-                print_ast(ast->body, 0);
-            break;
-        case AST_CALL:
-            print_ast(ast->callee, indent);
-            printf("(");
-            for (int i = 0; i < ast->arg_count; i++) {
-                print_ast(ast->args[i], 0);
-                if (i < ast->arg_count - 1) printf(", ");
-            }
-            printf(")");
-            break;
-        case AST_INDEX:
-            print_ast(ast->base, indent);
-            printf("[");
-            print_ast(ast->index, 0);
-            printf("]");
-            break;
-        case AST_REF:
-            printf("&");
-            print_ast(ast->base, indent);
-            break;
-        case AST_ACCESS:
-            print_ast(ast->base, indent);
-            printf(".");
-            print_ast(ast->specifier, 0);
-            break;
-        case AST_LIST:
-            printf("{");
-            for (int i = 0; i < ast->count; i++) {
-                print_ast(ast->items[i], 0);
-                if (i < ast->count - 1) printf(", ");
-            }
-            printf("}");
-            break;
-        case AST_SYMBOL:
-            print_indent(0, "%s", ast->ident);
-            break;
-        case AST_FLOAT_LIT:
-            print_indent(0, "%f", ast->float_lit);
-            break;
-        case AST_INT_LIT:
-            print_indent(0, "%d", ast->int_lit);
-            break;
-        case AST_ASSIGNMENT:
-            print_ast(ast->lhs, indent);
-            printf(" = ");
-            print_ast(ast->rhs, 0);
-            printf(";\n");
-            break;
-        case AST_DECL:
-            print_ast(ast->lhs, indent);
-            printf(" : ");
-            if (ast->evaled_type != NULL) print_type(ast->evaled_type);
-            printf(" = ");
-            print_ast(ast->rhs, 0);
-            printf(";\n");
-            break;
-        case AST_BINARY_OP:
-            printf("(");
-            print_ast(ast->left, 0);
-            switch (ast->op) {
-                case OP_EQUALS:         printf(" == "); break;
-                case OP_LESS_THAN:      printf(" < "); break;
-                case OP_GREATER_THAN:   printf(" > "); break;
-                case OP_LESS_EQUALS:    printf(" <= "); break;
-                case OP_GREATER_EQUALS: printf(" >= "); break;
-                case OP_PLUS:           printf(" + "); break;
-                case OP_MINUS:          printf(" - "); break;
-                case OP_DIVIDE:         printf(" / "); break;
-                case OP_MULTIPLY:       printf(" * "); break;
-                default: UNREACHABLE("invalid operation.");
-            }
-            print_ast(ast->right, 0);
-            printf(")");
-            break;
-        case AST_BLOCK:
-            print_indent(0, "{\n");
-            for (int i = 0; i < ast->count; i++) {
-                print_ast(ast->items[i], indent + 1);
-            }
-            print_indent(0, "}\n");
-            break;
-        case AST_RETURN:
-            print_indent(0, "return ");
-            print_ast(ast->rhs, 0);
-            printf(";\n");
-            break;
-        case AST_IF:
-            print_indent(0, "if ");
-            print_ast(ast->condition, 0);
-            printf("\n");
-            print_ast(ast->then, indent);
-            if (ast->otherwise) print_ast(ast->otherwise, indent);
-            break;
-        case AST_ELIF:
-            print_indent(0, "elif ");
-            print_ast(ast->condition, 0);
-            printf("\n");
-            print_ast(ast->then, indent);
-            if (ast->otherwise) print_ast(ast->otherwise, indent);
-            break;
-        case AST_ELSE:
-            print_indent(0, "else\n");
-            print_ast(ast->then, indent);
-            break;
-        case AST_WHILE:
-            print_indent(0, "while ");
-            print_ast(ast->condition, 0);
-            printf("\n");
-            print_ast(ast->then, indent);
-            break;
+            char *right = ast_str(arena, bin->right).data;
+            return arena_sprintf_indent("%s %s %s", left, op, right);
+        })
+        STR_CASE(list, ASTListConstruct, AST_LIST, {
+            char *items = astlist_str(arena, list->items, ", ", 0).data;
+            return arena_sprintf_indent("{%s}", items);
+        })
+        STR_CASE(ident, ASTIdentifier, AST_IDENTIFIER, {
+            return arena_sprintf_indent("%s", ident->name);
+        })
+        STR_CASE(_int, ASTIntLit, AST_INT_LIT, {
+            return arena_sprintf_indent("%d", _int->literal);
+        })
+        STR_CASE(_float, ASTFloatLit, AST_FLOAT_LIT, {
+            return arena_sprintf_indent("%d", _float->literal);
+        })
+        STR_CASE(_str, ASTStringLit, AST_STR_LIT, {
+            return arena_sprintf_indent("%s", _str->literal);
+        })
         default:
-            printf("unknown\n");
+            UNREACHABLE("invalid ast");
             break;
     }
 }
 
-AST *get_underlying_symbol_from(AST *index) {
-    return (index->base && index->base->type == AST_SYMBOL) ? index->base : get_underlying_symbol_from(index->base);
+String ast_str(Arena *arena, AST *root) {
+    return ast_str_helper(arena, root, 0);
 }
 
-bool op_is_arithmetic(BinaryOp op) {
-    switch (op) {
-        case OP_DIVIDE:
-        case OP_PLUS:
-        case OP_MINUS:
-        case OP_MULTIPLY:
-            return true;
-        default:
-            return false;
+String astlist_str(Arena *arena, ASTList list, const char *delim, int indent) {
+    if (list.count == 0) return (String) { 0 };
+
+    int dlen = (int)(strlen(delim));
+
+    String *parts = arena_alloc(arena, list.count * sizeof *parts);
+    int total = 0;
+    for (int i = 0; i < list.count; i++) {
+        parts[i] = ast_str_helper(arena, list.items[i], indent);
+        total += parts[i].len;
     }
-}
-
-bool op_is_conditional(BinaryOp op) {
-    switch (op) {
-        case OP_EQUALS:
-        case OP_LESS_EQUALS:
-        case OP_GREATER_THAN:
-        case OP_GREATER_EQUALS:
-        case OP_LESS_THAN:
-            return true;
-        default:
-            return false;
+    
+    total += dlen * (list.count - 1);
+    char *buf = arena_alloc(arena, total + 1);
+    int offset = 0;
+    for (int i = 0; i < list.count; i++) {
+        if (i > 0) {
+            memcpy(buf + offset, delim, dlen);
+            offset += dlen;
+        }
+        memcpy(buf + offset, parts[i].data, parts[i].len);
+        offset += parts[i].len;
     }
+    buf[total] = '\0';
+    return (String) { .len = total, .data = buf};
 }
 
 
-BinaryOp op_opposite(BinaryOp op) {
-    switch(op) {
-        case OP_EQUALS: return OP_NEQUALS;
-        case OP_NEQUALS: return OP_EQUALS;
-        case OP_LESS_THAN: return OP_GREATER_EQUALS;
-        case OP_GREATER_THAN: return OP_LESS_EQUALS;
-        case OP_LESS_EQUALS: return OP_GREATER_THAN;
-        case OP_GREATER_EQUALS: return OP_LESS_THAN;
-        default:
-            UNREACHABLE("invalid binary op");
-    }
-}
+// bool op_is_arithmetic(BinaryOp op) {
+//     switch (op) {
+//         case OP_DIVIDE:
+//         case OP_PLUS:
+//         case OP_MINUS:
+//         case OP_MULTIPLY:
+//             return true;
+//         default:
+//             return false;
+//     }
+// }
+
+
+// bool op_is_conditional(BinaryOp op) {
+//     switch (op) {
+//         case OP_EQUALS:
+//         case OP_LESS_EQUALS:
+//         case OP_GREATER_THAN:
+//         case OP_GREATER_EQUALS:
+//         case OP_LESS_THAN:
+//             return true;
+//         default:
+//             return false;
+//     }
+// }
+
+
+// BinaryOp op_opposite(BinaryOp op) {
+//     switch(op) {
+//         case OP_EQUALS: return OP_NEQUALS;
+//         case OP_NEQUALS: return OP_EQUALS;
+//         case OP_LESS_THAN: return OP_GREATER_EQUALS;
+//         case OP_GREATER_THAN: return OP_LESS_EQUALS;
+//         case OP_LESS_EQUALS: return OP_GREATER_THAN;
+//         case OP_GREATER_EQUALS: return OP_LESS_THAN;
+//         default:
+//             UNREACHABLE("invalid binary op");
+//     }
+// }

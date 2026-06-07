@@ -1,4 +1,5 @@
 #include <stdint.h>
+#include <stdio.h>
 
 #include "common.h"
 
@@ -140,6 +141,30 @@ void *arena_realloc(Arena *a, void *ptr, size_t old_size, size_t new_size) {
     uint8_t *res = (uint8_t *)arena_alloc(a, new_size);
     memcpy(res, ptr, old_size);
     return res;
+}
+
+String arena_sprintf(Arena *a, const char *fmt, ...) {
+    String str = { 0 };
+    va_list args, args2;
+
+    va_start(args, fmt);
+
+    va_copy(args2, args);
+    int len = vsnprintf(NULL, 0, fmt, args);
+    va_end(args);
+
+    if (len >= 0) {
+        str.data = arena_alloc(a, (len + 1) * sizeof(char));
+        if (str.data != NULL)
+            vsnprintf(str.data, len + 1, fmt, args2);
+        str.len = len;          // length excludes the NUL terminator
+    } else {
+        str.len = -1;
+        str.data = NULL;
+    }
+
+    va_end(args2);
+    return str;
 }
 
 void *arena_intern(Arena *a, HashTable *intern, const void *value, size_t size) {
