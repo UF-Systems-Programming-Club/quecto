@@ -13,7 +13,7 @@ Currently the desired grammar looks like this:
 
   proc main () => (status: i32) {
     i := 0;
-    while (i < 30) {
+    while i < 30 {
       q, r := divide(i, 15);
       if (q % 3 == 0)
         print("bow");
@@ -30,8 +30,8 @@ Currently the desired grammar looks like this:
 However, the only language features implemented are:
   - procedures (without multiple return values or named return values)
   - thus no multiple assign
-  - there is no system libraries yet (but we plan on using libc functions for now with an extern keyword)
-  - there is a analysis and preliminary type system in place though the size and conventions (u32 vs i32) are not yet used in IR/code gen
+  - there is no system libraries yet (but libc functions can be used via 'extern')
+  - there is a analysis and preliminary type system in place but it is rather weak
   - there is no and/or functionality yet
   - there are no bitwise operators yet
 
@@ -44,6 +44,7 @@ Currently the Quecto Compiler has 6 stages:
   - Parsing
   - Analysis
   - IR Generation
+  - CFG + IR Analysis
   - Code Generation
 
 ### Lexing
@@ -72,6 +73,8 @@ Parsing merely structurally creates the AST but assigns no meaning to symbols bu
 to see if it is valid.
 
 Related Files:
+  - `include/symbol_table.h`
+  - `src/symbol_table.c`
   - `include/analysis.h`
   - `src/analysis.c`
 
@@ -109,3 +112,4 @@ Related Files:
   - `include/codegen.h`
   - `src/codegen.c`
   - `src/backends/linux_x64.c`
+  - `src/backends/windows_x64.c`

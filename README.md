@@ -14,6 +14,10 @@ Currently, the result of the program can be seen with the exit code.
 
 See [Overview](./OVERVIEW.md).
 
+## Contributing
+
+See [Contributing](./CONTRIBUTING.md).
+
 ## Usage
 
 ```bash
