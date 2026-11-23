@@ -14,39 +14,101 @@
 #include "error.h"
 #include "backends/linux_x64.h"
 
+typedef enum {
+    DEBUG_PRINT_TOKENS = 1,
+    DEBUG_PRINT_AST = 2,
+    DEBUG_PRINT_CFG = 4,
+} BuildFlags;
+
+typedef struct {
+    const char *input_file;
+    const char *output_file;
+    BuildFlags flags;
+} BuildOptions;
+
+typedef enum {
+    COMMAND_UNRECOGNIZED = -1,
+    COMMAND_HELP = 0,
+    COMMAND_BUILD
+} CommandKind;
+
+typedef struct {
+    CommandKind kind;
+    BuildOptions build_options;
+} Command;
+
 
 void help_prompt(void);
 void unrecognized_prompt(void);
-int compile(const char *filename);
+int compile(BuildOptions options);
 
 int main(int argc, char **argv) { // quecto <command> <input> {flags}
-    if (argc == 1) {
-        help_prompt();
-    } else if (argc >= 2) {
-        int current_arg = 1;
-        if (strncmp(argv[current_arg++], "build", sizeof("build")) == 0) {
-            if (current_arg >= argc) {
-                printf("no file supplied.\n");
+
+    Command command = (Command) {
+        .kind = COMMAND_HELP,
+        .build_options = {
+            .input_file = NULL,
+            .output_file = "out.S",
+            .flags = 0,
+        }
+    };
+
+    if (argc >= 1) {
+
+        #define CONST_STR_CMP(a, b) (strncmp(a, b, sizeof(b)) == 0)
+
+        if (CONST_STR_CMP(argv[1], "build")) {
+            command.kind = COMMAND_BUILD;
+        } else if (CONST_STR_CMP(argv[1], "help")) {
+            command.kind = COMMAND_HELP;
+        }
+
+        for (int i = 2; i < argc;) {
+            if (CONST_STR_CMP(argv[i], "-o")) {
+                command.build_options.output_file = argv[i+1];
+                i += 2;
+            } else if (CONST_STR_CMP(argv[i], "-i")) {
+                command.build_options.input_file = argv[i+1];
+                i += 2;
+            } else if (CONST_STR_CMP(argv[i], "--dump-ast")) {
+                command.build_options.flags |= DEBUG_PRINT_AST;
+                i++;
+            }
+        }
+
+        #undef CONST_STR_CMP
+
+    }
+    
+    // run command
+
+    switch (command.kind) {
+        case COMMAND_UNRECOGNIZED:
+            unrecognized_prompt();
+            break;
+        case COMMAND_HELP:
+            help_prompt();
+            break;
+        case COMMAND_BUILD:
+            if (command.build_options.input_file != NULL) {
+                if (compile(command.build_options) == 0) {
+                    printf("compiled successfully.\n");
+                } else {
+                    printf("error");
+                    return -1;
+                }
+            } else {
+                printf("no file supplied");
                 return -1;
             }
-            char *filename = argv[current_arg];
-            if (compile(filename) == 0) {
-                printf("compiled successfully.\n");
-            } else {
-                printf("error\n");
-            }
-        } else if (strncmp(argv[1], "help", sizeof("help")) == 0) {
-            help_prompt();
-        } else {
-            unrecognized_prompt();
-        }
-    }   
+            break;
+    }
 }
 
 void help_prompt(void) {
     printf("info: Usage: quecto [command] [options]\n");
     printf("List of Commands:\n");
-    printf("\tbuild {file}\t\tBuilds the file.\n");
+    printf("\tbuild {file} {-i input} {-o output}\t\tBuilds the file.\n");
     printf("\thelp\t\tShows this prompt.\n");
 }
 
@@ -54,8 +116,9 @@ void unrecognized_prompt(void) {
     printf("unrecognized command\n");
 }
 
-int compile(const char *filename) {
-    FILE *f = fopen(filename, "r");
+int compile(BuildOptions options) {
+    FILE *f = fopen(options.input_file, "r");
+    
     fseek(f, 0, SEEK_END);
     long fsize = ftell(f);
     fseek(f, 0, SEEK_SET);
@@ -78,10 +141,10 @@ int compile(const char *filename) {
     arena_create(&scratch, 1024 * 1024);
     
     TokenArray tokens = tokenize(&arena, src, src_size);
+
     if (error) return -1;
 
-    HashTable types = {0}; // intern table
-
+    HashTable types = { 0 }; // intern table
 
     ParserState parser = {
         .tokens = tokens,
@@ -92,6 +155,18 @@ int compile(const char *filename) {
     AST *ast = parse_program(&parser);
 
     if (error) return -1;
+
+    if ((options.flags & DEBUG_PRINT_AST) == DEBUG_PRINT_AST) {
+        size_t mark = arena_mark(&scratch);
+        String filename = arena_sprintf(&scratch, "%s.ast", options.output_file);
+        String contents = ast_str(&scratch, ast);
+        
+        FILE *out = fopen(filename.data, "w");
+        fputs(contents.data, out);
+        fclose(out);
+        
+        arena_restore(&scratch, mark);
+    }
 
     SymbolTable symbols = { 0 };
 
@@ -120,6 +195,7 @@ int compile(const char *filename) {
             pass_color_cfg,
             pass_phis_into_copies,
             pass_sweep_nops,
+            debug_pass_print_colored,
             NULL,
     };
 
@@ -128,7 +204,7 @@ int compile(const char *filename) {
 
     passes_run(&program, passes, (Arenas) { .scratch = &scratch, .persistent = &backing});
 
-    FILE *out = fopen("out.S", "w");
+    FILE *out = fopen(options.output_file, "w");
     compile_program_with(out, &scratch, &LINUX_X86_64_BACKEND, &program);
 
     fclose(out);

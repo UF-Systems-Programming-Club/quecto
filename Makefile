@@ -40,14 +40,14 @@ smoke: main
 	@echo "==BUILDING EXPECTED SUCCESS EXAMPLES=="
 	@for example in $(EXAMPLES); do \
 		echo "Building $$example"; \
-		$(BUILD_DIR)/main build $$example && \
+		$(BUILD_DIR)/main build -i $$example && \
 			echo "SUCCESS: $$example built successfully" || \
 			{ echo "ERROR: $$example unexpectedly failed"; exit 1; } \
 	done
 	@echo "\n\n==BUILDING EXPECTED ERROR EXAMPLES=="
 	@for example in $(ERROR_EXAMPLES); do \
 		echo "Building $$example"; \
-		($(BUILD_DIR)/main build $$example) && \
+		($(BUILD_DIR)/main build -i $$example) && \
 			{ echo "ERROR: $$example unexpectedly succeeded"; exit 1; } || \
 			echo "SUCCESS: $$example failed successfully"; \
 	done
@@ -67,7 +67,7 @@ else ifeq ($(DETECTED_OS),Linux)
 endif
 
 run-%: main examples/%.q
-	$(BUILD_DIR)/main build examples/$*.q
+	$(BUILD_DIR)/main build -i examples/$*.q
 	$(NASM) $(NASM_FLAGS) -o $*.o out.S
 	$(LD) $(LD_FLAGS) -o $(BUILD_DIR)/$* $*.o
 	rm -f $*.o out.S
