@@ -24,9 +24,9 @@ Token consume_token(ParserState *parser) {
 Token expect_token(ParserState *parser, TokenType type) {
     if (peek_token_type(parser, 0) != type) {
         Token tok = consume_token(parser);
-        report_error(tok.line, tok.col, "expected \'%s\' but got \'"sv_fmt"\' instead\n",
+        report_error(tok.line, tok.col, "expected \'%s\' but got \'"SV_FMT"\' instead\n",
                 token_info_table[type].name,
-                sv_arg(tok.lexeme)
+                SV_ARG(tok.lexeme)
         );
         return tok;
     }

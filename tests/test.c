@@ -49,9 +49,9 @@ int token_tests(void) {
             int match = 1;
             for (int j = 0; j < tok_tests[i].expected_count; j++) {
                 if (result.items[j].type != tok_tests[i].expected_types[j]) {
-                    printf("FAILED: Token %d mismatch. Expected %s, got %s\n", 
-                           j, token_info_table[tok_tests[i].expected_types[j]].name, 
-                           token_info_table[result.items[j].type].name);
+                    printf("FAILED: Token %d mismatch. Expected "SV_FMT", got "SV_FMT"\n", 
+                           j, SV_ARG(token_info_table[tok_tests[i].expected_types[j]].name), 
+                           SV_ARG(token_info_table[result.items[j].type].name));
                     match = 0;
                     break;
                 }

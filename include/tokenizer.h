@@ -61,7 +61,7 @@ typedef enum {
 } TokenFlags;
 
 typedef struct {
-    const char *name;
+    StringView name;
     int precedence;
     TokenFlags flags;
 } TokenInfo;
@@ -75,9 +75,8 @@ TokenArray tokenize(Arenas *arena, const char *buf, size_t size);
 
 void print_token(Token tok);
 bool token_is_operator(TokenType type);
+String tk_array_str(Arena *a, TokenArray arr);
 bool token_is_primitive(TokenType type);
 int token_precedence(TokenType type);
-
-
 
 #endif

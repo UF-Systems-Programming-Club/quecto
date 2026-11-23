@@ -1,5 +1,7 @@
+#include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "common.h"
 
@@ -164,6 +166,33 @@ String arena_sprintf(Arena *a, const char *fmt, ...) {
     }
 
     va_end(args2);
+    return str;
+}
+
+String arena_sconcat(Arena *a, StringView delim, size_t n, const StringView *strs) {
+    String str = { 0 };
+
+    for (size_t i = 0; i < n; i++) {
+        str.len += strs[i].len;
+        if (i != n - 1)
+            str.len += delim.len;
+    }
+
+    str.data = arena_alloc(a, str.len + 1);
+    char *tmp = str.data;
+
+    for (size_t i = 0; i < n; i++) {
+        if (strs[i].len != 0) {
+            memcpy(tmp, strs[i].str, strs[i].len);
+            tmp += strs[i].len;
+        }
+        if (delim.len != 0) {
+            memcpy(tmp, delim.str, delim.len);
+            tmp += delim.len;
+        }
+    }
+
+    *tmp = '\0';
     return str;
 }
 

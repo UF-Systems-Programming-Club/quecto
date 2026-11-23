@@ -73,6 +73,9 @@ int main(int argc, char **argv) { // quecto <command> <input> {flags}
             } else if (CONST_STR_CMP(argv[i], "--dump-ast")) {
                 command.build_options.flags |= DEBUG_PRINT_AST;
                 i++;
+            } else if (CONST_STR_CMP(argv[i], "--dump-tokens")) {
+                command.build_options.flags |= DEBUG_PRINT_TOKENS;
+                i++;
             }
         }
 
@@ -141,6 +144,18 @@ int compile(BuildOptions options) {
     arena_create(&scratch, 1024 * 1024);
     
     TokenArray tokens = tokenize(&arena, src, src_size);
+
+    if ((options.flags & DEBUG_PRINT_TOKENS) == DEBUG_PRINT_TOKENS) {
+        size_t mark = arena_mark(&scratch);
+        String filename = arena_sprintf(&scratch, "%s.tk", options.output_file);
+        String contents = tk_array_str(&scratch, tokens);
+        
+        FILE *out = fopen(filename.data, "w");
+        fputs(contents.data, out);
+        fclose(out);
+        
+        arena_restore(&scratch, mark);
+    }
 
     if (error) return -1;
 

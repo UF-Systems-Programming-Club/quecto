@@ -121,6 +121,11 @@ typedef struct {
     char *data;
 } String;
 
+typedef struct {
+    size_t len;
+    const char *str;
+} StringView;
+
 void arena_create(Arena *a, size_t capacity);
 void *arena_alloc(Arena *a, size_t size);
 void *arena_realloc(Arena *a, void *ptr, size_t old_size, size_t new_size);
@@ -129,16 +134,13 @@ void arena_clear(Arena *a);
 void arena_free(Arena *a);
 
 String arena_sprintf(Arena *a, const char *fmt, ...);
+String arena_sconcat(Arena *a, StringView delim, size_t n, const StringView *strs);
 size_t arena_mark(Arena *a);
 void arena_restore(Arena *a, size_t cursor);
 
 #define arena_alloc_type(arena_ptr, type) \
     (type *)arena_alloc((arena_ptr), sizeof(type))
 
-typedef struct {
-    size_t len;
-    const char *str;
-} StringView;
 
 
 typedef struct {
@@ -191,8 +193,8 @@ struct { \
         stack->stack[stack->cursor++] = val; \
      } \
 
-#define sv_literal(str) (StringView){ sizeof(str) - 1, (str) }
-#define sv_fmt "%.*s"
-#define sv_arg(sv) (int)(sv).len, (sv).str
+#define SV_LITERAL(str) (StringView){ sizeof(str) - 1, (str) }
+#define SV_FMT "%.*s"
+#define SV_ARG(sv) (int)(sv).len, (sv).str
 
 #endif
