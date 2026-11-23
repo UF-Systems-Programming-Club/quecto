@@ -35,7 +35,7 @@ typedef struct {
     union {
         unsigned int int_lit;
         float float_lit;
-        char *string_lit;
+        const char *string_lit;
         char *identifier;
     };
     unsigned int line, col;

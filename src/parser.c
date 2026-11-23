@@ -441,6 +441,6 @@ AST *parse_str_lit(ParserState *parser) {
     ASTStringLit *literal = arena_alloc_type(parser->arena, ASTStringLit);
     literal->base.type = AST_STR_LIT;
     literal->base.token = expect_token(parser, TOKEN_STR_LIT);
-    literal->literal = literal->base.token.string_lit;
+    // literal->literal = literal->base.token.string_lit;
     return &literal->base;
 }

@@ -251,7 +251,7 @@ void string_builder_append_base(StringBuilder *sb, const char *data, size_t len)
             new_capacity = sb->capacity * 2;
         }
                 
-        arena_realloc(sb->backing, sb->string.data, sb->capacity, new_capacity);
+        sb->string.data = arena_realloc(sb->backing, sb->string.data, sb->capacity, new_capacity);
         sb->capacity = new_capacity;    
     }
     

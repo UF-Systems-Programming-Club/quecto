@@ -123,7 +123,9 @@ typedef String (DumpFn(Arena *scratch, const void *context));
 
 String generate_ast_dump(Arena *scratch, const void *context) {
     AST *ast = *(AST * const *) context;
-    return ast_str(scratch, ast);
+    StringBuilder sb = {0};
+    string_builder_create(&sb, scratch, 128);
+    return ast_str(&sb, scratch, ast);
 }
 
 String generate_token_dump(Arena *scratch, const void *context) {

@@ -126,6 +126,8 @@ typedef struct {
     char *data;
 } String;
 
+#define VIEW_FROM_STRING(s) (StringView) { .str = s.data, .len = s.len }
+
 typedef struct {
     Arena *backing;
     String string;
@@ -197,6 +199,9 @@ struct { \
 #define DEFINE_STACK_DEF(name, type) \
      static inline void name##_set_backing(name *stack, Arena *arena) {\
          stack->arena = arena;\
+     }\
+     static inline bool name##_empty(name *stack) {\
+        return stack->cursor <= 0;\
      }\
      static inline type name##_pop(name *stack) { \
          if (stack->cursor <= 0) return (type) { 0 };\

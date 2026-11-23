@@ -204,6 +204,9 @@ TokenArray tokenize(Arenas *arena, const char *buf, size_t size) {
                 tok.identifier = arena_alloc(arena->persistent, sizeof(char) * (next - start + 1));
                 strncpy(tok.identifier, token, next - start);
                 tok.identifier[next - start] = '\0';
+                // String ident = { .data = arena_alloc(arena->persistent, sizeof(char) * (next - start + 1)), .len = next - start};
+                // memcpy(ident.data, token, next - start);
+                // tok.identifier = VIEW_FROM_STRING(ident);
                 break;
             case TOKEN_INT_LIT:
                 tok.int_lit = int_from_str(&buf[start], next - start);

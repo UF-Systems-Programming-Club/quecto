@@ -72,8 +72,8 @@ DEFINE_AST(Call,       (AST *ident; ASTList args;) )
 DEFINE_AST(If,         (AST *cond; AST *then; AST *otherwise;) )
 DEFINE_AST(While,      (AST *cond; AST *then; ))
 DEFINE_AST(Return,     (AST *expr;) )
-DEFINE_AST(Identifier, (const char *name;) )
-DEFINE_AST(StringLit,  (const char *literal;) )
+DEFINE_AST(Identifier, (const char *name;) ) // needs to be changed to StringView
+DEFINE_AST(StringLit,  (StringView literal;) )
 DEFINE_AST(IntLit,     (unsigned int literal;) )
 DEFINE_AST(FloatLit,   (float literal;) )
 
@@ -88,7 +88,6 @@ bool op_is_arithmetic(BinaryOp op);
 BinaryOp op_opposite(BinaryOp op);
 
 void ast_print(Arena *arena, AST *root);
-String ast_str(Arena *arena, AST *root);
-String astlist_str(Arena *arena, ASTList list, const char *delim, int indent);
+String ast_str(StringBuilder *sb, Arena *arena, AST *root);
 
 #endif
