@@ -186,7 +186,7 @@ String arena_sconcat(Arena *a, StringView delim, size_t n, const StringView *str
             memcpy(tmp, strs[i].str, strs[i].len);
             tmp += strs[i].len;
         }
-        if (delim.len != 0) {
+        if (i != n - 1 && delim.len != 0) {
             memcpy(tmp, delim.str, delim.len);
             tmp += delim.len;
         }
@@ -224,6 +224,58 @@ void arena_free(Arena *a) {
     a->data = NULL;
     a->capacity = 0;
     a->size = 0;
+}
+
+
+void string_builder_create(StringBuilder *sb, Arena *a, size_t starting_capacity) {
+    sb->backing = a;
+    sb->string.data = arena_alloc(a, starting_capacity);
+    sb->string.len = 0;
+    sb->capacity = starting_capacity;
+}
+
+void string_builder_append_base(StringBuilder *sb, const char *data, size_t len) {
+    if (len == 0) return;
+
+    if (len > SIZE_MAX - sb->string.len) {
+        // error
+        exit(1);
+    }
+
+    size_t required = sb->string.len + len;
+    
+    if (required > sb->capacity) {
+        size_t new_capacity = required;
+
+        if (new_capacity <= SIZE_MAX / 2 && required < sb->capacity * 2) {
+            new_capacity = sb->capacity * 2;
+        }
+                
+        arena_realloc(sb->backing, sb->string.data, sb->capacity, new_capacity);
+        sb->capacity = new_capacity;    
+    }
+    
+    memcpy(sb->string.data + sb->string.len, data, len);
+    sb->string.len = required;
+}
+
+String string_builder_to_string(StringBuilder *sb, Arena *scratch) {
+    String str = { 0 };
+    str.data = arena_alloc(scratch, sb->string.len);
+    str.len = sb->string.len;
+
+    memcpy(str.data, sb->string.data, sb->string.len);
+
+    return str;
+}
+
+const char *string_builder_to_cstr(StringBuilder *sb, Arena *scratch) {
+    char *str = arena_alloc(scratch, sb->string.len + 1);
+
+    memcpy(str, sb->string.data, sb->string.len);
+    str[sb->string.len] = '\0';
+
+    return str;
 }
 
 

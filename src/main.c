@@ -119,6 +119,37 @@ void unrecognized_prompt(void) {
     printf("unrecognized command\n");
 }
 
+typedef String (DumpFn(Arena *scratch, const void *context));
+
+String generate_ast_dump(Arena *scratch, const void *context) {
+    AST *ast = *(AST * const *) context;
+    return ast_str(scratch, ast);
+}
+
+String generate_token_dump(Arena *scratch, const void *context) {
+    const TokenArray *tokens = context;
+    return tk_array_str(scratch, *tokens);
+}
+
+void dump_intermediate_file(Arena *scratch, const char *file, StringView suffix, DumpFn generator, const void *context) {
+    size_t mark = arena_mark(scratch);
+
+    StringBuilder sb = { 0 };
+    string_builder_create(&sb, scratch, sizeof(char) * 16);
+    string_builder_cstr_append(&sb, file);
+    string_builder_sv_append(&sb, suffix);
+
+    String contents = generator(scratch, context);
+
+    const char *filename = string_builder_to_cstr(&sb, scratch);
+    
+    FILE *out = fopen(filename, "w");
+    fwrite(contents.data, 1, contents.len, out);
+    fclose(out);
+    
+    arena_restore(scratch, mark);
+}
+
 int compile(BuildOptions options) {
     FILE *f = fopen(options.input_file, "r");
     
@@ -146,15 +177,8 @@ int compile(BuildOptions options) {
     TokenArray tokens = tokenize(&arena, src, src_size);
 
     if ((options.flags & DEBUG_PRINT_TOKENS) == DEBUG_PRINT_TOKENS) {
-        size_t mark = arena_mark(&scratch);
-        String filename = arena_sprintf(&scratch, "%s.tk", options.output_file);
-        String contents = tk_array_str(&scratch, tokens);
-        
-        FILE *out = fopen(filename.data, "w");
-        fputs(contents.data, out);
-        fclose(out);
-        
-        arena_restore(&scratch, mark);
+        dump_intermediate_file(&scratch, options.output_file, SV_LITERAL(".tk"),
+                generate_token_dump, &tokens);
     }
 
     if (error) return -1;
@@ -172,15 +196,8 @@ int compile(BuildOptions options) {
     if (error) return -1;
 
     if ((options.flags & DEBUG_PRINT_AST) == DEBUG_PRINT_AST) {
-        size_t mark = arena_mark(&scratch);
-        String filename = arena_sprintf(&scratch, "%s.ast", options.output_file);
-        String contents = ast_str(&scratch, ast);
-        
-        FILE *out = fopen(filename.data, "w");
-        fputs(contents.data, out);
-        fclose(out);
-        
-        arena_restore(&scratch, mark);
+        dump_intermediate_file(&scratch, options.output_file, SV_LITERAL(".ast"),
+                generate_ast_dump, &ast);
     }
 
     SymbolTable symbols = { 0 };

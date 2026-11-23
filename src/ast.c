@@ -18,6 +18,7 @@ void ast_print(Arena *arena, AST *ast) {
 }
 
 
+// STRING ABI CORRUPTED
 #define arena_sprintf_indent(fmt, ...) arena_sprintf(arena, "%.*s"fmt, indent, tabs, __VA_ARGS__)
 String ast_str_helper(Arena *arena, AST *ast, int indent) {
     if (ast == NULL) return (String) { .len = 0, .data= ""};
@@ -30,6 +31,7 @@ String ast_str_helper(Arena *arena, AST *ast, int indent) {
             String params = astlist_str(arena, proc->params, ", ", 0);
             String rets = astlist_str(arena, proc->rets, ", ", 0);
             char *block = ast_str(arena, proc->body).data;
+            // return arena_sconcat(arena, "  ", 5, {S})
             return arena_sprintf_indent("proc %s (%.*s) => (%.*s) %s ", name, params.len, params.data, rets.len, rets.data, block);
         })
         STR_CASE(exter, ASTExtern, AST_EXTERN, {
@@ -140,10 +142,12 @@ String ast_str(Arena *arena, AST *root) {
     return ast_str_helper(arena, root, 0);
 }
 
-String astlist_str(Arena *arena, ASTList list, const char *delim, int indent) {
-    if (list.count == 0) return (String) { 0 };
 
-    int dlen = (int)(strlen(delim));
+// STRING ABI CORRUPTED 
+String astlist_str(Arena *arena, ASTList list, const char *delim, int indent) {
+    if (list.count == 0) return (String) { 0 }; // if list empty 0
+
+    int dlen = (int)(strlen(delim)); // remove via SV
 
     String *parts = arena_alloc(arena, list.count * sizeof *parts);
     int total = 0;
