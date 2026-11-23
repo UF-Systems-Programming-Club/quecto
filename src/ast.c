@@ -50,7 +50,7 @@ void ast_print(Arena *arena, AST *ast) {
     int mark = arena_mark(arena);
     StringBuilder sb = { 0 };
     string_builder_create(&sb, arena, 128 * sizeof(char));
-    String out = sb_ast_str(&sb, arena, ast);
+    String out = ast_str(&sb, arena, ast);
 
     printf("%.*s\n", (int)out.len, out.data);
     arena_restore(arena, mark);
