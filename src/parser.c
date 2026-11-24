@@ -24,9 +24,9 @@ Token consume_token(ParserState *parser) {
 Token expect_token(ParserState *parser, TokenType type) {
     if (peek_token_type(parser, 0) != type) {
         Token tok = consume_token(parser);
-        report_error(tok.line, tok.col, "expected \'%s\' but got \'"sv_fmt"\' instead\n",
-                token_info_table[type].name,
-                sv_arg(tok.lexeme)
+        report_error(tok.line, tok.col, "expected \'"SV_FMT"' but got \'"SV_FMT"\' instead\n",
+                SV_ARG(token_info_table[type].name),
+                SV_ARG(tok.lexeme)
         );
         return tok;
     }
@@ -47,7 +47,7 @@ AST *parse_program(ParserState *parser) {
             case TOKEN_PROC:   statement = parse_procedure(parser); break;
             default: {
                 Token tok = consume_token(parser);
-                report_error(tok.line, tok.col, "Expected top-level declaration got %s", token_info_table[tok.type].name);
+                report_error(tok.line, tok.col, "Expected top-level declaration got "SV_FMT, SV_ARG(token_info_table[tok.type].name));
                 return NULL;
             }
         }
@@ -441,6 +441,6 @@ AST *parse_str_lit(ParserState *parser) {
     ASTStringLit *literal = arena_alloc_type(parser->arena, ASTStringLit);
     literal->base.type = AST_STR_LIT;
     literal->base.token = expect_token(parser, TOKEN_STR_LIT);
-    literal->literal = literal->base.token.string_lit;
+    // literal->literal = literal->base.token.string_lit;
     return &literal->base;
 }

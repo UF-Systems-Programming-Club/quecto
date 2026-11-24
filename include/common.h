@@ -118,8 +118,23 @@ typedef struct {
 
 typedef struct {
     size_t len;
+    const char *str;
+} StringView;
+
+typedef struct {
+    size_t len;
     char *data;
 } String;
+
+#define VIEW_FROM_STRING(s) (StringView) { .str = s.data, .len = s.len }
+
+typedef struct {
+    Arena *backing;
+    String string;
+    size_t capacity;
+} StringBuilder;
+
+
 
 void arena_create(Arena *a, size_t capacity);
 void *arena_alloc(Arena *a, size_t size);
@@ -129,17 +144,34 @@ void arena_clear(Arena *a);
 void arena_free(Arena *a);
 
 String arena_sprintf(Arena *a, const char *fmt, ...);
+String arena_sconcat(Arena *a, StringView delim, size_t n, const StringView *strs);
 size_t arena_mark(Arena *a);
 void arena_restore(Arena *a, size_t cursor);
 
 #define arena_alloc_type(arena_ptr, type) \
     (type *)arena_alloc((arena_ptr), sizeof(type))
 
-typedef struct {
-    size_t len;
-    const char *str;
-} StringView;
+void string_builder_create(StringBuilder *sb, Arena *a, size_t capacity);
+void string_builder_reserve(StringBuilder *sb, size_t n);
 
+void string_builder_append_char(StringBuilder *sb, char chr);
+void string_builder_append_size_t(StringBuilder *sb, size_t num);
+void string_builder_append_base(StringBuilder *sb, const char *data, size_t len);
+
+String string_builder_to_string(StringBuilder *sb, Arena *scratch);
+const char *string_builder_to_cstr(StringBuilder *sb, Arena *scratch);
+
+static inline void string_builder_append(StringBuilder *sb, String str) {
+    string_builder_append_base(sb, str.data, str.len);
+}
+
+static inline void string_builder_sv_append(StringBuilder *sb, StringView str) {
+    string_builder_append_base(sb, str.str, str.len);
+}
+
+static inline void string_builder_cstr_append(StringBuilder *sb, const char *cstr) {
+    string_builder_append_base(sb, cstr, strlen(cstr));
+}
 
 typedef struct {
     uint64_t *buckets;
@@ -173,6 +205,9 @@ struct { \
      static inline void name##_set_backing(name *stack, Arena *arena) {\
          stack->arena = arena;\
      }\
+     static inline bool name##_empty(name *stack) {\
+        return stack->cursor <= 0;\
+     }\
      static inline type name##_pop(name *stack) { \
          if (stack->cursor <= 0) return (type) { 0 };\
          return stack->stack[--stack->cursor];\
@@ -191,8 +226,8 @@ struct { \
         stack->stack[stack->cursor++] = val; \
      } \
 
-#define sv_literal(str) (StringView){ sizeof(str) - 1, (str) }
-#define sv_fmt "%.*s"
-#define sv_arg(sv) (int)(sv).len, (sv).str
+#define SV_LITERAL(str) (StringView){ sizeof(str) - 1, (str) }
+#define SV_FMT "%.*s"
+#define SV_ARG(sv) (int)(sv).len, (sv).str
 
 #endif

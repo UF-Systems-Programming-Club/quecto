@@ -14,39 +14,136 @@
 #include "error.h"
 #include "backends/linux_x64.h"
 
+typedef enum {
+    DEBUG_PRINT_TOKENS = 1,
+    DEBUG_PRINT_AST = 2,
+    DEBUG_PRINT_EMIT = 4,
+    DEBUG_PRINT_POST_PASS = 8,
+} BuildFlags;
+
+typedef enum {
+    BUILD_EMPTY_ARG = 1,
+    BUILD_FILE_NOT_FOUND = 2,
+} ErrorFlags;
+
+typedef struct {
+    const char *input_file;
+    const char *output_file;
+    BuildFlags flags;
+} BuildOptions;
+
+typedef enum {
+    COMMAND_UNRECOGNIZED = -1,
+    COMMAND_HELP = 0,
+    COMMAND_BUILD
+} CommandKind;
+
+typedef struct {
+    CommandKind kind;
+    BuildOptions build_options;
+    ErrorFlags error_flags;
+} Command;
+
 
 void help_prompt(void);
 void unrecognized_prompt(void);
-int compile(const char *filename);
+int compile(BuildOptions options);
 
 int main(int argc, char **argv) { // quecto <command> <input> {flags}
-    if (argc == 1) {
-        help_prompt();
-    } else if (argc >= 2) {
-        int current_arg = 1;
-        if (strncmp(argv[current_arg++], "build", sizeof("build")) == 0) {
-            if (current_arg >= argc) {
-                printf("no file supplied.\n");
+
+    Command command = (Command) {
+        .kind = COMMAND_HELP,
+        .build_options = {
+            .input_file = NULL,
+            .output_file = "out.S",
+            .flags = 0,
+        }
+    };
+
+    if (argc > 1) {
+
+        #define CONST_STR_CMP(a, b) (strncmp(a, b, sizeof(b)) == 0)
+
+        if (CONST_STR_CMP(argv[1], "build")) {
+            command.kind = COMMAND_BUILD;
+        } else if (CONST_STR_CMP(argv[1], "help")) {
+            command.kind = COMMAND_HELP;
+        }
+
+        for (int i = 2; i < argc;) {
+            if (CONST_STR_CMP(argv[i], "-o")) {
+                if (i+1 >= argc) {
+                    command.error_flags |= BUILD_EMPTY_ARG;
+                    break;
+                }
+                command.build_options.output_file = argv[i+1];
+                i += 2;
+            } else if (CONST_STR_CMP(argv[i], "-i")) {
+                if (i+1 >= argc) {
+                    command.error_flags |= BUILD_EMPTY_ARG;
+                    break;
+                }
+                command.build_options.input_file = argv[i+1];
+                i += 2;
+            } else if (CONST_STR_CMP(argv[i], "--dump-ast")) {
+                command.build_options.flags |= DEBUG_PRINT_AST;
+                i++;
+            } else if (CONST_STR_CMP(argv[i], "--dump-tokens")) {
+                command.build_options.flags |= DEBUG_PRINT_TOKENS;
+                i++;
+            } else if (CONST_STR_CMP(argv[i], "--dump-emit")) {
+                command.build_options.flags |= DEBUG_PRINT_EMIT;
+                i++;
+            } else if (CONST_STR_CMP(argv[i], "--dump-post-pass")) {
+                command.build_options.flags |= DEBUG_PRINT_POST_PASS;
+                i++;
+            } else {
+                i++;
+            }
+        }
+
+        #undef CONST_STR_CMP
+
+    }
+    
+    // run command
+
+    if ((command.error_flags & BUILD_FILE_NOT_FOUND) == BUILD_FILE_NOT_FOUND) {
+        printf("file not found.\n");
+        return 1;
+    }
+    if ((command.error_flags & BUILD_EMPTY_ARG) == BUILD_EMPTY_ARG) {
+        printf("empty arg.\n");
+        return 1;
+    }
+
+    switch (command.kind) {
+        case COMMAND_UNRECOGNIZED:
+            unrecognized_prompt();
+            break;
+        case COMMAND_HELP:
+            help_prompt();
+            break;
+        case COMMAND_BUILD:
+            if (command.build_options.input_file != NULL) {
+                if (compile(command.build_options) == 0) {
+                    printf("compiled successfully.\n");
+                } else {
+                    printf("error");
+                    return -1;
+                }
+            } else {
+                printf("no file supplied");
                 return -1;
             }
-            char *filename = argv[current_arg];
-            if (compile(filename) == 0) {
-                printf("compiled successfully.\n");
-            } else {
-                printf("error\n");
-            }
-        } else if (strncmp(argv[1], "help", sizeof("help")) == 0) {
-            help_prompt();
-        } else {
-            unrecognized_prompt();
-        }
-    }   
+            break;
+    }
 }
 
 void help_prompt(void) {
     printf("info: Usage: quecto [command] [options]\n");
     printf("List of Commands:\n");
-    printf("\tbuild {file}\t\tBuilds the file.\n");
+    printf("\tbuild {file} {-i input} {-o output}\t\tBuilds the file.\n");
     printf("\thelp\t\tShows this prompt.\n");
 }
 
@@ -54,8 +151,64 @@ void unrecognized_prompt(void) {
     printf("unrecognized command\n");
 }
 
-int compile(const char *filename) {
-    FILE *f = fopen(filename, "r");
+typedef String (DumpFn(Arena *scratch, const void *context));
+
+String generate_ast_dump(Arena *scratch, const void *context) {
+    AST *ast = *(AST * const *) context;
+    StringBuilder sb = { 0 };
+    string_builder_create(&sb, scratch, 128);
+    ast_build_str(&sb, scratch, ast);
+
+    return sb.string;
+}
+
+String generate_ir_dump(Arena *scratch, const void *context) {
+    const Program *program = context;
+    StringBuilder sb = { 0 };
+    
+    string_builder_create(&sb, scratch, 128);
+    ir_build_str_program(&sb, scratch, *program);
+    
+    return sb.string;
+}
+
+String generate_colored_dump(Arena *scratch, const void *context) {
+    const Program *program = context;
+    StringBuilder sb = { 0 };
+    
+    string_builder_create(&sb, scratch, 128);
+    ir_build_str_program_colored(&sb, *program);
+    
+    return sb.string;
+}
+
+String generate_token_dump(Arena *scratch, const void *context) {
+    const TokenArray *tokens = context;
+    return tk_array_str(scratch, *tokens);
+}
+
+void dump_intermediate_file(Arena *scratch, const char *file, StringView suffix, DumpFn generator, const void *context) {
+    size_t mark = arena_mark(scratch);
+
+    StringBuilder sb = { 0 };
+    string_builder_create(&sb, scratch, sizeof(char) * 16);
+    string_builder_cstr_append(&sb, file);
+    string_builder_sv_append(&sb, suffix);
+
+    String contents = generator(scratch, context);
+
+    const char *filename = string_builder_to_cstr(&sb, scratch);
+    
+    FILE *out = fopen(filename, "w");
+    fwrite(contents.data, 1, contents.len, out);
+    fclose(out);
+    
+    arena_restore(scratch, mark);
+}
+
+int compile(BuildOptions options) {
+    FILE *f = fopen(options.input_file, "r");
+    
     fseek(f, 0, SEEK_END);
     long fsize = ftell(f);
     fseek(f, 0, SEEK_SET);
@@ -78,10 +231,15 @@ int compile(const char *filename) {
     arena_create(&scratch, 1024 * 1024);
     
     TokenArray tokens = tokenize(&arena, src, src_size);
+
+    if ((options.flags & DEBUG_PRINT_TOKENS) == DEBUG_PRINT_TOKENS) {
+        dump_intermediate_file(&scratch, options.output_file, SV_LITERAL(".tk"),
+                generate_token_dump, &tokens);
+    }
+
     if (error) return -1;
 
-    HashTable types = {0}; // intern table
-
+    HashTable types = { 0 }; // intern table
 
     ParserState parser = {
         .tokens = tokens,
@@ -92,6 +250,11 @@ int compile(const char *filename) {
     AST *ast = parse_program(&parser);
 
     if (error) return -1;
+
+    if ((options.flags & DEBUG_PRINT_AST) == DEBUG_PRINT_AST) {
+        dump_intermediate_file(&scratch, options.output_file, SV_LITERAL(".ast"),
+                generate_ast_dump, &ast);
+    }
 
     SymbolTable symbols = { 0 };
 
@@ -108,6 +271,7 @@ int compile(const char *filename) {
         .arena = &backing,
     };
 
+
     Passes passes = (PassFn[]) {
             pass_insert_phis,
             pass_rename,
@@ -120,15 +284,26 @@ int compile(const char *filename) {
             pass_color_cfg,
             pass_phis_into_copies,
             pass_sweep_nops,
+            // debug_pass_print_colored,
             NULL,
     };
 
     Program program = { .symbols = &symbols };
     emit_program(&emit_ctx, &program, ast);
 
+    if ((options.flags & DEBUG_PRINT_EMIT) == DEBUG_PRINT_EMIT) {
+        dump_intermediate_file(&scratch, options.output_file, SV_LITERAL(".ir"),
+                generate_ir_dump, &program);
+    }
+
     passes_run(&program, passes, (Arenas) { .scratch = &scratch, .persistent = &backing});
 
-    FILE *out = fopen("out.S", "w");
+    if ((options.flags & DEBUG_PRINT_POST_PASS) == DEBUG_PRINT_POST_PASS) {
+        dump_intermediate_file(&scratch, options.output_file, SV_LITERAL(".cir"),
+                generate_colored_dump, &program);
+    }
+
+    FILE *out = fopen(options.output_file, "w");
     compile_program_with(out, &scratch, &LINUX_X86_64_BACKEND, &program);
 
     fclose(out);

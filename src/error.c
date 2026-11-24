@@ -34,7 +34,7 @@ void report_error(unsigned int line, unsigned int col, const char *fmt, ...) {
 
     char *line_src = line_start(line);
     int len = strcspn(line_src, "\n");
-    printf(sv_fmt"\n", len, line_src);
+    printf(SV_FMT"\n", len, line_src);
     for (size_t i = 1; i < col; i++) {
         printf("~");
     }
