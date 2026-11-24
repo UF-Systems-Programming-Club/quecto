@@ -351,8 +351,10 @@ void ir_build_str_instr_colored(StringBuilder *sb, const Procedure *proc, Instr 
         case OP_PRINT_NONE:
             break;
         case OP_PRINT_ASSIGN:
-            ir_build_str_operand_colored(sb, proc, instr.dest);
-            string_builder_sv_append(sb, SV_LITERAL(" = "));
+            if (instr.dest.type != OPERAND_NONE) { // specifically for CALL b/c it has ASSIGN/FUNC in one, needs to be separated
+                ir_build_str_operand_colored(sb, proc, instr.dest);
+                string_builder_sv_append(sb, SV_LITERAL(" = "));
+            }
         case OP_PRINT_FUNC:
             string_builder_cstr_append(sb, opcode_to_string[instr.opcode]);
             string_builder_append_char(sb, ' ');
@@ -380,7 +382,7 @@ void ir_build_str_instr_colored(StringBuilder *sb, const Procedure *proc, Instr 
     }
 }
 
-void ir_build_str_program_colored(StringBuilder *sb, Arena *scratch, Program program) { // assumes CFG is filled
+void ir_build_str_program_colored(StringBuilder *sb, Program program) { // assumes CFG is filled
     for (size_t i = 0; i < program.count; i++) {
         Procedure *proc = &program.items[i];
         CFGraph cfg = proc->cfg;

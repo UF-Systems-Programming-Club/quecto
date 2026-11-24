@@ -18,8 +18,13 @@ typedef enum {
     DEBUG_PRINT_TOKENS = 1,
     DEBUG_PRINT_AST = 2,
     DEBUG_PRINT_EMIT = 4,
-    DEBUG_PRINT_POST_PASS = 4,
+    DEBUG_PRINT_POST_PASS = 8,
 } BuildFlags;
+
+typedef enum {
+    BUILD_EMPTY_ARG = 1,
+    BUILD_FILE_NOT_FOUND = 2,
+} ErrorFlags;
 
 typedef struct {
     const char *input_file;
@@ -36,6 +41,7 @@ typedef enum {
 typedef struct {
     CommandKind kind;
     BuildOptions build_options;
+    ErrorFlags error_flags;
 } Command;
 
 
@@ -54,7 +60,7 @@ int main(int argc, char **argv) { // quecto <command> <input> {flags}
         }
     };
 
-    if (argc >= 1) {
+    if (argc > 1) {
 
         #define CONST_STR_CMP(a, b) (strncmp(a, b, sizeof(b)) == 0)
 
@@ -66,9 +72,17 @@ int main(int argc, char **argv) { // quecto <command> <input> {flags}
 
         for (int i = 2; i < argc;) {
             if (CONST_STR_CMP(argv[i], "-o")) {
+                if (i+1 >= argc) {
+                    command.error_flags |= BUILD_EMPTY_ARG;
+                    break;
+                }
                 command.build_options.output_file = argv[i+1];
                 i += 2;
             } else if (CONST_STR_CMP(argv[i], "-i")) {
+                if (i+1 >= argc) {
+                    command.error_flags |= BUILD_EMPTY_ARG;
+                    break;
+                }
                 command.build_options.input_file = argv[i+1];
                 i += 2;
             } else if (CONST_STR_CMP(argv[i], "--dump-ast")) {
@@ -93,6 +107,15 @@ int main(int argc, char **argv) { // quecto <command> <input> {flags}
     }
     
     // run command
+
+    if ((command.error_flags & BUILD_FILE_NOT_FOUND) == BUILD_FILE_NOT_FOUND) {
+        printf("file not found.\n");
+        return 1;
+    }
+    if ((command.error_flags & BUILD_EMPTY_ARG) == BUILD_EMPTY_ARG) {
+        printf("empty arg.\n");
+        return 1;
+    }
 
     switch (command.kind) {
         case COMMAND_UNRECOGNIZED:
@@ -154,7 +177,7 @@ String generate_colored_dump(Arena *scratch, const void *context) {
     StringBuilder sb = { 0 };
     
     string_builder_create(&sb, scratch, 128);
-    ir_build_str_program_colored(&sb, scratch, *program);
+    ir_build_str_program_colored(&sb, *program);
     
     return sb.string;
 }

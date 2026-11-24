@@ -2,7 +2,7 @@
 .SILENT:
 
 CC ?= gcc
-CFLAGS ?= -std=c11 -Wall -Wpedantic -Wextra
+CFLAGS ?= -std=c11 -Wall -Wpedantic -Wextra -Wno-unused-function
 NASM ?= nasm
 DBGFLAGS ?= -g -fsanitize=address
 

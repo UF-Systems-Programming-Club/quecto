@@ -233,7 +233,7 @@ bool instr_defines_vreg(Instr instr, size_t vreg);
 void instr_replace_vreg(Instr *instr, size_t find, size_t replace);
 
 void ir_build_str_program(StringBuilder *sb, Arena *scratch, Program program);
-void ir_build_str_program_colored(StringBuilder *sb, Arena *scratch, Program program);
+void ir_build_str_program_colored(StringBuilder *sb, Program program);
 void ir_build_str_operand(StringBuilder *sb, Operand operand);
 void ir_build_str_phi(StringBuilder *sb, Phi phi, size_t num_args);
 void ir_build_str_instr_colored(StringBuilder *sb, const Procedure *proc, Instr instr);

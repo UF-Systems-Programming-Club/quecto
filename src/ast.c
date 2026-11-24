@@ -1,5 +1,4 @@
 #include <stdio.h>
-#include <sys/_types/_sigaltstack.h>
 
 #include "ast.h"
 #include "common.h"
@@ -73,6 +72,12 @@ void ast_build_str(StringBuilder *sb, Arena *scratch, AST *ast) {
             case PRINT_TASK_NODE: {
 
                 AST *ast = cur.node;
+
+                if (ast == NULL) {
+                    // need better error handling
+                    fprintf(stderr, "cannot print empty ast node");
+                    exit(-1);
+                }
 
                 switch (ast->type) {
                     STR_CASE(program, ASTProgram, AST_PROGRAM, {
@@ -155,7 +160,8 @@ void ast_build_str(StringBuilder *sb, Arena *scratch, AST *ast) {
                         break;
                     })
                     STR_CASE(ret, ASTReturn, AST_RETURN, {
-                        PrintTaskStack_push(&stack, NODE_PRINT_TASK(ret->expr));
+                        if (ret->expr != NULL)
+                            PrintTaskStack_push(&stack, NODE_PRINT_TASK(ret->expr));
                         PrintTaskStack_push(&stack, TEXT_PRINT_TASK(SV_LITERAL("return ")));
                         break;
                     })
@@ -256,7 +262,8 @@ void ast_build_str(StringBuilder *sb, Arena *scratch, AST *ast) {
             }
             case PRINT_TASK_NEWLINE: {
                 string_builder_sv_append(sb, SV_LITERAL("\n"));
-                string_builder_sv_append(sb, (StringView){.str = "\t\t\t\t\t\t\t\t\t\t", .len = indent});
+                for (size_t j = 0; j < indent; j++)
+                    string_builder_append_char(sb, '\t');
                 break;
             }
             case PRINT_TASK_INDENT: {

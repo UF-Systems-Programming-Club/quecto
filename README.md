@@ -36,10 +36,9 @@ The binary itself currently only has one command: `build`
 which can be used as such:
 
 ```bash
-  ./build/main build examples/array.q
+  ./build/main build -i examples/array.q -o out.S
 ```
 
-Currently, it is hardcoded to produce `./out.S` but will be more configurable in the future.
 Following the compilation run:
 
 ```bash
