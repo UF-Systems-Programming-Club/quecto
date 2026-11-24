@@ -3,19 +3,11 @@
 
 #include "common.h"
 
-// ------------
-// MACROS START
-// ------------
+// --- MACROS ---
 
 #define MAX_KEYWORD_LEN 128
 
-// ----------
-// MACROS END
-// ----------
-
-// ------------------------------
-// STRUCT & ENUM DEFINTIONS START
-// ------------------------------
+// --- STRUCTS AND ENUMS ---
 
 typedef enum {
     TOKEN_NONE,
@@ -78,23 +70,11 @@ typedef struct {
     TokenFlags flags;
 } TokenInfo;
 
-// ----------------------------
-// STRUCT & ENUM DEFINTIONS END
-// ----------------------------
-
-// -------------------
-// EXTERN TABLES START
-// -------------------
+// --- EXTERN TABLES ---
 
 extern const TokenInfo token_info_table[];
 
-// -----------------
-// EXTERN TABLES END
-// -----------------
-
-// ---------------------------
-// FUNCTION DECLARATIONS START
-// ---------------------------
+// --- FUNCTION DECLARATIONS ---
 
 int int_from_str(const char* a, size_t len); // move to common
 float float_from_str(const char* a, size_t len); // move to common
@@ -108,9 +88,5 @@ void tk_print(Token tok);
 bool tk_is_operator(TokenType type);
 bool tk_is_primitive(TokenType type);
 int tk_get_precedence(TokenType type);
-
-// -------------------------
-// FUNCTION DECLARATIONS END
-// -------------------------
 
 #endif

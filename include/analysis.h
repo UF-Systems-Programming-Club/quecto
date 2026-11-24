@@ -4,9 +4,7 @@
 #include "ast.h"
 #include "symbol_table.h"
 
-// ------------------------------
-// STRUCT & ENUM DEFINTIONS START
-// ------------------------------
+// --- STRUCTS AND ENUMS ---
 
 typedef struct {
     int global_count;
@@ -19,13 +17,7 @@ typedef struct {
     SymbolTable *symbol_table;
 } AnalysisContext;
 
-// ----------------------------
-// STRUCT & ENUM DEFINTIONS END
-// ----------------------------
-
-// ---------------------------
-// FUNCTION DECLARATIONS START
-// ---------------------------
+// --- FUNCTION DECLARATIONS ---
 
 QuectoType *analysis_resolve_binary_type(QuectoType *left, QuectoType *right);
 QuectoType *analysis_pointer_of(AnalysisContext *context, QuectoType *type);
@@ -52,9 +44,5 @@ QuectoType *analyze_binary_op(AnalysisContext *context, AST *op, QuectoType *exp
 QuectoType *analyze_list(AnalysisContext *context, AST *list, QuectoType *expected);
 QuectoType *analyze_symbol(AnalysisContext *context, AST *symbol);
 QuectoType *analyze_string_literal(AnalysisContext *context, AST *lit);
-
-// -------------------------
-// FUNCTION DECLARATIONS END
-// -------------------------
 
 #endif

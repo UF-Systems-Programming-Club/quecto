@@ -5,19 +5,11 @@
 #include "common.h"
 #include "symbol_table.h"
 
-// ------------
-// MACROS START
-// ------------
+// --- MACROS ---
 
 #define VREG_NONE -1
 
-// ----------
-// MACROS END
-// ----------
-
-// ------------------------------
-// STRUCT & ENUM DEFINTIONS START
-// ------------------------------
+// --- STRUCTS AND ENUMS ---
 
 typedef enum {
     OPCODE_NONE,
@@ -215,23 +207,11 @@ typedef struct {
     size_t capacity;
 } Program;
 
-// ----------------------------
-// STRUCT & ENUM DEFINTIONS END
-// ----------------------------
-
-// -------------------
-// EXTERN TABLES START
-// -------------------
+// --- EXTERN TABLES ---
 
 extern const OpcodeDesc opcode_description_table[];
 
-// -----------------
-// EXTERN TABLES END
-// -----------------
-
-// ---------------------------
-// FUNCTION DECLARATIONS START
-// ---------------------------
+// --- FUNCTION DECLARATIONS ---
 
 Operand  ir_vreg_allocate_explicit(Arena *arena, Procedure *procedure, VregInfo info);
 VregInfo ir_vregi_from_sloti(SlotInfo slot);
@@ -257,9 +237,5 @@ void ir_build_str_program(StringBuilder *sb, Arena *scratch, Program program, Re
 
 void ir_print_program(Arena *scratch, Program program, RegisterPrintFn *print_register);
 void ir_print_procedure(Arena *scratch, const Procedure *procedure, RegisterPrintFn *print_register);
-
-// -------------------------
-// FUNCTION DECLARATIONS END
-// -------------------------
 
 #endif

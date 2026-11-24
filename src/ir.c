@@ -6,9 +6,7 @@
 #include "cfg.h"
 #include "symbol_table.h"
 
-// ------------------------
-// OPCODE DESCRIPTION START
-// ------------------------
+// --- OPCODE DESCRIPTION ---
 
 #define BINARY_ASSIGN_DESC(op_flags, ident) (OpcodeDesc){ \
     .dest = OPDR_DEF,\
@@ -97,13 +95,7 @@ const OpcodeDesc opcode_description_table[] = {
     [OPCODE_RET]         =          MARK_DESC(0,           "ret"),
 };
 
-// ------------------------
-//  OPCODE DESCRIPTION END
-// ------------------------
-
-// ------------------------
-//  IR STRING BUILDER START
-// ------------------------
+// --- STRINGS ---
 
 void ir_build_str_register(StringBuilder *sb, const Procedure *proc, size_t vreg) {
     (void)proc;
@@ -283,13 +275,7 @@ void ir_build_str_program(StringBuilder *sb, Arena *scratch, Program program, Re
     string_builder_append_char(sb, '\n');
 }
 
-// ------------------------
-//  IR STRING BUILDER END
-// ------------------------
-
-// ------------------------
-//  IR PRINT START
-// ------------------------
+// --- PRINT ---
 
 void ir_print_program(Arena *scratch, Program program, RegisterPrintFn *print_register) {
     size_t mark = arena_mark(scratch);
@@ -309,13 +295,7 @@ void ir_print_procedure(Arena *scratch, const Procedure *procedure, RegisterPrin
     arena_restore(scratch, mark);
 }
 
-// ------------------------
-//  IR PRINT START
-// ------------------------
-
-// ------------------------
-//  MISCELLANEOUS (cleanup)
-// ------------------------
+// --- MISCELLANEOUS ---
 
 bool ir_operand_has_vreg(Operand operand, size_t vreg) {
     return (operand.type == OPERAND_VREG && operand.vreg == vreg) ||
@@ -398,4 +378,19 @@ inline VregInfo ir_vregi_from_sloti(SlotInfo slot) {
         .size = slot.size,
         .sign = slot.sign
     };
+}
+
+Operand ir_vreg_allocate_explicit(Arena *arena, Procedure *procedure, VregInfo info) {
+    #define VREG(v) (Operand) { .type = OPERAND_VREG, .vreg = (v) }
+    
+    info.interval.iend = -1;
+    info.interval.bend = -1;
+    info.interval.istart = -1;
+    info.interval.bstart = -1;
+    info.color.index = -1;
+    info.hint = 0;
+    arena_array_append(arena, procedure->vregs, info);
+    return VREG(procedure->vregs.count - 1);
+
+    #undef VREG
 }

@@ -13,6 +13,128 @@
 #define GLOBAL(g) (Operand) { .type = OPERAND_GLOBAL, .glbl = (g) }
 #define SLOT(s) (Operand) { .type = OPERAND_SLOT, .slot = (s) }
 
+static Operand allocate_vreg(EmitContext *context, VregInfo info) {
+    return ir_vreg_allocate_explicit(context->arena, context->procedure, info);
+}
+
+static Operand allocate_vreg_for_type(EmitContext *context, QuectoType *type) {
+  assert(type != NULL && "quecto type not initialized or nulled");
+
+  VregInfo info;
+  info.size = quecto_type_size(type);
+  info.sign = quecto_is_signed(type);
+  info.interval.bend = -1;
+  info.interval.iend = -1;
+  info.color.index = -1;
+
+  return allocate_vreg(context, info);
+}
+
+static int allocate_block(EmitContext *context) {
+    BasicBlock block = { 0 };
+    block.successors[0] = -1;
+    block.successors[1] = -1;
+    arena_array_append(context->arena, context->procedure->cfg, block);
+    return context->procedure->cfg.count - 1;
+}
+
+
+static void fallthrough_to(EmitContext *context, int block) {
+    if (context->current_block != -1) emit_jmp(context, block);
+}
+
+
+static Operand slot_for(EmitContext *context, SymbolData *sym, bool param) {
+    int *slot = ht_nsearch(&context->slot_from_symbol, &sym, sizeof(SymbolData*)); //pass by pointer cause pointers shud be unique alr
+    if (slot != NULL) {
+        return SLOT(*slot);
+    }
+
+    SlotInfo info = (SlotInfo) {
+        .size = quecto_type_size(sym->qtype),
+        .sign = quecto_is_signed(sym->qtype),
+        .param = param,
+        .address_taken = false,
+    };
+
+    slot = arena_alloc(context->arena, sizeof(int));
+    *slot = context->procedure->slots.count;
+    arena_array_append(context->arena, context->procedure->slots, info);
+
+    ht_ninsert(&context->slot_from_symbol, &sym, sizeof(SymbolData*), slot);
+
+    return SLOT(*slot);
+}
+
+
+static Operand addr_of_slot(EmitContext *context, Operand slot) {
+    assert(slot.type == OPERAND_SLOT);
+
+    Operand out = allocate_vreg(context, (VregInfo) {.size = 8, .sign = 0});
+    
+    context->procedure->slots.items[slot.slot].address_taken = true;
+    emit_instr(context, OPCODE_ADDR, out, slot, NONE);
+
+    return out;
+}
+
+
+static Operand slot_from_identifier(EmitContext *context, AST *base) {
+    ASTIdentifier *ident = CAST_AST(base, ASTIdentifier, AST_IDENTIFIER);
+    SymbolData *var = get_symbol(context->scope, ident->name);
+    return slot_for(context, var, false);
+}
+
+
+static Operand decay(EmitContext *context, AST *base) {
+    switch (base->resolved_qtype->type) {
+        case QUECTO_ARRAY:
+            return addr_of_slot(context, slot_from_identifier(context, base));
+        case QUECTO_POINTER:
+            return emit_instr(context, OPCODE_LOAD, allocate_vreg(context, (VregInfo){.size = 8}), slot_from_identifier(context, base), NONE);
+        default:
+            assert(0 && "type cannot decay");
+            return NONE;
+    }
+}
+
+
+static Operand mem_from_index(EmitContext *context, AST *base) {
+    ASTIndex *index = CAST_AST(base, ASTIndex, AST_INDEX);
+    Operand head = decay(context, index->head);
+    Operand ind = emit_expr(context, index->index);
+
+
+    // TODO: Likely will want to separate move semantics from IR and only care about it when lowering
+    // right now this is conforming to x86-64 semantics on movzx and mov
+    assert(ind.type == OPERAND_VREG);
+    if (context->procedure->vregs.items[ind.vreg].size < 4) {
+         ind = emit_instr(context, OPCODE_EXT_Z, allocate_vreg(context, (VregInfo){.size=8,.sign=false}), ind, NONE);
+    } else {
+         ind = emit_instr(context, OPCODE_COPY, allocate_vreg(context, (VregInfo){.size=8,.sign=false}), ind, NONE);
+    }
+
+    int size = quecto_type_size(index->base.resolved_qtype);
+
+    return MEM(INDEX(head.vreg, ind.vreg, 0, size));
+}
+
+
+static Operand global_for(EmitContext *context, const char *ident) {
+    SymbolTable *globals = context->scope;
+    for (;globals->prev != NULL; globals = globals->prev);
+
+    return GLOBAL(ht_nindex(&globals->table, ident, strlen(ident)));
+}
+
+
+static void start_block(EmitContext *context, int block_id) {
+    if (context->current_block != -1 && block_id != context->current_block) {
+        emit_jmp(context, block_id);
+    }
+    context->current_block = block_id;
+}
+
 
 const Opcode jump_condition_opcode_table[OP_COUNT] = {
     [OP_EQUALS] = OPCODE_BEQ,
@@ -95,8 +217,6 @@ void emit_statement(EmitContext *context, AST *statement) {
 }
 
 
-
-
 void emit_list(EmitContext *context, AST *base, Operand into) {
     ASTListConstruct *list = CAST_AST(base, ASTListConstruct, AST_LIST);
 
@@ -108,59 +228,6 @@ void emit_list(EmitContext *context, AST *base, Operand into) {
                    arg,
                    NONE);
     }
-}
-
-
-Operand decay(EmitContext *context, AST *base) {
-    switch (base->resolved_qtype->type) {
-        case QUECTO_ARRAY:
-            return addr_of_slot(context, slot_from_identifier(context, base));
-        case QUECTO_POINTER:
-            return emit_instr(context, OPCODE_LOAD, allocate_vreg(context, (VregInfo){.size = 8}), slot_from_identifier(context, base), NONE);
-        default:
-            assert(0 && "type cannot decay");
-            return NONE;
-    }
-}
-
-
-Operand slot_from_identifier(EmitContext *context, AST *base) {
-    ASTIdentifier *ident = CAST_AST(base, ASTIdentifier, AST_IDENTIFIER);
-    SymbolData *var = get_symbol(context->scope, ident->name);
-    return slot_for(context, var, false);
-}
-
-
-Operand mem_from_index(EmitContext *context, AST *base) {
-    ASTIndex *index = CAST_AST(base, ASTIndex, AST_INDEX);
-    Operand head = decay(context, index->head);
-    Operand ind = emit_expr(context, index->index);
-
-
-    // TODO: Likely will want to separate move semantics from IR and only care about it when lowering
-    // right now this is conforming to x86-64 semantics on movzx and mov
-    assert(ind.type == OPERAND_VREG);
-    if (context->procedure->vregs.items[ind.vreg].size < 4) {
-         ind = emit_instr(context, OPCODE_EXT_Z, allocate_vreg(context, (VregInfo){.size=8,.sign=false}), ind, NONE);
-    } else {
-         ind = emit_instr(context, OPCODE_COPY, allocate_vreg(context, (VregInfo){.size=8,.sign=false}), ind, NONE);
-    }
-
-    int size = quecto_type_size(index->base.resolved_qtype);
-
-    return MEM(INDEX(head.vreg, ind.vreg, 0, size));
-}
-
-
-Operand addr_of_slot(EmitContext *context, Operand slot) {
-    assert(slot.type == OPERAND_SLOT);
-
-    Operand out = allocate_vreg(context, (VregInfo) {.size = 8, .sign = 0});
-    
-    context->procedure->slots.items[slot.slot].address_taken = true;
-    emit_instr(context, OPCODE_ADDR, out, slot, NONE);
-
-    return out;
 }
 
 
@@ -198,6 +265,7 @@ void emit_assign(EmitContext *context, AST *base) {
     Operand rhs = emit_expr(context, assign->rhs);
     emit_instr(context, lhs.type == OPERAND_MEM ? OPCODE_STORE_INDEX : OPCODE_STORE, lhs, rhs, NONE);    
 }
+
 
 void emit_if(EmitContext *context, AST *base) {
     ASTIf *_if = CAST_AST(base, ASTIf, AST_IF);
@@ -396,86 +464,4 @@ void emit_ret(EmitContext *context, Operand with) {
 }
 
 
-int allocate_block(EmitContext *context) {
-    BasicBlock block = { 0 };
-    block.successors[0] = -1;
-    block.successors[1] = -1;
-    arena_array_append(context->arena, context->procedure->cfg, block);
-    return context->procedure->cfg.count - 1;
-}
-
-
-void start_block(EmitContext *context, int block_id) {
-    if (context->current_block != -1 && block_id != context->current_block) {
-        emit_jmp(context, block_id);
-    }
-    context->current_block = block_id;
-}
-
-
-void fallthrough_to(EmitContext *context, int block) {
-    if (context->current_block != -1) emit_jmp(context, block);
-}
-
-
-Operand ir_vreg_allocate_explicit(Arena *arena, Procedure *procedure, VregInfo info) {
-    info.interval.iend = -1;
-    info.interval.bend = -1;
-    info.interval.istart = -1;
-    info.interval.bstart = -1;
-    info.color.index = -1;
-    info.hint = 0;
-    arena_array_append(arena, procedure->vregs, info);
-    return VREG(procedure->vregs.count - 1);
-}
-
-
-Operand allocate_vreg(EmitContext *context, VregInfo info) {
-    return ir_vreg_allocate_explicit(context->arena, context->procedure, info);
-}
-
-
-Operand allocate_vreg_for_type(EmitContext *context, QuectoType *type) {
-  assert(type != NULL && "quecto type not initialized or nulled");
-
-  VregInfo info;
-  info.size = quecto_type_size(type);
-  info.sign = quecto_is_signed(type);
-  info.interval.bend = -1;
-  info.interval.iend = -1;
-  info.color.index = -1;
-
-  return allocate_vreg(context, info);
-}
-
-
-Operand global_for(EmitContext *context, const char *ident) {
-    SymbolTable *globals = context->scope;
-    for (;globals->prev != NULL; globals = globals->prev);
-
-    return GLOBAL(ht_nindex(&globals->table, ident, strlen(ident)));
-}
-
-
-Operand slot_for(EmitContext *context, SymbolData *sym, bool param) {
-    int *slot = ht_nsearch(&context->slot_from_symbol, &sym, sizeof(SymbolData*)); //pass by pointer cause pointers shud be unique alr
-    if (slot != NULL) {
-        return SLOT(*slot);
-    }
-
-    SlotInfo info = (SlotInfo) {
-        .size = quecto_type_size(sym->qtype),
-        .sign = quecto_is_signed(sym->qtype),
-        .param = param,
-        .address_taken = false,
-    };
-
-    slot = arena_alloc(context->arena, sizeof(int));
-    *slot = context->procedure->slots.count;
-    arena_array_append(context->arena, context->procedure->slots, info);
-
-    ht_ninsert(&context->slot_from_symbol, &sym, sizeof(SymbolData*), slot);
-
-    return SLOT(*slot);
-}
 

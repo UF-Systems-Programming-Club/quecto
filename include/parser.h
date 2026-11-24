@@ -6,9 +6,7 @@
 #include "tokenizer.h"
 #include "ast.h"
 
-// ------------------------------
-// STRUCT & ENUM DEFINTIONS START
-// ------------------------------
+// --- STRUCTS AND ENUMS ---
 
 typedef enum {
     PCLF_DECL,
@@ -29,13 +27,7 @@ typedef struct {
 
 typedef AST* (*ParseFn)(ParserState *parser);
 
-// ----------------------------
-// STRUCT & ENUM DEFINTIONS END
-// ----------------------------
-
-// ---------------------------
-// FUNCTION DECLARATIONS START
-// ---------------------------
+// --- FUNCTION DECLARATIONS ---
 
 QuectoType *parse_type(ParserState *parser);
 
@@ -65,9 +57,5 @@ AST *parse_identifier(ParserState *parser);
 AST *parse_int_lit(ParserState *parser);
 AST *parse_float_lit(ParserState *parser);
 AST *parse_str_lit(ParserState *parser);
-
-// -------------------------
-// FUNCTION DECLARATIONS END
-// -------------------------
 
 #endif
