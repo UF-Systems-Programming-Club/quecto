@@ -4,7 +4,7 @@
 #include "error.h"
 #include "symbol_table.h"
 
-QuectoType *resolve_binary_type(QuectoType *left, QuectoType *right) {
+QuectoType *analysis_resolve_binary_type(QuectoType *left, QuectoType *right) {
     if (quecto_types_equal(left, right)) return left;
     if (quecto_is_integer(left) && quecto_is_integer(right)) {
         return quecto_primitive_width[left->type] > quecto_primitive_width[right->type] ? left : right;
@@ -20,7 +20,7 @@ QuectoType *pointer_of_type(AnalysisContext *context, QuectoType *type) {
 }
 
 
-SymbolData *lookup_or_error(AnalysisContext *context, AST *base, const char *message) {
+SymbolData *analysis_lookup_or_error(AnalysisContext *context, AST *base, const char *message) {
     ASTIdentifier *identifier = CAST_AST(base, ASTIdentifier, AST_IDENTIFIER);
     SymbolData *var = get_symbol(context->symbol_table, identifier->name);
     return var ? var : (report_error(identifier->base.token.line, identifier->base.token.col, message), NULL);
@@ -204,7 +204,7 @@ void analyze_assignment(AnalysisContext *context, AST *base) {
 QuectoType *analyze_lhs(AnalysisContext *context, AST *base) {
     switch (base->type) {
         case AST_IDENTIFIER: {
-            SymbolData *symbol = lookup_or_error(context, base, "undefined variable");
+            SymbolData *symbol = analysis_lookup_or_error(context, base, "undefined variable");
             return symbol->qtype;
         }
         case AST_INDEX: {
@@ -236,7 +236,7 @@ QuectoType *analyze_expression(AnalysisContext *context, AST *expr, QuectoType *
 QuectoType *analyze_call(AnalysisContext *context, AST *base) {
     ASTCall *call = CAST_AST(base, ASTCall, AST_CALL);
 
-    SymbolData *symbol = lookup_or_error(context, call->ident, "cannot call an undefined procedure");
+    SymbolData *symbol = analysis_lookup_or_error(context, call->ident, "cannot call an undefined procedure");
 
     if (!quecto_is_procedure(symbol->qtype)) {
         report_error(call->base.token.line, call->base.token.col, "Cannot call a non-procedure");
@@ -294,7 +294,7 @@ QuectoType *analyze_binary_op(AnalysisContext *context, AST *base, QuectoType *e
     if (!left_valid && right_valid) left = analyze_expression(context, op->left, right);
     if (!right_valid && left_valid) right = analyze_expression(context, op->right, left);
 
-    return op->base.resolved_qtype = resolve_binary_type(left, right);
+    return op->base.resolved_qtype = analysis_resolve_binary_type(left, right);
 }
 
 
@@ -320,7 +320,7 @@ QuectoType *analyze_list(AnalysisContext *context, AST *base, QuectoType *expect
 
 
 QuectoType *analyze_symbol(AnalysisContext *context, AST *symbol) {
-    SymbolData *var = lookup_or_error(context, symbol, "undefined variable");
+    SymbolData *var = analysis_lookup_or_error(context, symbol, "undefined variable");
     return var ? (symbol->resolved_qtype = var->qtype) : NULL;
 }
 
