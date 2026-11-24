@@ -167,7 +167,7 @@ String generate_ir_dump(Arena *scratch, const void *context) {
     StringBuilder sb = { 0 };
     
     string_builder_create(&sb, scratch, 128);
-    ir_build_str_program(&sb, scratch, *program);
+    ir_build_str_program(&sb, scratch, *program, ir_build_str_register);
     
     return sb.string;
 }
@@ -177,7 +177,7 @@ String generate_colored_dump(Arena *scratch, const void *context) {
     StringBuilder sb = { 0 };
     
     string_builder_create(&sb, scratch, 128);
-    ir_build_str_program_colored(&sb, *program);
+    ir_build_str_program(&sb, scratch, *program, ir_build_str_register_colored);
     
     return sb.string;
 }

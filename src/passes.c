@@ -622,9 +622,9 @@ void pass_color_cfg(Arenas *arenas, Procedure *procedure) {
     set_create(&procedure->saved_colors, arenas->persistent, 16);
 
     Color colors [16] = {
-        (Color) { .index = 15, .flags = PR_GENERAL_PURPOSE | PR_CALLEE_SAVED}, // r15
-        (Color) { .index = 14, .flags = PR_GENERAL_PURPOSE | PR_CALLEE_SAVED}, // r14
-        (Color) { .index = 13, .flags = PR_GENERAL_PURPOSE | PR_CALLEE_SAVED}, // r13
+        (Color) { .index = 15, .flags = PR_GENERAL_PURPOSE | PR_CALLEE_SAVED }, // r15
+        (Color) { .index = 14, .flags = PR_GENERAL_PURPOSE | PR_CALLEE_SAVED }, // r14
+        (Color) { .index = 13, .flags = PR_GENERAL_PURPOSE | PR_CALLEE_SAVED }, // r13
         (Color) { .index = 12, .flags = PR_GENERAL_PURPOSE | PR_CALLEE_SAVED }, // r12
         (Color) { .index = 11, .flags = PR_GENERAL_PURPOSE }, // r11
         (Color) { .index = 10, .flags = PR_GENERAL_PURPOSE }, // r10
@@ -638,7 +638,7 @@ void pass_color_cfg(Arenas *arenas, Procedure *procedure) {
         (Color) { .index = 4, .flags = PR_GENERAL_PURPOSE | PR_ARG }, // rsi
         (Color) { .index = 5, .flags = PR_GENERAL_PURPOSE | PR_ARG }, // rdi
         
-        (Color) { .index = 1, .flags = PR_GENERAL_PURPOSE }, // rbx
+        (Color) { .index = 1, .flags = PR_GENERAL_PURPOSE | PR_CALLEE_SAVED }, // rbx
         (Color) { .index = 0, .flags = PR_GENERAL_PURPOSE | PR_RETURN}, // rax
     };
 
@@ -685,12 +685,10 @@ void pass_sweep_nops(Arenas *arenas, Procedure *procedure) {
 
 
 void debug_pass_print(Arenas *arenas, Procedure *procedure) {
-    (void)arenas;
-    print_procedure(*procedure);
+    ir_print_procedure(arenas->scratch, procedure, ir_build_str_register);
 }
 
 
 void debug_pass_print_colored(Arenas *arenas, Procedure *procedure) {
-    (void)arenas;
-    print_procedure_colored(procedure);
+    ir_print_procedure(arenas->scratch, procedure, ir_build_str_register_colored);
 }

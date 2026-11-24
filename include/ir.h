@@ -217,6 +217,7 @@ typedef struct {
     size_t capacity;
 } Program;
 
+
 extern const char *opcode_to_string[OPCODE_COUNT];
 extern const Opcode opposite_opcode_table[OPCODE_COUNT];
 
@@ -232,20 +233,18 @@ bool instr_uses_vreg(Instr instr, size_t vreg);
 bool instr_defines_vreg(Instr instr, size_t vreg);
 void instr_replace_vreg(Instr *instr, size_t find, size_t replace);
 
-void ir_build_str_program(StringBuilder *sb, Arena *scratch, Program program);
-void ir_build_str_program_colored(StringBuilder *sb, Program program);
-void ir_build_str_operand(StringBuilder *sb, Operand operand);
-void ir_build_str_phi(StringBuilder *sb, Phi phi, size_t num_args);
-void ir_build_str_instr_colored(StringBuilder *sb, const Procedure *proc, Instr instr);
-void ir_build_str_instr(StringBuilder *sb, Instr instr);
+typedef void (RegisterPrintFn)(StringBuilder *sb, const Procedure *proc, size_t vreg);
 
-void print_procedure(Procedure proc);
-void print_procedure_colored(Procedure *proc);
-bool print_operand(Operand operand, bool leading);
-void print_program(Program program, bool colored);
-void print_cfg(CFGraph graph);
-void print_block(CFGraph graph, bool walked[], int block);
-void print_instruction(Instr instr);
-void print_vregs(Procedure procedure);
+void ir_build_str_register(StringBuilder *sb, const Procedure *proc, size_t vreg);
+void ir_build_str_register_colored(StringBuilder *sb, const Procedure *proc, size_t vreg);
+
+void ir_build_str_operand(StringBuilder *sb, const Procedure *proc, Operand operand, RegisterPrintFn *print_register);
+void ir_build_str_phi(StringBuilder *sb, const Procedure *proc, Phi phi, size_t num_args, RegisterPrintFn *print_register);
+void ir_build_str_instr(StringBuilder *sb, const Procedure *proc, Instr instr, RegisterPrintFn *print_register);
+void ir_build_str_procedure(StringBuilder *sb, Arena *scratch, const Procedure *proc, RegisterPrintFn *print_register);
+void ir_build_str_program(StringBuilder *sb, Arena *scratch, Program program, RegisterPrintFn *print_register);
+
+void ir_print_program(Arena *scratch, Program program, RegisterPrintFn *print_register);
+void ir_print_procedure(Arena *scratch, const Procedure *procedure, RegisterPrintFn *print_register);
 
 #endif
