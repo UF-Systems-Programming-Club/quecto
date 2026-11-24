@@ -49,7 +49,7 @@ MachineCode emit_procedure_with(CodegenBackend *backend, Arena *scratch, Procedu
                 case OPCODE_BLE:
                 case OPCODE_BGE:
                     instr.dest = (Operand) { .type = OPERAND_BLOCK, .block = block->successors[1] };
-                    instr.opcode = opposite_opcode_table[instr.opcode];
+                    instr.opcode = opcode_description_table[instr.opcode].opposite;
                     break;
                 default:
                     break;

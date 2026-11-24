@@ -192,8 +192,8 @@ void dump_intermediate_file(Arena *scratch, const char *file, StringView suffix,
 
     StringBuilder sb = { 0 };
     string_builder_create(&sb, scratch, sizeof(char) * 16);
-    string_builder_cstr_append(&sb, file);
-    string_builder_sv_append(&sb, suffix);
+    string_builder_append_cstr(&sb, file);
+    string_builder_append_sv(&sb, suffix);
 
     String contents = generator(scratch, context);
 

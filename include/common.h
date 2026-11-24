@@ -165,11 +165,11 @@ static inline void string_builder_append(StringBuilder *sb, String str) {
     string_builder_append_base(sb, str.data, str.len);
 }
 
-static inline void string_builder_sv_append(StringBuilder *sb, StringView str) {
+static inline void string_builder_append_sv(StringBuilder *sb, StringView str) {
     string_builder_append_base(sb, str.str, str.len);
 }
 
-static inline void string_builder_cstr_append(StringBuilder *sb, const char *cstr) {
+static inline void string_builder_append_cstr(StringBuilder *sb, const char *cstr) {
     string_builder_append_base(sb, cstr, strlen(cstr));
 }
 

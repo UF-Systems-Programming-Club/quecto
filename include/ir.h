@@ -5,7 +5,19 @@
 #include "common.h"
 #include "symbol_table.h"
 
+// ------------
+// MACROS START
+// ------------
+
 #define VREG_NONE -1
+
+// ----------
+// MACROS END
+// ----------
+
+// ------------------------------
+// STRUCT & ENUM DEFINTIONS START
+// ------------------------------
 
 typedef enum {
     OPCODE_NONE,
@@ -89,10 +101,9 @@ typedef struct {
     OperandRole dest, arg1, arg2;
     OpcodeFlags flags;
     OpcodePrintType print_type;
+    Opcode opposite;
+    StringView name;
 } OpcodeDesc;
-
-extern const OpcodeDesc opcode_description_table[];
-
 
 typedef struct {
     OperandType type;
@@ -106,7 +117,6 @@ typedef struct {
     };
 } Operand;
 
-
 typedef struct {
     Opcode opcode;
     Operand dest;
@@ -114,13 +124,11 @@ typedef struct {
     Operand arg2;
 } Instr;
 
-
 typedef struct {
     Instr *items;
     size_t count;
     size_t capacity;
 } Bytecode;
-
 
 typedef enum {
     PR_BASE_POINTER = 1,
@@ -131,17 +139,14 @@ typedef enum {
     PR_ARG = 64,
 } PhysRegFlags;
 
-
 typedef struct {
     int index;
     PhysRegFlags flags;
 } Color;
 
-
 typedef struct {
     int bstart, istart, bend, iend; // NOTE: this bend, iend is a simplication for linear scans in the future may be replaced with a set of end based on cfg
 } Interval;
-
 
 typedef struct {
     int size;
@@ -153,13 +158,11 @@ typedef struct {
     bool killed; // marked for death
 } VregInfo;
 
-
 typedef struct {
     VregInfo *items;
     size_t count;
     size_t capacity;
 } VregInfoTable;
-
 
 typedef struct {
     int size;
@@ -169,13 +172,11 @@ typedef struct {
     bool killed; // marked for death
 } SlotInfo;
 
-
 typedef struct {
     SlotInfo *items;
     size_t count;
     size_t capacity;
 } SlotTable;
-
 
 typedef struct {
     int slot;
@@ -190,14 +191,12 @@ typedef struct {
     int successors[2];
 } BasicBlock;
 
-
 typedef struct {
     BasicBlock *items;
     int *idom, *rpo, *rpo_list; // indexed by item id; int because -1 is the unvisited sentinel
     Set *df, *live_in, *live_out, *uses, *defines; // live_in -> defines are vreg liveness related
     size_t count, capacity, entry_block;
 } CFGraph;
-
 
 typedef struct {
     CFGraph cfg;
@@ -209,7 +208,6 @@ typedef struct {
     const char *name;
 } Procedure;
 
-
 typedef struct {
     SymbolTable *symbols;
     Procedure *items;
@@ -217,27 +215,40 @@ typedef struct {
     size_t capacity;
 } Program;
 
+// ----------------------------
+// STRUCT & ENUM DEFINTIONS END
+// ----------------------------
 
-extern const char *opcode_to_string[OPCODE_COUNT];
-extern const Opcode opposite_opcode_table[OPCODE_COUNT];
+// -------------------
+// EXTERN TABLES START
+// -------------------
 
-Operand allocate_vreg_explicit(Arena *arena, Procedure *procedure, VregInfo info);
-VregInfo vregi_from_sloti(SlotInfo slot);
+extern const OpcodeDesc opcode_description_table[];
 
-bool operand_has_vreg(Operand operand, size_t vreg);
-int operand_collect_vregs(Operand opnd, size_t *out, int offset);
+// -----------------
+// EXTERN TABLES END
+// -----------------
 
-bool instr_match(Instr *instr, Opcode opcode, OperandType dest, OperandType arg1, OperandType arg2); // if arg is -1, matches anything
-int instr_collect_used_vregs(Instr instr, size_t *out);
-bool instr_uses_vreg(Instr instr, size_t vreg);
-bool instr_defines_vreg(Instr instr, size_t vreg);
-void instr_replace_vreg(Instr *instr, size_t find, size_t replace);
+// ---------------------------
+// FUNCTION DECLARATIONS START
+// ---------------------------
+
+Operand  ir_vreg_allocate_explicit(Arena *arena, Procedure *procedure, VregInfo info);
+VregInfo ir_vregi_from_sloti(SlotInfo slot);
+
+bool ir_operand_has_vreg(Operand operand, size_t vreg);
+int  ir_operand_collect_vregs(Operand opnd, size_t *out, int offset);
+
+bool ir_instr_match(Instr *instr, Opcode opcode, OperandType dest, OperandType arg1, OperandType arg2); // if arg is -1, matches anything
+int  ir_instr_collect_used_vregs(Instr instr, size_t *out);
+bool ir_instr_uses_vreg(Instr instr, size_t vreg);
+bool ir_instr_defines_vreg(Instr instr, size_t vreg);
+void ir_instr_replace_vreg(Instr *instr, size_t find, size_t replace);
 
 typedef void (RegisterPrintFn)(StringBuilder *sb, const Procedure *proc, size_t vreg);
 
 void ir_build_str_register(StringBuilder *sb, const Procedure *proc, size_t vreg);
 void ir_build_str_register_colored(StringBuilder *sb, const Procedure *proc, size_t vreg);
-
 void ir_build_str_operand(StringBuilder *sb, const Procedure *proc, Operand operand, RegisterPrintFn *print_register);
 void ir_build_str_phi(StringBuilder *sb, const Procedure *proc, Phi phi, size_t num_args, RegisterPrintFn *print_register);
 void ir_build_str_instr(StringBuilder *sb, const Procedure *proc, Instr instr, RegisterPrintFn *print_register);
@@ -246,5 +257,9 @@ void ir_build_str_program(StringBuilder *sb, Arena *scratch, Program program, Re
 
 void ir_print_program(Arena *scratch, Program program, RegisterPrintFn *print_register);
 void ir_print_procedure(Arena *scratch, const Procedure *procedure, RegisterPrintFn *print_register);
+
+// -------------------------
+// FUNCTION DECLARATIONS END
+// -------------------------
 
 #endif

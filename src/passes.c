@@ -55,7 +55,7 @@ void pass_liveness(Arenas *arenas, Procedure *procedure) {
             }
 
             size_t used[16];
-            size_t count = instr_collect_used_vregs(instr, used);
+            size_t count = ir_instr_collect_used_vregs(instr, used);
             for (size_t v = 0; v < count; v++) {
                 if (!set_has(&cfg->defines[b], used[v])) {
                     set_insert(&cfg->uses[b], used[v]);
@@ -207,7 +207,7 @@ void pass_rename_recurs(Arenas *arenas, Procedure *procedure, OperandStack stack
 
     for (size_t i = 0; i < block->phis.count; i++) {
         Phi *phi = &block->phis.items[i];
-        phi->dest = allocate_vreg_explicit(arenas->persistent, procedure, vregi_from_sloti(slots->items[phi->slot]));
+        phi->dest = ir_vreg_allocate_explicit(arenas->persistent, procedure, ir_vregi_from_sloti(slots->items[phi->slot]));
         OperandStack_push(&stacks[phi->slot], phi->dest);
         push_count[phi->slot]++;
     }
@@ -215,16 +215,16 @@ void pass_rename_recurs(Arenas *arenas, Procedure *procedure, OperandStack stack
     for (size_t i = 0; i < block->bytecode.count; i++) {
         Instr *instr = &block->bytecode.items[i];
        
-        if (instr_match(instr, OPCODE_LOAD, -1, OPERAND_SLOT, OPERAND_NONE) && !slots->items[instr->arg1.slot].address_taken) {
+        if (ir_instr_match(instr, OPCODE_LOAD, -1, OPERAND_SLOT, OPERAND_NONE) && !slots->items[instr->arg1.slot].address_taken) {
             instr->opcode = OPCODE_COPY;
             instr->arg1 = OperandStack_peek(&stacks[instr->arg1.slot], 1);
         }
 
-        if (instr_match(instr, OPCODE_PARAM, OPERAND_SLOT, -1, -1) && !slots->items[instr->dest.slot].address_taken) {
+        if (ir_instr_match(instr, OPCODE_PARAM, OPERAND_SLOT, -1, -1) && !slots->items[instr->dest.slot].address_taken) {
             instr->dest = OperandStack_peek(&stacks[instr->dest.slot], 1);
         }
 
-        if (instr_match(instr, OPCODE_STORE, OPERAND_SLOT, -1, -1) && !slots->items[instr->dest.slot].address_taken) {
+        if (ir_instr_match(instr, OPCODE_STORE, OPERAND_SLOT, -1, -1) && !slots->items[instr->dest.slot].address_taken) {
             OperandStack_push(&stacks[instr->dest.slot], instr->arg1);
             push_count[instr->dest.slot]++;
             *instr = (Instr) { 0 };
@@ -272,7 +272,7 @@ void pass_rename(Arenas *arenas, Procedure *procedure) {
     for (size_t i = 0; i < slots->count; i++) {
         OperandStack_set_backing(&stacks[i], arenas->scratch);
         if (slots->items[i].param && !slots->items[i].address_taken) {
-            OperandStack_push(&stacks[i], allocate_vreg_explicit(arenas->persistent, procedure, vregi_from_sloti(slots->items[i])));
+            OperandStack_push(&stacks[i], ir_vreg_allocate_explicit(arenas->persistent, procedure, ir_vregi_from_sloti(slots->items[i])));
         }
     }
 
@@ -292,7 +292,7 @@ void pass_remove_copies(Arenas *arenas, Procedure *procedure) {
             if (instr->opcode == OPCODE_COPY && instr->dest.type == OPERAND_VREG && instr->arg1.type == OPERAND_VREG) {
                 for (size_t k = j + 1; k < cfg->items[i].bytecode.count; k++) {
                     Instr *marked = &cfg->items[i].bytecode.items[k];
-                    instr_replace_vreg(marked, instr->dest.vreg, instr->arg1.vreg);
+                    ir_instr_replace_vreg(marked, instr->dest.vreg, instr->arg1.vreg);
                 }
                 *instr = (Instr) { 0 };
             }
@@ -320,7 +320,7 @@ void pass_compute_liveness(Arenas *arenas, Procedure *procedure) {
                 int iend = 0;
                 for (size_t k = cfg->items[b].bytecode.count; k-- > 0;) {
                     Instr instr = cfg->items[b].bytecode.items[k];
-                    if (instr_uses_vreg(instr, i)) {
+                    if (ir_instr_uses_vreg(instr, i)) {
                         iend = (int)k;
                         break;
                     }
@@ -336,7 +336,7 @@ void pass_compute_liveness(Arenas *arenas, Procedure *procedure) {
                 int istart = 0;
                 for (size_t k = cfg->items[b].bytecode.count; k-- > 0;) {
                     Instr instr = cfg->items[b].bytecode.items[k];
-                    if (instr_defines_vreg(instr, i)) {
+                    if (ir_instr_defines_vreg(instr, i)) {
                         istart = (int)k;
                         break;
                     }
@@ -406,7 +406,7 @@ void pass_crosses_call(Arenas *arenas, Procedure *procedure) {
             }
 
             size_t in_use[16];
-            size_t count = instr_collect_used_vregs(instr, in_use);
+            size_t count = ir_instr_collect_used_vregs(instr, in_use);
             for (size_t i = 0; i < count; i++) {
                 set_insert(&live, in_use[i]);   
             }

@@ -418,7 +418,7 @@ void fallthrough_to(EmitContext *context, int block) {
 }
 
 
-Operand allocate_vreg_explicit(Arena *arena, Procedure *procedure, VregInfo info) {
+Operand ir_vreg_allocate_explicit(Arena *arena, Procedure *procedure, VregInfo info) {
     info.interval.iend = -1;
     info.interval.bend = -1;
     info.interval.istart = -1;
@@ -431,7 +431,7 @@ Operand allocate_vreg_explicit(Arena *arena, Procedure *procedure, VregInfo info
 
 
 Operand allocate_vreg(EmitContext *context, VregInfo info) {
-    return allocate_vreg_explicit(context->arena, context->procedure, info);
+    return ir_vreg_allocate_explicit(context->arena, context->procedure, info);
 }
 
 

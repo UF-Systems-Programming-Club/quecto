@@ -215,7 +215,7 @@ void ast_build_str(StringBuilder *sb, Arena *scratch, AST *ast) {
                         break;
                     })
                     STR_CASE(ident, ASTIdentifier, AST_IDENTIFIER, {
-                        string_builder_cstr_append(sb, ident->name);
+                        string_builder_append_cstr(sb, ident->name);
                         break;
                     })
                     STR_CASE(_int, ASTIntLit, AST_INT_LIT, {
@@ -227,7 +227,7 @@ void ast_build_str(StringBuilder *sb, Arena *scratch, AST *ast) {
                         break;
                     })
                     STR_CASE(_str, ASTStringLit, AST_STR_LIT, {
-                        string_builder_sv_append(sb, _str->literal);
+                        string_builder_append_sv(sb, _str->literal);
                         break;
                     })
                 }
@@ -257,11 +257,11 @@ void ast_build_str(StringBuilder *sb, Arena *scratch, AST *ast) {
                 break;
             }
             case PRINT_TASK_TEXT: {
-                string_builder_sv_append(sb, cur.text);
+                string_builder_append_sv(sb, cur.text);
                 break;
             }
             case PRINT_TASK_NEWLINE: {
-                string_builder_sv_append(sb, SV_LITERAL("\n"));
+                string_builder_append_sv(sb, SV_LITERAL("\n"));
                 for (size_t j = 0; j < indent; j++)
                     string_builder_append_char(sb, '\t');
                 break;
@@ -277,5 +277,5 @@ void ast_build_str(StringBuilder *sb, Arena *scratch, AST *ast) {
         }
     }
 
-    string_builder_sv_append(sb, SV_LITERAL("\n"));
+    string_builder_append_sv(sb, SV_LITERAL("\n"));
 }
