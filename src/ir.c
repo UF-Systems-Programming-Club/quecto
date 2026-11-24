@@ -129,6 +129,45 @@ const OpcodeDesc opcode_description_table[] = {
 };
 
 
+void ir_build_str_operand_colored(StringBuilder *sb, const Procedure *proc, Operand operand) {
+    #define COLOR_ID(x) (proc->vregs.items[x].color.index)
+    switch (operand.type) {
+        case OPERAND_VREG:
+            if (COLOR_ID(operand.vreg) != -1) {
+                string_builder_append_char(sb, 'c');
+                string_builder_append_size_t(sb, COLOR_ID(operand.vreg));
+            }
+            break;
+        case OPERAND_MEM:
+            string_builder_sv_append(sb, SV_LITERAL("[c"));
+            string_builder_append_size_t(sb, COLOR_ID(operand.mem.base));
+            
+            if (operand.mem.stride > 0) {
+                string_builder_sv_append(sb, SV_LITERAL(" + "));
+                string_builder_append_size_t(sb, operand.mem.stride);
+                string_builder_sv_append(sb, SV_LITERAL(" * c"));
+                string_builder_append_size_t(sb, COLOR_ID(operand.mem.index));
+            }
+
+            if (operand.mem.offset != 0) {
+                unsigned magnitude = (unsigned)operand.mem.offset;
+                if (operand.mem.offset > 0)  {
+                    string_builder_sv_append(sb, SV_LITERAL(" - "));
+                } else {
+                    magnitude = 0u - magnitude;
+                    string_builder_sv_append(sb, SV_LITERAL(" + "));
+                }
+                string_builder_append_size_t(sb, magnitude);
+            }
+            string_builder_append_char(sb, ']');
+            break;
+        default:
+            ir_build_str_operand(sb, operand);
+            break;
+    }
+    #undef COLOR_ID
+}
+
 void ir_build_str_operand(StringBuilder *sb, Operand operand) {
     switch (operand.type) {
         case OPERAND_BLOCK:
@@ -200,8 +239,10 @@ void ir_build_str_instr(StringBuilder *sb, Instr instr) {
         case OP_PRINT_NONE:
             break;
         case OP_PRINT_ASSIGN:
-            ir_build_str_operand(sb, instr.dest);
-            string_builder_sv_append(sb, SV_LITERAL(" = "));
+            if (instr.dest.type != OPERAND_NONE) { // specifically for CALL b/c it has ASSIGN/FUNC in one, needs to be separated
+                ir_build_str_operand(sb, instr.dest);
+                string_builder_sv_append(sb, SV_LITERAL(" = "));
+            }
         case OP_PRINT_FUNC:
             string_builder_cstr_append(sb, opcode_to_string[instr.opcode]);
             string_builder_append_char(sb, ' ');
@@ -278,12 +319,123 @@ void ir_build_str_program(StringBuilder *sb, Arena *scratch, Program program) {
                 string_builder_append_char(sb, '\n');
             }
 
+            if (cfg.items[b].successors[0] == -1 && cfg.items[b].successors[0] == -1)
+                continue;
+
             string_builder_sv_append(sb, SV_LITERAL("\t\tsuccessors: "));
             
+            bool succ_printed = false;
             for (size_t m = 0; m < 2; m++) {
                 int s = cfg.items[b].successors[m];
-                if (s != -1) string_builder_append_size_t(sb, s);
-                if (m == 0) string_builder_sv_append(sb, SV_LITERAL(", "));
+                if (s != -1) {
+                    if (succ_printed) {
+                        string_builder_sv_append(sb, SV_LITERAL(", "));
+                        succ_printed = false;
+                    }
+                    string_builder_append_size_t(sb, s);
+                    succ_printed = true;
+                }
+            }
+            string_builder_append_char(sb, '\n');
+        }
+        string_builder_append_char(sb, '\n');
+    }
+    string_builder_append_char(sb, '\n');
+}
+
+
+void ir_build_str_instr_colored(StringBuilder *sb, const Procedure *proc, Instr instr) {
+    OpcodePrintType style = opcode_description_table[instr.opcode].print_type;
+
+    switch (style) {
+        case OP_PRINT_NONE:
+            break;
+        case OP_PRINT_ASSIGN:
+            ir_build_str_operand_colored(sb, proc, instr.dest);
+            string_builder_sv_append(sb, SV_LITERAL(" = "));
+        case OP_PRINT_FUNC:
+            string_builder_cstr_append(sb, opcode_to_string[instr.opcode]);
+            string_builder_append_char(sb, ' ');
+            ir_build_str_operand_colored(sb, proc, instr.arg1);
+            if (instr.arg2.type != OPERAND_NONE) {
+                string_builder_sv_append(sb, SV_LITERAL(", "));
+                ir_build_str_operand_colored(sb, proc, instr.arg2);
+            }
+            break;
+        case OP_PRINT_BRANCH:
+            string_builder_cstr_append(sb, opcode_to_string[instr.opcode]);
+            string_builder_append_char(sb, ' ');
+            if (instr.arg1.type != OPERAND_NONE) {
+                ir_build_str_operand_colored(sb, proc, instr.arg1);
+                if (instr.arg2.type != OPERAND_NONE)
+                    string_builder_sv_append(sb, SV_LITERAL(", "));
+            }
+            if (instr.arg2.type != OPERAND_NONE) {
+                ir_build_str_operand_colored(sb, proc, instr.arg2);
+                if (instr.dest.type != OPERAND_NONE)
+                    string_builder_sv_append(sb, SV_LITERAL(", "));
+            }
+            ir_build_str_operand_colored(sb, proc, instr.dest);
+            break;
+    }
+}
+
+void ir_build_str_program_colored(StringBuilder *sb, Arena *scratch, Program program) { // assumes CFG is filled
+    for (size_t i = 0; i < program.count; i++) {
+        Procedure *proc = &program.items[i];
+        CFGraph cfg = proc->cfg;
+
+        string_builder_cstr_append(sb, proc->name);
+        string_builder_sv_append(sb, SV_LITERAL(":\n"));
+
+        int k = 0;
+        fill_rpo(&cfg, &k, cfg.entry_block);
+
+
+        for (size_t l = 0; l < cfg.count; l++) {
+            int b = cfg.rpo_list[l];
+
+            if (b == -1) continue;
+
+            string_builder_sv_append(sb, SV_LITERAL("\tblock "));
+            string_builder_append_size_t(sb, b);
+            string_builder_sv_append(sb, SV_LITERAL(":\n"));
+
+
+            for (size_t m = 0; m < cfg.items[b].phis.count; m++) {
+                Phi phi = cfg.items[b].phis.items[m];
+                
+                string_builder_append_char(sb, '\t');
+                string_builder_append_char(sb, '\t');
+                ir_build_str_phi(sb, phi, cfg.items[b].predecessors.count);
+                string_builder_append_char(sb, '\n');
+            }
+
+            for (size_t m = 0; m < cfg.items[b].bytecode.count; m++) {
+                Instr instr = cfg.items[b].bytecode.items[m];
+                
+                string_builder_append_char(sb, '\t');
+                string_builder_append_char(sb, '\t');
+                ir_build_str_instr_colored(sb, proc, instr);
+                string_builder_append_char(sb, '\n');
+            }
+
+            if (cfg.items[b].successors[0] == -1 && cfg.items[b].successors[0] == -1)
+                continue;
+
+            string_builder_sv_append(sb, SV_LITERAL("\t\tsuccessors: "));
+            
+            bool succ_printed = false;
+            for (size_t m = 0; m < 2; m++) {
+                int s = cfg.items[b].successors[m];
+                if (s != -1) {
+                    if (succ_printed) {
+                        string_builder_sv_append(sb, SV_LITERAL(", "));
+                        succ_printed = false;
+                    }
+                    string_builder_append_size_t(sb, s);
+                    succ_printed = true;
+                }
             }
             string_builder_append_char(sb, '\n');
         }

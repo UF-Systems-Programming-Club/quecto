@@ -18,6 +18,7 @@ typedef enum {
     DEBUG_PRINT_TOKENS = 1,
     DEBUG_PRINT_AST = 2,
     DEBUG_PRINT_EMIT = 4,
+    DEBUG_PRINT_POST_PASS = 4,
 } BuildFlags;
 
 typedef struct {
@@ -78,6 +79,9 @@ int main(int argc, char **argv) { // quecto <command> <input> {flags}
                 i++;
             } else if (CONST_STR_CMP(argv[i], "--dump-emit")) {
                 command.build_options.flags |= DEBUG_PRINT_EMIT;
+                i++;
+            } else if (CONST_STR_CMP(argv[i], "--dump-post-pass")) {
+                command.build_options.flags |= DEBUG_PRINT_POST_PASS;
                 i++;
             } else {
                 i++;
@@ -141,6 +145,16 @@ String generate_ir_dump(Arena *scratch, const void *context) {
     
     string_builder_create(&sb, scratch, 128);
     ir_build_str_program(&sb, scratch, *program);
+    
+    return sb.string;
+}
+
+String generate_colored_dump(Arena *scratch, const void *context) {
+    const Program *program = context;
+    StringBuilder sb = { 0 };
+    
+    string_builder_create(&sb, scratch, 128);
+    ir_build_str_program_colored(&sb, scratch, *program);
     
     return sb.string;
 }
@@ -247,7 +261,7 @@ int compile(BuildOptions options) {
             pass_color_cfg,
             pass_phis_into_copies,
             pass_sweep_nops,
-            debug_pass_print_colored,
+            // debug_pass_print_colored,
             NULL,
     };
 
@@ -260,6 +274,11 @@ int compile(BuildOptions options) {
     }
 
     passes_run(&program, passes, (Arenas) { .scratch = &scratch, .persistent = &backing});
+
+    if ((options.flags & DEBUG_PRINT_POST_PASS) == DEBUG_PRINT_POST_PASS) {
+        dump_intermediate_file(&scratch, options.output_file, SV_LITERAL(".cir"),
+                generate_colored_dump, &program);
+    }
 
     FILE *out = fopen(options.output_file, "w");
     compile_program_with(out, &scratch, &LINUX_X86_64_BACKEND, &program);
