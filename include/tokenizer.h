@@ -3,7 +3,19 @@
 
 #include "common.h"
 
+// ------------
+// MACROS START
+// ------------
+
 #define MAX_KEYWORD_LEN 128
+
+// ----------
+// MACROS END
+// ----------
+
+// ------------------------------
+// STRUCT & ENUM DEFINTIONS START
+// ------------------------------
 
 typedef enum {
     TOKEN_NONE,
@@ -66,17 +78,39 @@ typedef struct {
     TokenFlags flags;
 } TokenInfo;
 
+// ----------------------------
+// STRUCT & ENUM DEFINTIONS END
+// ----------------------------
+
+// -------------------
+// EXTERN TABLES START
+// -------------------
+
 extern const TokenInfo token_info_table[];
 
-int int_from_str(const char* a, size_t len);
-float float_from_str(const char* a, size_t len);
-KeywordEntry *lookup_keyword(const char *str, size_t len);
-TokenArray tokenize(Arenas *arena, const char *buf, size_t size);
+// -----------------
+// EXTERN TABLES END
+// -----------------
 
-void print_token(Token tok);
-bool token_is_operator(TokenType type);
+// ---------------------------
+// FUNCTION DECLARATIONS START
+// ---------------------------
+
+int int_from_str(const char* a, size_t len); // move to common
+float float_from_str(const char* a, size_t len); // move to common
+
+KeywordEntry *lookup_keyword(const char *str, size_t len); // from gperf
+
+TokenArray tk_tokenize(Arenas *arena, const char *buf, size_t size);
 String tk_array_str(Arena *a, TokenArray arr);
-bool token_is_primitive(TokenType type);
-int token_precedence(TokenType type);
+void tk_print(Token tok);
+
+bool tk_is_operator(TokenType type);
+bool tk_is_primitive(TokenType type);
+int tk_get_precedence(TokenType type);
+
+// -------------------------
+// FUNCTION DECLARATIONS END
+// -------------------------
 
 #endif

@@ -285,7 +285,7 @@ AST *parse_expr_helper(ParserState *parser, int min_prec) {
 
     // NOTE: utilizes the fact that get precedence returns -1 when the next token is
     // not an operator or apart of an expression
-    while (token_precedence(peek_token_type(parser, 0)) > min_prec) {
+    while (tk_get_precedence(peek_token_type(parser, 0)) > min_prec) {
         switch (peek_token_type(parser, 0)) {
             case TOKEN_OPEN_SQUARE: left = parse_index(parser, left); break;
             case TOKEN_OPEN_PAREN:
@@ -402,7 +402,7 @@ AST *parse_binary_op(ParserState *parser, AST *left) {
         default:                    UNREACHABLE("TokenType");
     }
 
-    op->right = parse_expr_helper(parser, token_precedence(op->base.token.type));
+    op->right = parse_expr_helper(parser, tk_get_precedence(op->base.token.type));
     return &op->base;
 }
 

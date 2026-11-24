@@ -230,7 +230,7 @@ int compile(BuildOptions options) {
     arena_create(&backing, 1024 * 2048);
     arena_create(&scratch, 1024 * 1024);
     
-    TokenArray tokens = tokenize(&arena, src, src_size);
+    TokenArray tokens = tk_tokenize(&arena, src, src_size);
 
     if ((options.flags & DEBUG_PRINT_TOKENS) == DEBUG_PRINT_TOKENS) {
         dump_intermediate_file(&scratch, options.output_file, SV_LITERAL(".tk"),

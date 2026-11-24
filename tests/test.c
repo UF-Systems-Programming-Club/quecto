@@ -41,7 +41,7 @@ int token_tests(void) {
 
     for (int i = 0; i < num_tok_tests; i++) {
         printf("Running Token Test %d: \"%s\"\n", i + 1, tok_tests[i].input);
-        TokenArray result = tokenize(&arenas, tok_tests[i].input, strlen(tok_tests[i].input));
+        TokenArray result = tk_tokenize(&arenas, tok_tests[i].input, strlen(tok_tests[i].input));
 
         if (result.count != (size_t)tok_tests[i].expected_count) {
             printf("FAILED: Expected %d tokens, got %zu\n", tok_tests[i].expected_count, result.count);

@@ -120,7 +120,7 @@ bool is_alpha(uint8_t c) {
 }
 
 
-TokenArray tokenize(Arenas *arena, const char *buf, size_t size) {
+TokenArray tk_tokenize(Arenas *arena, const char *buf, size_t size) {
     TokenArray tokens = { 0 };
 
     size_t start = 0;
@@ -236,7 +236,7 @@ TokenArray tokenize(Arenas *arena, const char *buf, size_t size) {
 }
 
 
-void print_token(Token tok) {
+void tk_print(Token tok) {
     switch (tok.type) {
         case TOKEN_INT_LIT: printf("%u", tok.int_lit); break;
         case TOKEN_FLOAT_LIT: printf("%.2f", tok.float_lit); break;
@@ -264,22 +264,22 @@ String tk_array_str(Arena *a, TokenArray arr) {
 }
 
 
-bool token_is_operator(TokenType type) {
+bool tk_is_operator(TokenType type) {
     return (token_info_table[type].flags & TOK_OPERATOR) == TOK_OPERATOR;
 }
 
 
 bool token_has_precedence(TokenType type) {
-    return token_is_operator(type) ||
+    return tk_is_operator(type) ||
            (token_info_table[type].flags & TOK_HAS_PREC) == TOK_HAS_PREC;
 }
 
 
-bool token_is_primitive(TokenType type) {
+bool tk_is_primitive(TokenType type) {
     return (token_info_table[type].flags & TOK_PRIMITIVE) == TOK_PRIMITIVE;
 }
 
 
-int token_precedence(TokenType type) {
+int tk_get_precedence(TokenType type) {
     return token_has_precedence(type) ? token_info_table[type].precedence : -1;
 }
