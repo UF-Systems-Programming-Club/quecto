@@ -1,4 +1,5 @@
 #include <stdarg.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -234,15 +235,16 @@ void string_builder_create(StringBuilder *sb, Arena *a, size_t starting_capacity
     sb->capacity = starting_capacity;
 }
 
-void string_builder_append_base(StringBuilder *sb, const char *data, size_t len) {
-    if (len == 0) return;
 
-    if (len > SIZE_MAX - sb->string.len) {
+void string_builder_reserve(StringBuilder *sb, size_t n) {
+    if (n == 0) return;
+
+    if (n > SIZE_MAX - sb->string.len) {
         // error
         exit(1);
     }
 
-    size_t required = sb->string.len + len;
+    size_t required = sb->string.len + n;
     
     if (required > sb->capacity) {
         size_t new_capacity = required;
@@ -254,9 +256,42 @@ void string_builder_append_base(StringBuilder *sb, const char *data, size_t len)
         sb->string.data = arena_realloc(sb->backing, sb->string.data, sb->capacity, new_capacity);
         sb->capacity = new_capacity;    
     }
+}
+
+void string_builder_append_base(StringBuilder *sb, const char *data, size_t len) {
+    if (len == 0) return;
     
+    string_builder_reserve(sb, len);
     memcpy(sb->string.data + sb->string.len, data, len);
-    sb->string.len = required;
+    
+    sb->string.len += len;
+}
+
+void string_builder_append_char(StringBuilder *sb, char chr) {
+    string_builder_reserve(sb, 1);
+    *(sb->string.data + sb->string.len) = chr;
+    sb->string.len += 1;
+}
+                            
+void string_builder_append_size_t(StringBuilder *sb, size_t num) {
+    size_t _num = num;
+    size_t len = 0;
+    
+    do {
+        _num /= 10;
+        len += 1;
+    } while (_num > 0);
+
+    string_builder_reserve(sb, len);
+
+    char *tmp = sb->string.data + sb->string.len + len;
+
+    do {
+        *(--tmp) = '0' + (num % 10);
+        num /= 10;
+    } while (num != 0);
+
+    sb->string.len += len;
 }
 
 String string_builder_to_string(StringBuilder *sb, Arena *scratch) {

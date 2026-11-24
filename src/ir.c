@@ -3,6 +3,7 @@
 #include "ast.h"
 #include "common.h"
 #include "ir.h"
+#include "cfg.h"
 #include "symbol_table.h"
 
 
@@ -47,36 +48,249 @@ const Opcode opposite_opcode_table[OPCODE_COUNT] = {
     [OPCODE_BLT] = OPCODE_BGE,
 };
 
+#define BINARY_ASSIGN_DESC(op_flags) (OpcodeDesc){ \
+    .dest = OPDR_DEF,\
+    .arg1 = OPDR_USE,\
+    .arg2 = OPDR_USE,\
+    .flags =(op_flags),\
+    .print_type = OP_PRINT_ASSIGN\
+}
+
+#define UNARY_ASSIGN_DESC(op_flags) (OpcodeDesc) {\
+    .dest = OPDR_DEF,\
+    .arg1 = OPDR_USE,\
+    .arg2 = OPDR_NONE,\
+    .flags =(op_flags),\
+    .print_type = OP_PRINT_ASSIGN\
+}
+
+#define UNARY_STORE_DESC(op_flags) (OpcodeDesc) {\
+    .dest = OPDR_USE,\
+    .arg1 = OPDR_USE,\
+    .arg2 = OPDR_NONE,\
+    .flags = (op_flags),\
+    .print_type = OP_PRINT_ASSIGN\
+}
+
+#define MARK_DESC(op_flags) (OpcodeDesc) {\
+    .dest = OPDR_NONE,\
+    .arg1 = OPDR_USE,\
+    .arg2 = OPDR_NONE,\
+    .flags = (op_flags),\
+    .print_type = OP_PRINT_FUNC\
+}
+
+#define JUMP_DESC(op_flags) (OpcodeDesc) {\
+    .dest = OPDR_USE,\
+    .arg1 = OPDR_NONE,\
+    .arg2 = OPDR_NONE,\
+    .flags = (op_flags),\
+    .print_type = OP_PRINT_BRANCH\
+}
+
+#define BRANCH_DESC(op_flags) (OpcodeDesc) {\
+    .dest = OPDR_USE,\
+    .arg1 = OPDR_USE,\
+    .arg2 = OPDR_USE,\
+    .flags = (op_flags),\
+    .print_type = OP_PRINT_BRANCH\
+}
+
 const OpcodeDesc opcode_description_table[] = {
-    [OPCODE_NONE]        = { OPDR_NONE, OPDR_NONE, OPDR_NONE, 0},
-    [OPCODE_ADD]         = { OPDR_DEF,   OPDR_USE, OPDR_USE,  0},
-    [OPCODE_SUB]         = { OPDR_DEF,   OPDR_USE, OPDR_USE,  OPC_NONCOMM},
-    [OPCODE_MUL]         = { OPDR_DEF,   OPDR_USE, OPDR_USE,  0},
-    [OPCODE_DIV]         = { OPDR_DEF,   OPDR_USE, OPDR_USE,  OPC_NONCOMM},
-    [OPCODE_CMP_EQ]      = { OPDR_DEF,   OPDR_USE, OPDR_USE,  0},
-    [OPCODE_CMP_LT]      = { OPDR_DEF,   OPDR_USE, OPDR_USE,  OPC_NONCOMM},
-    [OPCODE_CMP_GT]      = { OPDR_DEF,   OPDR_USE, OPDR_USE,  OPC_NONCOMM},
-    [OPCODE_CMP_LEQ]     = { OPDR_DEF,   OPDR_USE, OPDR_USE,  OPC_NONCOMM},
-    [OPCODE_CMP_GEQ]     = { OPDR_DEF,   OPDR_USE, OPDR_USE,  OPC_NONCOMM},
-    [OPCODE_LOAD]        = { OPDR_DEF,   OPDR_USE, OPDR_NONE, 0},
-    [OPCODE_EXT_Z]        = { OPDR_DEF,   OPDR_USE, OPDR_NONE, 0},
-    [OPCODE_IMM]         = { OPDR_DEF,   OPDR_USE, OPDR_NONE, 0},
-    [OPCODE_INDEX]       = { OPDR_DEF,   OPDR_USE, OPDR_NONE, 0},
-    [OPCODE_ADDR]        = { OPDR_DEF,   OPDR_USE, OPDR_NONE, 0},
-    [OPCODE_STORE]       = { OPDR_USE,   OPDR_USE, OPDR_NONE, 0},
-    [OPCODE_STORE_INDEX] = { OPDR_USE,   OPDR_USE, OPDR_NONE, 0},
-    [OPCODE_COPY]        = { OPDR_DEF,   OPDR_USE, OPDR_NONE, 0},
-    [OPCODE_CALL]        = { OPDR_DEF,   OPDR_USE, OPDR_NONE, 0},
-    [OPCODE_ARG]         = { OPDR_NONE,  OPDR_USE, OPDR_NONE, 0},
-    [OPCODE_PARAM]       = { OPDR_DEF,   OPDR_USE, OPDR_NONE, 0},
-    [OPCODE_JMP]         = { OPDR_USE,  OPDR_NONE, OPDR_NONE, 0},
-    [OPCODE_BEQ]         = { OPDR_USE,   OPDR_USE, OPDR_USE,  0},
-    [OPCODE_BLT]         = { OPDR_USE,   OPDR_USE, OPDR_USE,  0},
-    [OPCODE_BGT]         = { OPDR_USE,   OPDR_USE, OPDR_USE,  0},
-    [OPCODE_BGE]         = { OPDR_USE,   OPDR_USE, OPDR_USE,  0},
-    [OPCODE_BLE]         = { OPDR_USE,   OPDR_USE, OPDR_USE,  0},
-    [OPCODE_RET]         = { OPDR_NONE,  OPDR_USE, OPDR_NONE, 0},
+    [OPCODE_NONE]        = { 0 },
+    [OPCODE_ADD]         = BINARY_ASSIGN_DESC(0),
+    [OPCODE_SUB]         = BINARY_ASSIGN_DESC(OPC_NONCOMM),
+    [OPCODE_MUL]         = BINARY_ASSIGN_DESC(0),
+    [OPCODE_DIV]         = BINARY_ASSIGN_DESC(OPC_NONCOMM),
+    [OPCODE_CMP_EQ]      = BINARY_ASSIGN_DESC(0),
+    [OPCODE_CMP_LT]      = BINARY_ASSIGN_DESC(OPC_NONCOMM),
+    [OPCODE_CMP_GT]      = BINARY_ASSIGN_DESC(OPC_NONCOMM),
+    [OPCODE_CMP_LEQ]     = BINARY_ASSIGN_DESC(OPC_NONCOMM),
+    [OPCODE_CMP_GEQ]     = BINARY_ASSIGN_DESC(OPC_NONCOMM),
+    [OPCODE_LOAD]        = UNARY_ASSIGN_DESC(0),
+    [OPCODE_EXT_Z]       = UNARY_ASSIGN_DESC(0),
+    [OPCODE_IMM]         = UNARY_ASSIGN_DESC(0),
+    [OPCODE_INDEX]       = UNARY_ASSIGN_DESC(0),
+    [OPCODE_ADDR]        = UNARY_ASSIGN_DESC(0),
+    [OPCODE_STORE]       = UNARY_STORE_DESC(0),
+    [OPCODE_STORE_INDEX] = UNARY_STORE_DESC(0),
+    [OPCODE_COPY]        = UNARY_ASSIGN_DESC(0),
+    [OPCODE_CALL]        = UNARY_ASSIGN_DESC(0),
+    [OPCODE_ARG]         = MARK_DESC(0),
+    [OPCODE_PARAM]       = UNARY_ASSIGN_DESC(0),
+    [OPCODE_JMP]         = JUMP_DESC(0),
+    [OPCODE_BEQ]         = BRANCH_DESC(0),
+    [OPCODE_BLT]         = BRANCH_DESC(0),
+    [OPCODE_BGT]         = BRANCH_DESC(0),
+    [OPCODE_BGE]         = BRANCH_DESC(0),
+    [OPCODE_BLE]         = BRANCH_DESC(0),
+    [OPCODE_BNE]         = BRANCH_DESC(0),
+    [OPCODE_RET]         = MARK_DESC(0),
 };
+
+
+void ir_build_str_operand(StringBuilder *sb, Operand operand) {
+    switch (operand.type) {
+        case OPERAND_BLOCK:
+            string_builder_append_char(sb, 'b');
+            string_builder_append_size_t(sb, operand.block);
+            break;
+        case OPERAND_VREG:
+            string_builder_append_char(sb, 'r');
+            string_builder_append_size_t(sb, operand.vreg);
+            break;
+        case OPERAND_MEM:
+            string_builder_sv_append(sb, SV_LITERAL("[r"));
+            string_builder_append_size_t(sb, operand.mem.base);
+            
+            if (operand.mem.stride > 0) {
+                string_builder_sv_append(sb, SV_LITERAL(" + "));
+                string_builder_append_size_t(sb, operand.mem.stride);
+                string_builder_sv_append(sb, SV_LITERAL(" * r"));
+                string_builder_append_size_t(sb, operand.mem.index);
+            }
+
+            if (operand.mem.offset != 0) {
+                unsigned magnitude = (unsigned)operand.mem.offset;
+                if (operand.mem.offset > 0)  {
+                    string_builder_sv_append(sb, SV_LITERAL(" - "));
+                } else {
+                    magnitude = 0u - magnitude;
+                    string_builder_sv_append(sb, SV_LITERAL(" + "));
+                }
+                string_builder_append_size_t(sb, magnitude);
+            }
+            
+            string_builder_append_char(sb, ']');
+            break;
+        case OPERAND_IMM:
+            string_builder_append_size_t(sb, operand.imm);
+            break;
+        case OPERAND_SLOT:
+            string_builder_append_char(sb, 's');
+            string_builder_append_size_t(sb, operand.slot);
+            break;
+        case OPERAND_GLOBAL:
+            string_builder_sv_append(sb, SV_LITERAL("GBL"));
+            string_builder_append_size_t(sb, operand.glbl);
+            break;
+        default:
+            // error
+            break;
+    }
+}
+
+
+void ir_build_str_phi(StringBuilder *sb, Phi phi, size_t num_args) {
+    ir_build_str_operand(sb, phi.dest);
+    string_builder_sv_append(sb, SV_LITERAL(" = phi "));
+
+    for (size_t i = 0; i < num_args; i++) {
+        ir_build_str_operand(sb, phi.args[i]);
+        if (i != num_args - 1)
+            string_builder_sv_append(sb, SV_LITERAL(", "));
+    }
+}
+
+
+void ir_build_str_instr(StringBuilder *sb, Instr instr) {
+    OpcodePrintType style = opcode_description_table[instr.opcode].print_type;
+
+    switch (style) {
+        case OP_PRINT_NONE:
+            break;
+        case OP_PRINT_ASSIGN:
+            ir_build_str_operand(sb, instr.dest);
+            string_builder_sv_append(sb, SV_LITERAL(" = "));
+        case OP_PRINT_FUNC:
+            string_builder_cstr_append(sb, opcode_to_string[instr.opcode]);
+            string_builder_append_char(sb, ' ');
+            ir_build_str_operand(sb, instr.arg1);
+            if (instr.arg2.type != OPERAND_NONE) {
+                string_builder_sv_append(sb, SV_LITERAL(", "));
+                ir_build_str_operand(sb, instr.arg2);
+            }
+            break;
+        case OP_PRINT_BRANCH:
+            string_builder_cstr_append(sb, opcode_to_string[instr.opcode]);
+            string_builder_append_char(sb, ' ');
+            if (instr.arg1.type != OPERAND_NONE) {
+                ir_build_str_operand(sb, instr.arg1);
+                if (instr.arg2.type != OPERAND_NONE)
+                    string_builder_sv_append(sb, SV_LITERAL(", "));
+            }
+            if (instr.arg2.type != OPERAND_NONE) {
+                ir_build_str_operand(sb, instr.arg2);
+                if (instr.dest.type != OPERAND_NONE)
+                    string_builder_sv_append(sb, SV_LITERAL(", "));
+            }
+            ir_build_str_operand(sb, instr.dest);
+            break;
+    }
+}
+
+
+void ir_build_str_program(StringBuilder *sb, Arena *scratch, Program program) {
+    for (size_t i = 0; i < program.count; i++) {
+        Procedure *proc = &program.items[i];
+
+        string_builder_cstr_append(sb, proc->name);
+        string_builder_sv_append(sb, SV_LITERAL(":\n"));
+
+        // need to fix this... not satisfactory
+        CFGraph cfg = (CFGraph) { 0 };
+        cfg = proc->cfg;
+        cfg.rpo = arena_alloc(scratch, cfg.count * sizeof *cfg.rpo);
+        cfg.rpo_list = arena_alloc(scratch, cfg.count * sizeof *cfg.rpo_list);
+
+        memset(cfg.rpo, -1, cfg.count * sizeof *cfg.rpo);
+        memset(cfg.rpo_list, -1, cfg.count * sizeof *cfg.rpo_list);
+
+        int k = 0;
+        fill_rpo(&cfg, &k, cfg.entry_block);
+
+
+        for (size_t l = 0; l < cfg.count; l++) {
+            int b = cfg.rpo_list[l];
+
+            if (b == -1) continue;
+
+            string_builder_sv_append(sb, SV_LITERAL("\tblock "));
+            string_builder_append_size_t(sb, b);
+            string_builder_sv_append(sb, SV_LITERAL(":\n"));
+
+
+            for (size_t m = 0; m < cfg.items[b].phis.count; m++) {
+                Phi phi = cfg.items[b].phis.items[m];
+                
+                string_builder_append_char(sb, '\t');
+                string_builder_append_char(sb, '\t');
+                ir_build_str_phi(sb, phi, cfg.items[b].predecessors.count);
+                string_builder_append_char(sb, '\n');
+            }
+
+            for (size_t m = 0; m < cfg.items[b].bytecode.count; m++) {
+                Instr instr = cfg.items[b].bytecode.items[m];
+                
+                string_builder_append_char(sb, '\t');
+                string_builder_append_char(sb, '\t');
+                ir_build_str_instr(sb, instr);
+                string_builder_append_char(sb, '\n');
+            }
+
+            string_builder_sv_append(sb, SV_LITERAL("\t\tsuccessors: "));
+            
+            for (size_t m = 0; m < 2; m++) {
+                int s = cfg.items[b].successors[m];
+                if (s != -1) string_builder_append_size_t(sb, s);
+                if (m == 0) string_builder_sv_append(sb, SV_LITERAL(", "));
+            }
+            string_builder_append_char(sb, '\n');
+        }
+        string_builder_append_char(sb, '\n');
+    }
+    string_builder_append_char(sb, '\n');
+}
 
 
 void print_program(Program program, bool colored) {

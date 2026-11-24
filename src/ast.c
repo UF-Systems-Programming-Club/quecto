@@ -50,14 +50,14 @@ void ast_print(Arena *arena, AST *ast) {
     int mark = arena_mark(arena);
     StringBuilder sb = { 0 };
     string_builder_create(&sb, arena, 128 * sizeof(char));
-    String out = ast_str(&sb, arena, ast);
+    ast_build_str(&sb, arena, ast);
 
-    printf("%.*s\n", (int)out.len, out.data);
+    printf("%.*s\n", (int)sb.string.len, sb.string.data);
     arena_restore(arena, mark);
 }
 
-String ast_str(StringBuilder *sb, Arena *scratch, AST *ast) {
-    if (ast == NULL) return (String) { 0 };
+void ast_build_str(StringBuilder *sb, Arena *scratch, AST *ast) {
+    if (ast == NULL) return;
 
     size_t indent = 0;
 
@@ -271,5 +271,4 @@ String ast_str(StringBuilder *sb, Arena *scratch, AST *ast) {
     }
 
     string_builder_sv_append(sb, SV_LITERAL("\n"));
-    return sb->string;
 }

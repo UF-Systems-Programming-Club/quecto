@@ -152,7 +152,12 @@ void arena_restore(Arena *a, size_t cursor);
     (type *)arena_alloc((arena_ptr), sizeof(type))
 
 void string_builder_create(StringBuilder *sb, Arena *a, size_t capacity);
+void string_builder_reserve(StringBuilder *sb, size_t n);
+
+void string_builder_append_char(StringBuilder *sb, char chr);
+void string_builder_append_size_t(StringBuilder *sb, size_t num);
 void string_builder_append_base(StringBuilder *sb, const char *data, size_t len);
+
 String string_builder_to_string(StringBuilder *sb, Arena *scratch);
 const char *string_builder_to_cstr(StringBuilder *sb, Arena *scratch);
 

@@ -88,6 +88,6 @@ bool op_is_arithmetic(BinaryOp op);
 BinaryOp op_opposite(BinaryOp op);
 
 void ast_print(Arena *arena, AST *root);
-String ast_str(StringBuilder *sb, Arena *arena, AST *root);
+void ast_build_str(StringBuilder *sb, Arena *arena, AST *root);
 
 #endif

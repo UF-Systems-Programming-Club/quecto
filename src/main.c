@@ -17,7 +17,7 @@
 typedef enum {
     DEBUG_PRINT_TOKENS = 1,
     DEBUG_PRINT_AST = 2,
-    DEBUG_PRINT_CFG = 4,
+    DEBUG_PRINT_EMIT = 4,
 } BuildFlags;
 
 typedef struct {
@@ -76,6 +76,11 @@ int main(int argc, char **argv) { // quecto <command> <input> {flags}
             } else if (CONST_STR_CMP(argv[i], "--dump-tokens")) {
                 command.build_options.flags |= DEBUG_PRINT_TOKENS;
                 i++;
+            } else if (CONST_STR_CMP(argv[i], "--dump-emit")) {
+                command.build_options.flags |= DEBUG_PRINT_EMIT;
+                i++;
+            } else {
+                i++;
             }
         }
 
@@ -123,9 +128,21 @@ typedef String (DumpFn(Arena *scratch, const void *context));
 
 String generate_ast_dump(Arena *scratch, const void *context) {
     AST *ast = *(AST * const *) context;
-    StringBuilder sb = {0};
+    StringBuilder sb = { 0 };
     string_builder_create(&sb, scratch, 128);
-    return ast_str(&sb, scratch, ast);
+    ast_build_str(&sb, scratch, ast);
+
+    return sb.string;
+}
+
+String generate_ir_dump(Arena *scratch, const void *context) {
+    const Program *program = context;
+    StringBuilder sb = { 0 };
+    
+    string_builder_create(&sb, scratch, 128);
+    ir_build_str_program(&sb, scratch, *program);
+    
+    return sb.string;
 }
 
 String generate_token_dump(Arena *scratch, const void *context) {
@@ -217,6 +234,7 @@ int compile(BuildOptions options) {
         .arena = &backing,
     };
 
+
     Passes passes = (PassFn[]) {
             pass_insert_phis,
             pass_rename,
@@ -235,6 +253,11 @@ int compile(BuildOptions options) {
 
     Program program = { .symbols = &symbols };
     emit_program(&emit_ctx, &program, ast);
+
+    if ((options.flags & DEBUG_PRINT_EMIT) == DEBUG_PRINT_EMIT) {
+        dump_intermediate_file(&scratch, options.output_file, SV_LITERAL(".ir"),
+                generate_ir_dump, &program);
+    }
 
     passes_run(&program, passes, (Arenas) { .scratch = &scratch, .persistent = &backing});
 

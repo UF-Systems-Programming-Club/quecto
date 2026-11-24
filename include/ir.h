@@ -53,6 +53,13 @@ typedef enum {
     OPC_CLOBBERS_CALL = 2,
 } OpcodeFlags;
 
+typedef enum {
+    OP_PRINT_NONE = 0,
+    OP_PRINT_ASSIGN,
+    OP_PRINT_FUNC,
+    OP_PRINT_BRANCH
+} OpcodePrintType;
+
 typedef struct {
 	int base; // vreg
 	int index; // vreg
@@ -60,7 +67,6 @@ typedef struct {
 	int stride;
 	int size;
 } MemRef;
-
 
 typedef enum {
     OPERAND_ANY = -1,
@@ -79,12 +85,11 @@ typedef enum {
     OPDR_DEF,
 } OperandRole;
 
-
 typedef struct {
     OperandRole dest, arg1, arg2;
     OpcodeFlags flags;
+    OpcodePrintType print_type;
 } OpcodeDesc;
-
 
 extern const OpcodeDesc opcode_description_table[];
 
@@ -226,6 +231,11 @@ int instr_collect_used_vregs(Instr instr, size_t *out);
 bool instr_uses_vreg(Instr instr, size_t vreg);
 bool instr_defines_vreg(Instr instr, size_t vreg);
 void instr_replace_vreg(Instr *instr, size_t find, size_t replace);
+
+void ir_build_str_program(StringBuilder *sb, Arena *scratch, Program program);
+void ir_build_str_operand(StringBuilder *sb, Operand operand);
+void ir_build_str_phi(StringBuilder *sb, Phi phi, size_t num_args);
+void ir_build_str_instr(StringBuilder *sb, Instr instr);
 
 void print_procedure(Procedure proc);
 void print_procedure_colored(Procedure *proc);
