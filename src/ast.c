@@ -31,8 +31,7 @@ typedef struct {
     };
 } PrintTask;
 
-typedef DEFINE_STACK(PrintTask) PrintTaskStack;
-DEFINE_STACK_DEF(PrintTaskStack, PrintTask)
+DEFINE_ARENA_STACK(PrintTaskStack, PrintTask)
 
 #define NODE_PRINT_TASK(n) (PrintTask) { .type = PRINT_TASK_NODE, .node = n }
 #define LIST_PRINT_TASK(l, d) (PrintTask) { .type = PRINT_TASK_LIST, .list = l, .delim = d }
@@ -60,8 +59,7 @@ void ast_build_str(StringBuilder *sb, Arena *scratch, AST *ast) {
 
     size_t indent = 0;
 
-    PrintTaskStack stack = (PrintTaskStack) { 0 };
-    PrintTaskStack_set_backing(&stack, scratch);
+    PrintTaskStack stack = PrintTaskStack_create(scratch);
     PrintTaskStack_push(&stack, NODE_PRINT_TASK(ast));
 
     while (!PrintTaskStack_empty(&stack)) {

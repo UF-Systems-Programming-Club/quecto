@@ -195,8 +195,7 @@ void pass_kill_slots(Arenas *arenas, Procedure *procedure) {
     }
 }
 
-typedef DEFINE_STACK(Operand) OperandStack;
-DEFINE_STACK_DEF(OperandStack, Operand)
+DEFINE_ARENA_STACK(OperandStack, Operand)
 
 void pass_rename_recurs(Arenas *arenas, Procedure *procedure, OperandStack stacks[], size_t bid) {
     CFGraph *cfg = &procedure->cfg;
@@ -217,11 +216,11 @@ void pass_rename_recurs(Arenas *arenas, Procedure *procedure, OperandStack stack
        
         if (ir_instr_match(instr, OPCODE_LOAD, -1, OPERAND_SLOT, OPERAND_NONE) && !slots->items[instr->arg1.slot].address_taken) {
             instr->opcode = OPCODE_COPY;
-            instr->arg1 = OperandStack_peek(&stacks[instr->arg1.slot], 1);
+            instr->arg1 = OperandStack_top(&stacks[instr->arg1.slot]);
         }
 
         if (ir_instr_match(instr, OPCODE_PARAM, OPERAND_SLOT, -1, -1) && !slots->items[instr->dest.slot].address_taken) {
-            instr->dest = OperandStack_peek(&stacks[instr->dest.slot], 1);
+            instr->dest = OperandStack_top(&stacks[instr->dest.slot]);
         }
 
         if (ir_instr_match(instr, OPCODE_STORE, OPERAND_SLOT, -1, -1) && !slots->items[instr->dest.slot].address_taken) {
@@ -247,7 +246,7 @@ void pass_rename_recurs(Arenas *arenas, Procedure *procedure, OperandStack stack
 
         for (size_t j = 0; j < succ->phis.count; j++) {
             Phi *p = &succ->phis.items[j];
-            p->args[idx] = OperandStack_peek(&stacks[p->slot], 1);
+            p->args[idx] = OperandStack_top(&stacks[p->slot]);
         }
     }
 
@@ -270,7 +269,7 @@ void pass_rename(Arenas *arenas, Procedure *procedure) {
     OperandStack *stacks = arena_alloc(arenas->scratch, sizeof(OperandStack) * slots->count);
 
     for (size_t i = 0; i < slots->count; i++) {
-        OperandStack_set_backing(&stacks[i], arenas->scratch);
+        stacks[i] = OperandStack_create(arenas->scratch);
         if (slots->items[i].param && !slots->items[i].address_taken) {
             OperandStack_push(&stacks[i], ir_vreg_allocate_explicit(arenas->persistent, procedure, ir_vregi_from_sloti(slots->items[i])));
         }

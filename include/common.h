@@ -193,38 +193,52 @@ void set_complement(Set *set);
 void set_clear(Set *set);
 void set_copy(Set *dst, Set* src);
 
-#define DEFINE_STACK(type) \
-struct { \
-    Arena *arena; \
-    type *stack; \
-    size_t capacity; \
-    size_t cursor; \
-} \
-
-#define DEFINE_STACK_DEF(name, type) \
-     static inline void name##_set_backing(name *stack, Arena *arena) {\
-         stack->arena = arena;\
-     }\
-     static inline bool name##_empty(name *stack) {\
-        return stack->cursor <= 0;\
-     }\
-     static inline type name##_pop(name *stack) { \
-         if (stack->cursor <= 0) return (type) { 0 };\
-         return stack->stack[--stack->cursor];\
-     } \
-     static inline type name##_peek(name *stack, int dist) { \
-        assert(stack->cursor >= (size_t)dist && "cannot peek"); \
-        return stack->stack[stack->cursor - dist]; \
-     } \
-     static inline void name##_push(name *stack, type val) { \
-        if (stack->cursor + 1 > stack->capacity) { \
-            size_t old = stack->capacity; \
-            size_t new = old == 0 ? 16 : old * 2; \
-            stack->stack = arena_realloc(stack->arena, stack->stack, old * sizeof(type), new * sizeof(type)); \
-            stack->capacity = new;\
-        }\
-        stack->stack[stack->cursor++] = val; \
-     } \
+#define DEFINE_ARENA_STACK(name, type) \
+    typedef struct { \
+        Arena *arena; \
+        type *items; \
+        size_t count; \
+        size_t capacity; \
+    } name; \
+    static inline name name##_create(Arena *arena) { \
+        assert(arena != NULL); \
+        return (name) { .arena = arena }; \
+    } \
+    static inline bool name##_empty(const name *stack) { \
+        return stack->count == 0; \
+    } \
+    static inline type name##_pop(name *stack) { \
+        assert(stack->count > 0 && "cannot pop empty stack"); \
+        return stack->items[--stack->count]; \
+    } \
+    static inline type name##_peek(const name *stack, size_t depth) { \
+        assert(depth < stack->count && "cannot peek outside stack"); \
+        return stack->items[stack->count - 1 - depth]; \
+    } \
+    static inline type name##_top(const name *stack) { \
+        return name##_peek(stack, 0); \
+    } \
+    static inline void name##_push(name *stack, type value) { \
+        if (stack->count == stack->capacity) { \
+            size_t max_count = (SIZE_MAX - (sizeof(void *) - 1)) / sizeof(type); \
+            if (stack->capacity >= max_count) { \
+                fprintf(stderr, "Arena stack capacity overflow\n"); \
+                abort(); \
+            } \
+            size_t capacity; \
+            if (stack->capacity == 0) \
+                capacity = max_count < 16 ? max_count : 16; \
+            else \
+                capacity = stack->capacity > max_count / 2 ? max_count : stack->capacity * 2; \
+            size_t bytes = capacity * sizeof(type); \
+            if (stack->items == NULL) \
+                stack->items = arena_alloc(stack->arena, bytes); \
+            else \
+                stack->items = arena_realloc(stack->arena, stack->items, stack->count * sizeof(type), bytes); \
+            stack->capacity = capacity; \
+        } \
+        stack->items[stack->count++] = value; \
+    }
 
 #define SV_LITERAL(str) (StringView){ sizeof(str) - 1, (str) }
 #define SV_FMT "%.*s"
