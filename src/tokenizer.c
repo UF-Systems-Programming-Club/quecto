@@ -6,47 +6,55 @@
 #include "common.h"
 #include "error.h"
 
+#define TOKEN_INFO(ident, tk_flags, prec) (TokenInfo) {\
+    .name = SV_LITERAL(ident),\
+    .flags = tk_flags,\
+    .precedence = prec\
+}
+
 const TokenInfo token_info_table[] = {
-    [TOKEN_PLUS]           = { .name = SV_LITERAL("+"),           .flags = TOK_OPERATOR, .precedence = 2},
-    [TOKEN_MINUS]          = { .name = SV_LITERAL("-"),           .flags = TOK_OPERATOR, .precedence = 2},
-    [TOKEN_MULTIPLY]       = { .name = SV_LITERAL("*"),           .flags = TOK_OPERATOR, .precedence = 3},
-    [TOKEN_DIVIDE]         = { .name = SV_LITERAL("/"),           .flags = TOK_OPERATOR, .precedence = 3},
-    [TOKEN_CARET]          = { .name = SV_LITERAL("^"),           .flags = TOK_OPERATOR, .precedence = 7},
-    [TOKEN_AMPERSAND]      = { .name = SV_LITERAL("&"),           .flags = TOK_OPERATOR, .precedence = 7},
-    [TOKEN_OPEN_CURLY]     = { .name = SV_LITERAL("{"),           .flags = 0},
-    [TOKEN_CLOSE_CURLY]    = { .name = SV_LITERAL("}"),           .flags = 0},
-    [TOKEN_OPEN_PAREN]     = { .name = SV_LITERAL("("),           .flags = TOK_HAS_PREC, .precedence = 4},
-    [TOKEN_CLOSE_PAREN]    = { .name = SV_LITERAL(")"),           .flags = 0},
-    [TOKEN_OPEN_SQUARE]    = { .name = SV_LITERAL("["),           .flags = TOK_HAS_PREC, .precedence = 4},
-    [TOKEN_CLOSE_SQUARE]   = { .name = SV_LITERAL("]"),           .flags = 0},
-    [TOKEN_SEMICOLON]      = { .name = SV_LITERAL(";"),           .flags = 0},
-    [TOKEN_COLON]          = { .name = SV_LITERAL(":"),           .flags = 0},
-    [TOKEN_PERIOD]         = { .name = SV_LITERAL("."),           .flags = TOK_OPERATOR, .precedence = 5},
-    [TOKEN_COMMA]          = { .name = SV_LITERAL(","),           .flags = 0},
-    [TOKEN_EQUALS]         = { .name = SV_LITERAL("="),           .flags = 0},
-    [TOKEN_EQUALS_EQUALS]  = { .name = SV_LITERAL("=="),          .flags = TOK_OPERATOR, .precedence = 1},
-    [TOKEN_ARROW]          = { .name = SV_LITERAL("=>"),          .flags = 0},
-    [TOKEN_LESS_EQUALS]    = { .name = SV_LITERAL("<="),          .flags = TOK_OPERATOR, .precedence = 1},
-    [TOKEN_GREATER_EQUALS] = { .name = SV_LITERAL(">="),          .flags = TOK_OPERATOR, .precedence = 1},
-    [TOKEN_LESS_THAN]      = { .name = SV_LITERAL("<"),           .flags = TOK_OPERATOR, .precedence = 1},
-    [TOKEN_GREATER_THAN]   = { .name = SV_LITERAL(">"),           .flags = TOK_OPERATOR, .precedence = 1},
-    [TOKEN_INT_LIT]        = { .name = SV_LITERAL("int lit"),     .flags = TOK_HAS_PREC, .precedence = 6},
-    [TOKEN_STR_LIT]        = { .name = SV_LITERAL("str lit"),     .flags = TOK_HAS_PREC, .precedence = 6},
-    [TOKEN_FLOAT_LIT]      = { .name = SV_LITERAL("float lit"),   .flags = TOK_HAS_PREC, .precedence = 6},
-    [TOKEN_IDENTIFIER]     = { .name = SV_LITERAL("identifier"),  .flags = TOK_HAS_PREC, .precedence = 6},
-    [TOKEN_RETURN]         = { .name = SV_LITERAL("return"),      .flags = TOK_KEYWORD},
-    [TOKEN_IF]             = { .name = SV_LITERAL("if"),          .flags = TOK_KEYWORD},
-    [TOKEN_ELIF]           = { .name = SV_LITERAL("elif"),        .flags = TOK_KEYWORD},
-    [TOKEN_ELSE]           = { .name = SV_LITERAL("else"),        .flags = TOK_KEYWORD},
-    [TOKEN_WHILE]          = { .name = SV_LITERAL("while"),       .flags = TOK_KEYWORD},
-    [TOKEN_PROC]           = { .name = SV_LITERAL("proc"),        .flags = TOK_KEYWORD},
-    [TOKEN_EXTERN]         = { .name = SV_LITERAL("extern"),      .flags = TOK_KEYWORD},
-    [TOKEN_U32]            = { .name = SV_LITERAL("u32"),         .flags = TOK_PRIMITIVE},
-    [TOKEN_I32]            = { .name = SV_LITERAL("i32"),         .flags = TOK_PRIMITIVE},
-    [TOKEN_I8]             = { .name = SV_LITERAL("i8"),          .flags = TOK_PRIMITIVE},
-    [TOKEN_U8]             = { .name = SV_LITERAL("u8"),          .flags = TOK_PRIMITIVE},
-    [TOKEN_EOF]            = { .name = SV_LITERAL("eof"),         .flags = 0}
+    [TOKEN_PLUS]           = TOKEN_INFO("+", TOK_OPERATOR, 2),
+    [TOKEN_MINUS]          = TOKEN_INFO("-", TOK_OPERATOR, 2),
+    [TOKEN_MULTIPLY]       = TOKEN_INFO("*", TOK_OPERATOR, 3),
+    [TOKEN_DIVIDE]         = TOKEN_INFO("/", TOK_OPERATOR, 3),
+    [TOKEN_CARET]          = TOKEN_INFO("^", TOK_OPERATOR, 7),
+    [TOKEN_AMPERSAND]      = TOKEN_INFO("&", TOK_OPERATOR, 7),
+    [TOKEN_OPEN_CURLY]     = TOKEN_INFO("{", 0, -1),
+    [TOKEN_CLOSE_CURLY]    = TOKEN_INFO("}", 0, -1),
+    [TOKEN_OPEN_PAREN]     = TOKEN_INFO("(", TOK_HAS_PREC, 4),
+    [TOKEN_CLOSE_PAREN]    = TOKEN_INFO(")", 0, -1),
+    [TOKEN_OPEN_SQUARE]    = TOKEN_INFO("[", TOK_HAS_PREC, 4),
+    [TOKEN_CLOSE_SQUARE]   = TOKEN_INFO("]", 0, -1),
+    [TOKEN_SEMICOLON]      = TOKEN_INFO(";", 0, -1),
+    [TOKEN_COLON]          = TOKEN_INFO(":", 0, -1),
+    [TOKEN_PERIOD]         = TOKEN_INFO(".", TOK_OPERATOR, 5),
+    [TOKEN_COMMA]          = TOKEN_INFO(",", 0, -1),
+    [TOKEN_EQUALS]         = TOKEN_INFO("=", 0, -1),
+    [TOKEN_EQUALS_EQUALS]  = TOKEN_INFO("==", TOK_OPERATOR, 1),
+    [TOKEN_ARROW]          = TOKEN_INFO("=>", 0, -1),
+    [TOKEN_LESS_EQUALS]    = TOKEN_INFO("<=", TOK_OPERATOR, 1),
+    [TOKEN_GREATER_EQUALS] = TOKEN_INFO(">=", TOK_OPERATOR, 1),
+    [TOKEN_LESS_THAN]      = TOKEN_INFO("<", TOK_OPERATOR, 1),
+    [TOKEN_GREATER_THAN]   = TOKEN_INFO(">", TOK_OPERATOR, 1),
+    [TOKEN_INT_LIT]        = TOKEN_INFO("int lit", TOK_HAS_PREC, 6),
+    [TOKEN_STR_LIT]        = TOKEN_INFO("str lit", TOK_HAS_PREC, 6),
+    [TOKEN_FLOAT_LIT]      = TOKEN_INFO("float lit", TOK_HAS_PREC, 6),
+    [TOKEN_IDENTIFIER]     = TOKEN_INFO("identifier", TOK_HAS_PREC, 6),
+    [TOKEN_RETURN]         = TOKEN_INFO("return", TOK_KEYWORD, -1),
+    [TOKEN_IF]             = TOKEN_INFO("if", TOK_KEYWORD, -1),
+    [TOKEN_ELIF]           = TOKEN_INFO("elif", TOK_KEYWORD, -1),
+    [TOKEN_ELSE]           = TOKEN_INFO("else", TOK_KEYWORD, -1),
+    [TOKEN_WHILE]          = TOKEN_INFO("while", TOK_KEYWORD, -1),
+    [TOKEN_PROC]           = TOKEN_INFO("proc", TOK_KEYWORD, -1),
+    [TOKEN_EXTERN]         = TOKEN_INFO("extern", TOK_KEYWORD, -1),
+    [TOKEN_U32]            = TOKEN_INFO("u32", TOK_PRIMITIVE, -1),
+    [TOKEN_I32]            = TOKEN_INFO("i32", TOK_PRIMITIVE, -1),
+    [TOKEN_I8]             = TOKEN_INFO("i8", TOK_PRIMITIVE, -1),
+    [TOKEN_U8]             = TOKEN_INFO("u8", TOK_PRIMITIVE, -1),
+    [TOKEN_EOF]            = TOKEN_INFO("eof", 0, -1),
 };
+
+#undef TOKEN_INFO
 
 const TokenType token_from_char[] = {
     [':'] = TOKEN_COLON,
@@ -228,7 +236,7 @@ TokenArray tk_tokenize(Arenas *arena, const char *buf, size_t size) {
         start = next;
     }
 
-    Token tok_eof = {0};
+    Token tok_eof = (Token) { 0 };
     tok_eof.type = TOKEN_EOF;
     arena_array_append(arena->persistent, tokens, tok_eof);
 
