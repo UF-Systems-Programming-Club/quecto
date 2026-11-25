@@ -12,7 +12,7 @@ typedef struct {
     int current_block;
 } EmitContext;
 
-void emit_prggram(EmitContext *context, Program *into, AST *program);
+void emit_program(EmitContext *context, Program *into, AST *program);
 void emit_procedure(EmitContext *context, Procedure *into, AST *procedure);
 void emit_statement(EmitContext *context, AST *statement);
 void emit_block(EmitContext *context, AST *block);
